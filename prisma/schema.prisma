@@ -14,6 +14,87 @@ datasource db {
     url      = env("DATABASE_URL")
 }
 
-model Record {
-    id String @id @default(cuid())
+model RiverSite {
+    id             Int     @id @default(autoincrement())
+    siteCode       String  @unique
+    riverName      String
+    siteName       String?
+    landmarkUp     String? // bridge, powerline …
+    latitude       Float?
+    longitude      Float?
+    landmarkDown   String?
+    latDown        Float?
+    longDown       Float?
+    localityLength Float? // m
+    localityWidth  Float? // m
+
+    // relations
+    samplings Sampling[]
+
+    @@map("river_sites")
+}
+
+model Sampling {
+    id     Int       @id @default(autoincrement())
+    siteId Int
+    site   RiverSite @relation(fields: [siteId], references: [id])
+
+    year                      Int
+    catchDate                 DateTime?
+    dataProvider              String? // "Michael Grohmann", etc.
+    askProviderBeforeUse      Boolean? // yes / no
+    source                    String? // IHG, etc.
+    project                   String? // DB, etc.
+    fishingAuthority          String?
+    preclassificationStressor String?
+    temp                      Float? // °C
+    conductivity              Float? // µS cm-1
+    pHValue                   Float?
+    oCont                     Float? // mg l-1
+    oSat                      Float? // %
+    method                    String? // Boat / Wading …
+    assessment                String? // strip / point …
+    samplingStrategy          String? // partialprop …
+    anodes                    Int?
+    numSubsections            Int?
+    lengthSubsection          Float? // m
+    widthSubsection           Float? // m
+    typeOfStrip               String?
+    habitat                   String? // Ufer, Tief, …
+    runStrip                  String? // Flach, Pool …
+    catchEfficiency           Float? // %
+    remarksRawData            String?
+    remarkImport              String?
+
+    // relations
+    catches FishCatch[]
+
+    @@map("samplings")
+}
+
+model FishCatch {
+    id            Int         @id @default(autoincrement())
+    samplingId    Int
+    sampling      Sampling    @relation(fields: [samplingId], references: [id])
+    // excel erst ab/unterhalb von hier!!!
+    fishId        String? // WAS IS DAS? Wir brauchen die nicht (weil wir eh id haben)
+    species       FishSpecies @relation(fields: [speciesId], references: [id])
+    speciesId     Int
+    lengthMm      Int?
+    totalWeightGr Float?
+
+    @@map("fish_catches")
+}
+
+model FishSpecies {
+    id          Int     @id @default(autoincrement())
+    speciesName String  @unique
+    germanName  String?
+    latinName   String?
+    family      String?
+
+    // relations
+    catches FishCatch[]
+
+    @@map("fish_species")
 }
