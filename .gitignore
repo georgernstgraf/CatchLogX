@@ -42,3 +42,4 @@ next-env.d.ts
 
 /app/generated/prisma
 fische.db
+samples/.~lock.data.xlsx#
