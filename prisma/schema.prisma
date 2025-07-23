@@ -14,6 +14,23 @@ datasource db {
     url      = env("DATABASE_URL")
 }
 
+model User {
+  id             String   @id @default(cuid())
+  username       String   @unique
+  hashedPassword String
+  name           String?
+  sessions       Session[]
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 model RiverSite {
     id             Int     @id @default(autoincrement())
     siteCode       String  @unique
