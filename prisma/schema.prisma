@@ -22,6 +22,22 @@ model User {
   sessions       Session[]
 }
 
+model PasswordResets {
+  id                String      @id @default(cuid())
+  username          String
+  timestamp         DateTime
+  state             String
+}
+
+model Uploads {
+    id              String      @id @default(cuid())
+    uploaded_by     String
+    link            String
+    state           String
+
+    user            User        @relation(fields: [userId], references: [id])
+}
+
 model Session {
   id           String   @id @default(cuid())
   sessionToken String   @unique
