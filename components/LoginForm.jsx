@@ -2,9 +2,9 @@ import React from 'react'
 
 const LoginForm = () => {
   return (
-    <div>
-      <div className='text-[#ff04ca]'>Universität für Bodenkultur Wien</div>
-      <div className='text-[#ff04ca]'>Fish Database</div>
+    <div className="flex flex-col justify-center items-center min-h-screen">
+      <div className='text-[#000000]'>Universität für Bodenkultur Wien</div>
+      <div className='text-[#000000]'>Fish Database</div>
       <input
         type="text"
         id="username"
@@ -12,7 +12,7 @@ const LoginForm = () => {
         placeholder="Username"
         required
       />
-      
+
       <input
         type="password"
         id="password"
@@ -20,7 +20,7 @@ const LoginForm = () => {
         placeholder="Password"
         required
       />
-      <button type="submit">Login</button>
+      <button type="submit" style={{ backgroundColor: '#357174', color: '#fff' }}>Login</button>
     </div>
 
   )
