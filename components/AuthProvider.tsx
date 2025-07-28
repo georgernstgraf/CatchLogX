@@ -1,6 +1,5 @@
 "use client";
 import { createContext, useContext, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 
 interface User {
   id: string;
@@ -25,7 +24,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
+
+  // Debug: Wenn sich der User-State ändert, loggen wir das
+  useEffect(() => {
+    console.log("User-State hat sich geändert:", user);
+    console.log("Ist eingeloggt:", !!user);
+  }, [user]);
 
   const checkAuth = async () => {
     try {
@@ -70,30 +74,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    try {
-      // Clear user state immediately for better UX
-      setUser(null);
+    console.log("🚪 Logout wird gestartet...");
 
-      // Call logout API to clear server-side session
+    try {
+      // Session auf dem Server löschen
+      console.log("📞 API-Call für Logout wird gemacht");
       const response = await fetch("/api/auth/logout", {
         method: "POST",
-        credentials: "include", // Ensure cookies are sent
+        credentials: "include",
       });
 
       if (!response.ok) {
         console.warn(
-          "Logout API call failed, but proceeding with client-side logout"
+          "⚠️ Server-Logout hat nicht geklappt, aber wir machen trotzdem weiter"
         );
+      } else {
+        console.log("✅ Server-Logout war erfolgreich");
       }
-
-      // Always redirect to login page
-      router.push("/login");
     } catch (error) {
-      console.error("Logout error:", error);
-      // Still clear user state and redirect even if API fails
-      setUser(null);
-      router.push("/login");
+      console.error("❌ Fehler beim Server-Logout:", error);
     }
+
+    // User-State löschen
+    console.log("🗑️ User wird aus dem State gelöscht");
+    setUser(null);
+
+    // Ein kleiner Timeout, damit der State-Update Zeit hat
+    setTimeout(() => {
+      console.log("🔄 Jetzt wird zur Login-Seite weitergeleitet...");
+      console.log("📍 Aktuelle URL:", window.location.href);
+      window.location.href = "/login";
+      console.log("✅ window.location.href = '/login' wurde ausgeführt");
+    }, 200);
   };
 
   useEffect(() => {
