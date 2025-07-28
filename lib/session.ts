@@ -18,7 +18,9 @@ export interface SessionData {
  * @param request - The NextRequest object
  * @returns Promise<SessionData | null> - The session data if valid, null otherwise
  */
-export async function getSessionUser(request: NextRequest): Promise<SessionData | null> {
+export async function getSessionUser(
+  request: NextRequest
+): Promise<SessionData | null> {
   try {
     // Get session token from cookie
     const sessionToken = request.cookies.get("session-token")?.value;

@@ -12,7 +12,10 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (
+    username: string,
+    password: string
+  ) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
 }
@@ -70,17 +73,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       // Clear user state immediately for better UX
       setUser(null);
-      
+
       // Call logout API to clear server-side session
-      const response = await fetch("/api/auth/logout", { 
+      const response = await fetch("/api/auth/logout", {
         method: "POST",
-        credentials: "include" // Ensure cookies are sent
+        credentials: "include", // Ensure cookies are sent
       });
-      
+
       if (!response.ok) {
-        console.warn("Logout API call failed, but proceeding with client-side logout");
+        console.warn(
+          "Logout API call failed, but proceeding with client-side logout"
+        );
       }
-      
+
       // Always redirect to login page
       router.push("/login");
     } catch (error) {
