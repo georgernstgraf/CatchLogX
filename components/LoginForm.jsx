@@ -2,6 +2,16 @@ import Link from 'next/link'
 import React from 'react'
 
 const LoginForm = () => {
+
+  const [username, setUsername] = React.useState('');
+  const [password, setPassword] = React.useState('');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    console.log('Username:', username);
+    console.log('Password:', password);
+  }
+
   return (
     <div className="flex flex-col justify-center items-center min-h-screen bg-[#f5f4f2]">
       <div className="bg-[#FCFBF9] rounded-xl shadow-lg flex flex-col items-center p-10 w-[400px]">
