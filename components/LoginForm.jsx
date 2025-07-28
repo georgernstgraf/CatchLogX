@@ -1,9 +1,8 @@
 "use client"
-
-import Image from 'next/image'
 import Link from 'next/link'
 import React from 'react'
 import bokuLogo from "@/components/assets/img/Logo.png"
+import Image from 'next/image'
 
 const LoginForm = () => {
 
@@ -15,9 +14,6 @@ const LoginForm = () => {
     console.log('Username:', username);
     console.log('Password:', password);
   }
-
-
-
   return (
     <div className="flex flex-col justify-center items-center min-h-screen bg-[#f5f4f2]">
       <div className="bg-[#FCFBF9] rounded-xl shadow-lg flex flex-col items-center p-10 w-[400px]">
