@@ -27,12 +27,12 @@ const LoginForm = () => {
           </div>
           <span className="text-black text-[25px] font-medium leading-tight">Universität für<br />Bodenkultur Wien</span>
         </div>
-        <div className="text-black text-5xl font-bold mb-8 text-center w-full">Fish Database</div>
+        <div className="text-black text-5xl font-bold mb-8 text-center w-full">Login</div>
         <input
           type="text"
           id="username"
           name="username"
-          placeholder="Username"
+          placeholder="Benutzername"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           required
@@ -42,14 +42,14 @@ const LoginForm = () => {
           type="password"
           id="password"
           name="password"
-          placeholder="Password"
+          placeholder="Passwort"
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className="w-full bg-white text-black border border-[#e5e5e5] p-4 rounded-lg mb-6 text-lg focus:outline-none focus:ring-2 focus:ring-[#357174]"
         />
-        <button onClick={handleSubmit} type="submit" className="w-full bg-[#357174] text-white p-4 rounded-lg text-lg font-medium  hover:bg-[#4da1a6] transition-colors duration-200 mb-4">Sign in</button>
-        <Link href="/forgot-password" className="text-black text-base font-normal w-full text-center mb-4">Forgot password?</Link>
+        <button onClick={handleSubmit} type="submit" className="w-full bg-[#357174] text-white p-4 rounded-lg text-lg font-medium  hover:bg-[#4da1a6] transition-colors duration-200 mb-4">Anmelden</button>
+        <Link href="/forgot-password" className="text-black text-base font-normal w-full text-center mb-4">Passwort vergessen?</Link>
       </div>
     </div>
   )
