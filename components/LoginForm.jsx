@@ -19,9 +19,11 @@ const LoginForm = () => {
   return (
     <div className="flex flex-col justify-center items-center min-h-screen bg-[#f5f4f2]">
       <div className="bg-[#FCFBF9] rounded-xl shadow-lg flex flex-col items-center p-10 w-[400px]">
-        <div className="flex flex-row items-center gap-10 w-full mb-6">
-          <Image src={bokuLogo} alt="Boku Logo" width={100} height={100} className="object-contain" />
-          <span className="text-black text-[25px] font-medium">Universität für<br />Bodenkultur Wien</span>
+         <div className="flex flex-row justify-center items-center gap-9 w-full mb-6">
+          <div className="flex items-center h-full">
+            <Image src={bokuLogo} alt="Boku Logo" width={150} height={150} className="object-contain" />
+          </div>
+          <span className="text-black text-[25px] font-medium leading-tight">Universität für<br />Bodenkultur Wien</span>
         </div>
         <div className="text-black text-5xl font-bold mb-8 text-center w-full">Login</div>
         <input
