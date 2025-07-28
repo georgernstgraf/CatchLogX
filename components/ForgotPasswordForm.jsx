@@ -9,9 +9,20 @@ const ForgotPasswordForm = () => {
 
   const [username, setUsername] = React.useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Username:', username);
+    const response = await fetch('/api/forgot-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: username,
+          timestamp: Date.now(),
+        }),
+    })
+    const data = await response.json();
+    console.log(data);
   }
 
   return (
@@ -35,7 +46,7 @@ const ForgotPasswordForm = () => {
             required
             className="w-full bg-white text-black border border-[#e5e5e5] p-4 rounded-lg mb-4 text-lg focus:outline-none focus:ring-2 focus:ring-[#357174]"
           />
-          <button type="submit" className="w-full bg-[#357174] text-white p-4 rounded-lg text-lg font-medium  hover:bg-[#4da1a6] transition-colors duration-200 mb-4">Anfrage senden</button>
+          <button type="submit" onClick={handleSubmit} className="w-full bg-[#357174] text-white p-4 rounded-lg text-lg font-medium  hover:bg-[#4da1a6] transition-colors duration-200 mb-4">Anfrage senden</button>
         </form>
       </div>
     </div>
