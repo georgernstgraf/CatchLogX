@@ -58,13 +58,13 @@ const LoginForm = () => {
         <div className="text-black text-5xl font-bold mb-8 text-center w-full">
           Login
         </div>
-        
+
         {error && (
           <div className="w-full bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             {error}
           </div>
         )}
-        
+
         <form onSubmit={handleSubmit} className="w-full">
           <input
             type="text"
