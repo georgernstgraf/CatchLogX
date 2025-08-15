@@ -8,7 +8,7 @@ interface LogoutButtonProps {
 }
 
 const LogoutButton: React.FC<LogoutButtonProps> = ({
-  className = "w-full bg-[#357174] text-white p-3 rounded-lg text-sm font-medium hover:bg-[#4da1a6] transition-colors duration-200",
+  className = "w-full bg-[#357174] text-white p-3 rounded-lg cursor-pointer text-sm font-medium hover:bg-[#4da1a6] transition-colors duration-200",
   children = "Abmelden",
 }) => {
   const { logout } = useAuth();
