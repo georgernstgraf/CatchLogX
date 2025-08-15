@@ -5,6 +5,7 @@ interface User {
   id: string;
   username: string;
   name: string | null;
+  role: string | null;
 }
 
 interface AuthContextType {
@@ -24,12 +25,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  // Debug: Wenn sich der User-State ändert, loggen wir das
-  useEffect(() => {
-    console.log("User-State hat sich geändert:", user);
-    console.log("Ist eingeloggt:", !!user);
-  }, [user]);
 
   const checkAuth = async () => {
     try {
@@ -74,37 +69,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    console.log("🚪 Logout wird gestartet...");
-
     try {
       // Session auf dem Server löschen
-      console.log("📞 API-Call für Logout wird gemacht");
-      const response = await fetch("/api/auth/logout", {
+      await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "include",
       });
-
-      if (!response.ok) {
-        console.warn(
-          "⚠️ Server-Logout hat nicht geklappt, aber wir machen trotzdem weiter"
-        );
-      } else {
-        console.log("✅ Server-Logout war erfolgreich");
-      }
     } catch (error) {
-      console.error("❌ Fehler beim Server-Logout:", error);
+      console.error("Fehler beim Server-Logout:", error);
     }
 
     // User-State löschen
-    console.log("🗑️ User wird aus dem State gelöscht");
     setUser(null);
 
     // Ein kleiner Timeout, damit der State-Update Zeit hat
     setTimeout(() => {
-      console.log("🔄 Jetzt wird zur Login-Seite weitergeleitet...");
-      console.log("📍 Aktuelle URL:", window.location.href);
       window.location.href = "/login";
-      console.log("✅ window.location.href = '/login' wurde ausgeführt");
     }, 200);
   };
 
