@@ -20,6 +20,7 @@ model User {
   hashedPassword String
   name           String?
   sessions       Session[]
+  uploads        Uploads[]
 }
 
 model PasswordResets {
@@ -34,6 +35,7 @@ model Uploads {
     uploaded_by     String
     link            String
     state           String
+    userId          String
 
     user            User        @relation(fields: [userId], references: [id])
 }
