@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import React from "react";
+import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import bokuLogo from "@/assets/img/Logo.png";
 import Image from "next/image";
@@ -13,6 +13,34 @@ const LoginForm = () => {
   const [isLoading, setIsLoading] = React.useState(false);
   const router = useRouter();
   const { login } = useAuth();
+  const [user, setUser] = React.useState(null);
+
+  useEffect(() => {
+    checkSession();
+  }, []);
+
+  const checkSession = async () => {
+    try {
+      // Verify session with database
+      const response = await fetch("/api/auth/session");
+
+      if (response.ok) {
+        const data = await response.json();
+
+        if (data.authenticated) {
+          setUser({
+            id: data.user.id,
+            username: data.user.username,
+          });
+          router.replace("/");
+        }
+      }
+    } catch (error) {
+      console.error("Session check fehlgeschlagen:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
