@@ -35,9 +35,8 @@ model Uploads {
     uploaded_by     String
     link            String
     state           String
-    userId          String
 
-    user            User        @relation(fields: [userId], references: [id])
+    user            User        @relation(fields: [uploaded_by], references: [id])
 }
 
 model Session {
