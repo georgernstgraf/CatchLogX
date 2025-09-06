@@ -1,15 +1,21 @@
 "use client";
+
 import {
   FileInputIcon,
   FilePlus2Icon,
-  Home,
+  Fish,
+  Globe,
   LucideIcon,
+  SearchCode,
+  ShieldEllipsis,
   User,
 } from "lucide-react";
 import Link from "next/link";
 import React from "react";
 import LogoutButton from "./LogoutButton";
 import { useAuth } from "./AuthProvider";
+import Image from "next/image";
+import Logo from "@/assets/img/Boku-wien_randlos.svg";
 
 const Sidebar = () => {
   const { user } = useAuth();
@@ -22,12 +28,17 @@ const Sidebar = () => {
 
   const links: LinkType[] = [
     {
-      title: "Startseite",
+      title: "SQL Abfrage",
       path: "/",
-      icon: Home,
+      icon: SearchCode,
     },
     {
-      title: "Datei hochladen",
+      title: "Karte",
+      path: "/map",
+      icon: Globe,
+    },
+    {
+      title: "Upload",
       path: "/upload",
       icon: FilePlus2Icon,
     },
@@ -36,20 +47,34 @@ const Sidebar = () => {
       path: "/my-uploads",
       icon: FileInputIcon,
     },
+    {
+      title: "Fischsuche",
+      path: "/search/fish",
+      icon: Fish,
+    },
+    {
+      title: "Admin",
+      path: "/admin",
+      icon: ShieldEllipsis,
+    },
   ];
 
   return (
-    <div className="w-48 h-screen sticky top-0 border-r-[0.8px] border-r-gray-300 bg-[#f4f4f4] shadow-lg">
+    <div className="w-48 h-screen sticky top-0 border-r-[0.8px] border-r-gray-300 bg-[#1d293d] shadow-lg">
       <div className="w-full h-full flex flex-col">
+        <div className="flex mt-2 px-1 justify-center">
+          <Image alt="Boku Logo" src={Logo} width={30} height={30} />
+          <h1 className="font-semibold text-[#e5e5e5] ml-3">
+            Universität für Bodenkultur Wien
+          </h1>
+        </div>
+        <hr className="mt-3 w-[95%] text-[#e5e5e5] mx-auto" />
         <div className="flex-1">
-          <div className="flex justify-center mb-6 px-3 mt-2">
-            <h1 className="text-center">Universität für Bodenkultur Wien</h1>
-          </div>
-          <div className="space-y-4">
+          <div className="space-y-4 mt-4">
             {links.map((link) => (
               <div
                 key={link.title}
-                className="ml-3 flex flex-row items-center hover:text-[#357174]"
+                className="ml-3 flex flex-row items-center transition-colors duration-200 text-[#e5e5e5] hover:text-[#357174]"
               >
                 <link.icon className="mr-2" size={18} />
                 <Link href={link.path}>{link.title}</Link>
@@ -58,15 +83,29 @@ const Sidebar = () => {
           </div>
         </div>
 
-        {/* User info and logout button at the bottom */}
+        {/* User dropdown menu at the bottom */}
         <div className="p-3 pb-6 border-t border-gray-300">
           {user && (
-            <div className="mb-3 flex items-center text-sm text-gray-600">
-              <User className="mr-2" size={16} />
-              <span className="truncate">{user.name || user.username}</span>
+            <div className="relative group">
+              <button className="w-full flex items-center text-sm text-[#e5e5e5] hover:text-[#357174] transition-colors duration-200 p-2 rounded">
+                <User className="mr-2" size={16} />
+                <span className="truncate">{user.name || user.username}</span>
+              </button>
+
+              {/* Dropdown menu */}
+              <div className="absolute bottom-full left-0 w-full mb-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 bg-white border border-gray-300 rounded shadow-lg">
+                <Link
+                  href="/settings"
+                  className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  Einstellungen
+                </Link>
+                <div className="px-3 py-2">
+                  <LogoutButton />
+                </div>
+              </div>
             </div>
           )}
-          <LogoutButton />
         </div>
       </div>
     </div>

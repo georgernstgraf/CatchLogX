@@ -19,7 +19,9 @@ model User {
   username       String   @unique
   hashedPassword String
   name           String?
+  role           String   @default("viewer")
   sessions       Session[]
+  uploads        Uploads[]
 }
 
 model PasswordResets {
@@ -35,7 +37,7 @@ model Uploads {
     link            String
     state           String
 
-    user            User        @relation(fields: [userId], references: [id])
+    user            User        @relation(fields: [uploaded_by], references: [id])
 }
 
 model Session {

@@ -5,6 +5,7 @@ export interface SessionUser {
   id: string;
   username: string;
   name: string | null;
+  role: string | null;
 }
 
 export interface SessionData {
@@ -38,6 +39,7 @@ export async function getSessionUser(
             id: true,
             username: true,
             name: true,
+            role: true,
           },
         },
       },
