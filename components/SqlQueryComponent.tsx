@@ -55,6 +55,8 @@ const SqlQueryUIDesign: React.FC = () => {
     });
 
     const data = await response.json();
+
+    // WIP: console.log(data) ersetzen mit einer State Variablen für die Ergebnisse
     console.log(data);
   };
 
