@@ -1,3 +1,10 @@
+import DashboardComponent from "@/components/DashboardComponent";
+import ProtectedRoute from "@/components/ProtectedRoute";
+
 export default function Home() {
-  return null;
+  return (
+    <ProtectedRoute>
+      <DashboardComponent />
+    </ProtectedRoute>
+  );
 }
