@@ -13,6 +13,17 @@ function validateSQLQuery(query: string): { isValid: boolean; error?: string } {
     return { isValid: false, error: "Query ist leer" };
   }
 
+  const dangerousTables = ["USER", "SESSION", "PASSWORDRESETS", "UPLOADS"];
+
+  for (const table of dangerousTables) {
+    if (trimmedQuery.toUpperCase().includes(table.toUpperCase())) {
+      return {
+        isValid: false,
+        error: `Gefährliche Operation erkannt: ${table} darf nicht abgefragt werden.`,
+      };
+    }
+  }
+
   // Gefährliche Operationen verhindern
   const dangerousKeywords = [
     "DROP",
