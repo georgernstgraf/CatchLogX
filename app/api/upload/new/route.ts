@@ -34,11 +34,11 @@ const validations: Record<string, ValidationRule> = {
   locality_length: { type: "number", decimal: 2, unit: "m" },
   temp: { type: "number", decimal: 2, unit: "°C", min: 0.1 },
   conductivity: { type: "number", min: 0, max: 50000, unit: "µS/cm" },
-  pH_value: { type: "number", min: 0, max: 14, decimal: 1 }, // pH kann Dezimalstellen haben
+  pH_value: { type: "number", min: 0, max: 14, decimal: 1 },
   ox_cont: { type: "number", min: 0, max: 200, unit: "%" },
   ox_sat: { type: "number", min: 0, max: 20, unit: "mg/L" },
-  method: { required: true, type: "string" },
-  assessment: { required: true, type: "string" },
+  method: { required: true, type: "string", options: ["Boat", "Boat large", "Boat small", "bottomtrawl", "drift net", "e-bottomtrawl","fish trap", "gillnet", "longline", "Multimesh-Gillnet","trammelnet","visual sighting", "Wading"] },
+  assessment: { required: true, type: "string", options: ["1 Run + FE%", "DeLury","Mark/Recapture","qualitative","quantitative","Seber-LeCren","Shoreline strips","Strip"] },
   "sampling strategy": { required: true, type: "string", options: ["whole", "partialprop"] },
   anodes: { type: "number", min: 0, max: 10 },
   "Number of Subsections": { type: "number" },
@@ -58,17 +58,26 @@ const validations: Record<string, ValidationRule> = {
   "Import date": { required: true, type: "date" },
 };
 
-// Datum aus Excel (nicht funktionsfähig)
+// Datum aus Excel
 function parseExcelDate(value: any): Date | null {
   if (!value) return null;
-  if (typeof value === 'string') {
-    const date = new Date(value);
-    return isNaN(date.getTime()) ? null : date;
-  }
+  // Falls es bereits ein Date-Objekt ist
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  // Excel speichert Daten als serielle Zahlen -> Umrechnung in JS Date
   if (typeof value === 'number') {
-    const excelEpoch = new Date(1900, 0, 1);
-    const date = new Date(excelEpoch.getTime() + (value - 1) * 24 * 60 * 60 * 1000);
-    return date;
+    return new Date((value - 25569) * 86400 * 1000);
+  }
+  // Falls es ein String im Format "dd.mm.yyyy" ist
+  if (typeof value === 'string') {
+    const parts = value.split('.');
+    if (parts.length === 3) {
+      const [d, m, y] = parts.map(Number);
+      if (d && m && y) {
+        const date = new Date(y, m - 1, d); // Date erstellen
+        return date.getDate() === d && date.getMonth() === m - 1 ? date : null; // Validierung des Datums, z.B. 31.02.2020 ist ungültig
+      }
+    }
   }
   return null;
 }
@@ -84,7 +93,11 @@ function isEmpty(value: any): boolean {
 export async function POST(req: NextRequest) {
   try {
     const fileBuffer = Buffer.from(await req.arrayBuffer());
-    const workbook = XLSX.read(fileBuffer, { type: "buffer", cellDates: true });
+    const workbook = XLSX.read(fileBuffer, { 
+      type: "buffer", 
+      cellDates: false, // Wichtig: auf false setzen, damit Excel die Daten als Strings liefert
+      dateNF: 'dd.mm.yyyy' // Erwartetes Datumsformat
+    });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
@@ -125,13 +138,6 @@ export async function POST(req: NextRequest) {
         const rawValue = row[headerMap[header]];
         let value = rawValue;
         
-        if (validations[header]?.type === "date" && !isEmpty(rawValue)) {
-          const parsedDate = parseExcelDate(rawValue);
-          value = parsedDate ? parsedDate.toISOString().split('T')[0] : rawValue;
-        }
-        
-        rowObj[header] = value;
-        
         const rules = validations[header];
         if (rules) {
           // Pflichtfeld-Prüfung
@@ -164,10 +170,12 @@ export async function POST(req: NextRequest) {
               rowErrors.push(`"${header}" muss ein Text sein (Typ: ${typeof rawValue})`);
             }
             
-            if (rules.type === "date") {
+            if (rules.type === "date" && !isEmpty(rawValue)) {
               const parsedDate = parseExcelDate(rawValue);
               if (!parsedDate || isNaN(parsedDate.getTime())) {
                 rowErrors.push(`"${header}" muss ein gültiges Datum sein (Wert: "${rawValue}")`);
+              } else {
+                value = parsedDate.toISOString().split('T')[0];
               }
             }
 
@@ -182,6 +190,7 @@ export async function POST(req: NextRequest) {
             }
           }
         }
+        rowObj[header] = value;
       }
 
       if (rowErrors.length > 0) {
