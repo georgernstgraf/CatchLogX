@@ -127,12 +127,16 @@ export async function POST(req: NextRequest) {
     }
 
     const data: Record<string, any>[] = [];
-    const errors: { row: number; errors: string[] }[] = [];
+    const errors: Array<{
+      row: number;
+      column: string;
+      message: string;
+    }> = [];
 
+    // Prüfung der Zeilen
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       const rowObj: Record<string, any> = {};
-      const rowErrors: string[] = [];
 
       for (const header of expectedHeaders) {
         const rawValue = row[headerMap[header]];
@@ -142,38 +146,66 @@ export async function POST(req: NextRequest) {
         if (rules) {
           // Pflichtfeld-Prüfung
           if (rules.required && isEmpty(rawValue)) {
-            rowErrors.push(`"${header}" ist Pflichtfeld`);
+            errors.push({
+              row: i + 1,
+              column: header,
+              message: `Pflichtfeld nicht ausgefüllt`
+            });
           }
 
           if (!isEmpty(rawValue)) {
             if (rules.type === "number") {
               const num = Number(rawValue);
               if (isNaN(num)) {
-                rowErrors.push(`"${header}" muss eine Zahl sein (Wert: "${rawValue}")`);
+                errors.push({
+                  row: i + 1,
+                  column: header,
+                  message: `Muss eine Zahl sein (Wert: "${rawValue}")`
+                });
               } else {
                 if (rules.min !== undefined && num < rules.min) {
-                  rowErrors.push(`"${header}" darf nicht kleiner als ${rules.min} sein (Wert: ${num})`);
+                  errors.push({
+                    row: i + 1,
+                    column: header,
+                    message: `Wert darf nicht kleiner als ${rules.min} sein (Wert: ${num})`
+                  });
                 }
                 if (rules.max !== undefined && num > rules.max) {
-                  rowErrors.push(`"${header}" darf nicht größer als ${rules.max} sein (Wert: ${num})`);
+                  errors.push({
+                    row: i + 1,
+                    column: header,
+                    message: `Wert darf nicht größer als ${rules.max} sein (Wert: ${num})`
+                  });
                 }
                 if (rules.decimal !== undefined) {
                   const decimals = (String(num).split(".")[1] || "").length;
                   if (decimals > rules.decimal) {
-                    rowErrors.push(`"${header}" darf maximal ${rules.decimal} Nachkommastellen haben (Wert: ${num})`);
+                    errors.push({
+                      row: i + 1,
+                      column: header,
+                      message: `Darf maximal ${rules.decimal} Nachkommastellen haben (Wert: ${num})`
+                    });
                   }
                 }
               }
             }
             
             if (rules.type === "string" && typeof rawValue !== "string") {
-              rowErrors.push(`"${header}" muss ein Text sein (Typ: ${typeof rawValue})`);
+              errors.push({
+                row: i + 1,
+                column: header,
+                message: `Muss ein Text sein (Typ: ${typeof rawValue})`
+              });
             }
             
             if (rules.type === "date" && !isEmpty(rawValue)) {
               const parsedDate = parseExcelDate(rawValue);
               if (!parsedDate || isNaN(parsedDate.getTime())) {
-                rowErrors.push(`"${header}" muss ein gültiges Datum sein (Wert: "${rawValue}")`);
+                errors.push({
+                  row: i + 1,
+                  column: header,
+                  message: `Muss ein gültiges Datum sein (Wert: "${rawValue}")`
+                });
               } else {
                 value = parsedDate.toISOString().split('T')[0];
               }
@@ -185,7 +217,11 @@ export async function POST(req: NextRequest) {
               const normalizedOptions = rules.options.map(opt => opt.toLowerCase());
               
               if (!normalizedOptions.includes(normalizedValue)) {
-                rowErrors.push(`"${header}" muss einer der Werte sein: ${rules.options.join(", ")} (Wert: "${rawValue}")`);
+                errors.push({
+                  row: i + 1,
+                  column: header,
+                  message: `Muss einer der Werte sein: ${rules.options.join(", ")} (Wert: "${rawValue}")`
+                });
               }
             }
           }
@@ -193,22 +229,16 @@ export async function POST(req: NextRequest) {
         rowObj[header] = value;
       }
 
-      if (rowErrors.length > 0) {
-        errors.push({ row: i + 1, errors: rowErrors });
-      } else {
+      if (!errors.some(e => e.row === i + 1)) {
         data.push(rowObj);
       }
     }
 
-    // Ausgabe der Validierungsfehler in der Konsole pro Zeile
-    console.log("Validierungsfehler:", errors);
-
     if (errors.length > 0) {
       return NextResponse.json(
         { 
-          error: "Validierung fehlgeschlagen", 
-          details: errors,
-          summary: `${errors.length} Zeilen mit Fehlern gefunden`
+          error: "Validierung fehlgeschlagen",
+          validationErrors: errors
         },
         { status: 400 }
       );

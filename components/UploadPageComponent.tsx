@@ -9,6 +9,12 @@ const UploadPageComponent = () => {
   const [uploadStatus, setUploadStatus] = useState<
     "idle" | "uploading" | "success" | "error"
   >("idle");
+  const [validationErrors, setValidationErrors] = useState<Array<{
+    row: number;
+    column: string;
+    message: string;
+  }>>([]);
+  const [headerErrors, setHeaderErrors] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Überprüfung ob die Datei eine Excel-Datei ist
@@ -67,34 +73,38 @@ const UploadPageComponent = () => {
     if (!selectedFile) return;
 
     setUploadStatus("uploading");
-  
-  try {
-    const formData = new FormData();
-    formData.append('file', selectedFile);
+    setValidationErrors([]); // Reset validation errors
+    setHeaderErrors([]); // Reset header errors
 
-    const response = await fetch('/api/upload/new', {
-      method: 'POST',
-      body: selectedFile 
-    });
+    try {
+      const response = await fetch("/api/upload/new", {
+        method: "POST",
+        body: selectedFile,
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!response.ok) {
-      // Fehlerbehandlung
-      setUploadStatus("error")
-      console.error("Upload failed:", data);
-      return;
+      if (!response.ok) {
+        setUploadStatus("error");
+        
+        // Prüfen auf Spaltenfehler
+        if (data.error === "Fehlende Spalten" && data.details?.[0]?.errors) {
+          setHeaderErrors(data.details[0].errors);
+        }
+        // Prüfen auf Validierungsfehler
+        else if (data.validationErrors) {
+          setValidationErrors(data.validationErrors);
+        }
+        return;
+      }
+
+      setUploadStatus("success");
+      console.log("Upload erfolgreich:", data);
+    } catch (error) {
+      console.error("Upload error:", error);
+      setUploadStatus("error");
     }
-
-    // Erfolgreicher Upload
-    setUploadStatus("success");
-    console.log("Upload erfolgreich:", data);
-
-  } catch (error) {
-    console.error("Upload error:", error);
-    setUploadStatus("error");
-  }
-};
+  };
 
   const resetUpload = () => {
     setSelectedFile(null);
@@ -384,7 +394,7 @@ const UploadPageComponent = () => {
                 {/* Error Message */}
                 {uploadStatus === "error" && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <div className="flex items-center">
+                    <div className="flex items-center mb-3">
                       <svg className="w-5 h-5 text-red-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" 
                           d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" 
@@ -392,9 +402,45 @@ const UploadPageComponent = () => {
                         />
                       </svg>
                       <p className="text-red-700 font-medium">
-                        Beim Upload ist ein Fehler aufgetreten. Bitte überprüfe deine Datei und versuche es erneut.
+                        Beim Upload wurden Fehler gefunden:
                       </p>
                     </div>
+                    
+                    {headerErrors.length > 0 ? (
+                      <div className="bg-white rounded p-3 border border-red-100">
+                        <h4 className="font-medium text-red-700 mb-2">Fehler in der Spaltenstruktur:</h4>
+                        <ul className="list-disc list-inside space-y-1 text-sm text-red-600">
+                          {headerErrors.map((error, index) => (
+                            <li key={index}>{error}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : validationErrors.length > 0 ? (
+                      <div className="max-h-60 overflow-y-auto bg-white rounded p-3 border border-red-100">
+                        <table className="min-w-full">
+                          <thead className="bg-red-50 sticky top-0">
+                            <tr>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-red-700">Zeile</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-red-700">Spalte</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-red-700">Fehlermeldung</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-red-100">
+                            {validationErrors.map((error, index) => (
+                              <tr key={index} className="text-sm">
+                                <td className="px-4 py-2 text-gray-900">{error.row}</td>
+                                <td className="px-4 py-2 text-gray-900">{error.column}</td>
+                                <td className="px-4 py-2 text-gray-600">{error.message}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="text-red-600 text-sm">
+                        Ein unerwarteter Fehler ist aufgetreten. Bitte überprüfe deine Datei und versuche es erneut.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
