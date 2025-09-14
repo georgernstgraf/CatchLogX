@@ -1,36 +1,159 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CatchLogX 🐟
 
-## Getting Started
+**CatchLogX** ist eine moderne Web-Anwendung für die Verwaltung und Analyse von Befischungsdaten, entwickelt als Diplomprojekt an der HTL Spengergasse für die Universität für Bodenkultur Wien (BOKU), Abteilung für Hydrobiologie.
 
-First, run the development server:
+## 📋 Projektbeschreibung
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+Die Anwendung ermöglicht es Mitarbeitern der BOKU Wien, Befischungsdaten zu erfassen, zu verwalten und zu analysieren. Über eine intuitive Web-Oberfläche können Excel-Dateien hochgeladen, SQL-Abfragen durchgeführt und Daten visualisiert werden.
+
+### Hauptfunktionen
+
+- 🔐 **Sichere Authentifizierung** mit rollenbasierter Zugriffskontrolle
+- 📊 **Excel-Upload** für Befischungsdaten
+- 🗄️ **SQL-Abfrage-Interface** für erweiterte Datenanalyse
+- 👥 **Admin Panel** für Benutzerverwaltung
+- 🗂️ **Datenbank-Management** mit Prisma ORM
+
+## 🛠️ Technologie-Stack
+
+### Frontend
+
+- **Next.js 15.2.2** - React Framework mit App Router
+- **React 19** - UI Library
+- **TypeScript** - Type-Safe JavaScript
+- **Tailwind CSS 4** - Utility-First CSS Framework
+- **Lucide React** - Icon Library
+
+### Backend
+
+- **Next.js API Routes** - Server-Side Logic
+- **Prisma** - Database ORM und Migration Tool
+- **SQLite** - Entwicklungsdatenbank
+- **bcrypt** - Passwort-Hashing
+- **NextAuth.js** - Authentifizierung
+
+### Development Tools
+
+- **ESLint** - Code Linting
+- **TypeScript** - Static Type Checking
+- **Prisma Studio** - Database GUI
+
+## 🏗️ Datenbank-Schema
+
+Das Projekt verwendet ein relationales Datenbankschema für Befischungsdaten:
+
+- **Users**: Benutzer mit Rollen (Admin, Viewer)
+- **RiverSite**: Gewässerstandorte mit GPS-Koordinaten
+- **Sampling**: Befischungsveranstaltungen mit Umweltdaten
+- **FishCatch**: Einzelne Fischfänge mit Gewicht und Länge
+- **FishSpecies**: Fischarten mit deutschen und lateinischen Namen
+
+### Benutzerrollen
+
+- **Admin**: Vollzugriff auf alle Funktionen und Benutzerverwaltung
+- **Viewer**: Nur Lesezugriff auf Daten und SQL-Abfragen
+
+## 📁 Projektstruktur
+
+```
+CatchLogX/
+├── app/                    # Next.js App Router
+│   ├── api/               # API Routes
+│   │   ├── auth/          # Authentifizierung
+│   │   └── query/         # SQL-Abfragen
+│   ├── login/             # Login-Seite
+│   ├── upload/            # Upload-Seite
+│   └── forgot-password/   # Passwort-Reset
+├── components/            # React Komponenten
+│   ├── AuthProvider.tsx   # Authentifizierung Context
+│   ├── DashboardComponent.tsx
+│   ├── LoginForm.jsx
+│   ├── SqlQueryComponent.tsx
+│   └── UploadPageComponent.tsx
+├── lib/                   # Utility Functions
+│   ├── auth.ts           # Auth-Konfiguration
+│   ├── prisma.ts         # Prisma Client
+│   └── session.ts        # Session Management
+├── prisma/               # Datenbank
+│   ├── schema.prisma     # DB Schema
+│   └── migrations/       # DB Migrationen
+├── scripts/              # Utility Scripts
+│   ├── create-user.ts    # Benutzer erstellen
+│   └── insert-*.ts      # Daten-Import Scripts
+└── samples/              # Beispieldaten
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🔧 Verfügbare Scripts
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+# Entwicklungsserver starten
+npm run dev
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# Produktions-Build erstellen
+npm run build
 
-## Learn More
+# Produktionsserver starten
+npm run start
 
-To learn more about Next.js, take a look at the following resources:
+# Code linting
+npm run lint
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# Admin-Benutzer erstellen
+npm run create-user
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 📊 Features im Detail
 
-## Deploy on Vercel
+### Dashboard
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Übersicht über hochgeladene Dateien
+- Schnellzugriff auf häufig verwendete Funktionen
+- Benutzerstatistiken
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Upload-System
+
+- Excel-Dateien hochladen (.xlsx, .xls)
+- Automatische Validierung der Datenstruktur
+- Import in die Datenbank
+
+### SQL-Abfrage-Tool
+
+- Interaktiver SQL-Editor
+- Syntax-Highlighting
+- Ergebnis-Visualisierung
+- Export-Funktionen
+
+### Admin Panel
+
+- Benutzerverwaltung
+- Rollenverwaltung
+- System-Überwachung
+
+## 🎓 Diplomprojekt-Team
+
+Entwickelt von Schülern der HTL Spengergasse als Abschlussprojekt:
+
+- Arman (Team Lead & Backend Developer)
+- Maxima (Vice Team Lead & Software Security Engineer)
+- Burak (Database Designer)
+- Tadeas (Frontend Developer & UI/UX)
+
+## 🤝 Auftraggeber
+
+**Universität für Bodenkultur Wien (BOKU)**  
+Abteilung für Hydrobiologie  
+Institut für Wasserwirtschaft, Hydrologie und konstruktiven Wasserbau
+
+## 📄 Lizenz
+
+Dieses Projekt wurde für die BOKU Wien entwickelt und dient ausschließlich akademischen und wissenschaftlichen Zwecken.
+
+## 🐛 Bug Reports & Feature Requests
+
+Bei Problemen oder Verbesserungsvorschlägen erstellen Sie bitte ein Issue im GitHub Repository oder kontaktieren Sie das Entwicklungsteam.
+
+## 📚 Weitere Dokumentation
+
+- [Prisma Documentation](https://www.prisma.io/docs)
+- [Next.js Documentation](https://nextjs.org/docs)
+- [HTL Spengergasse](https://spengergasse.at)
