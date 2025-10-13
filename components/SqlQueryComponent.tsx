@@ -74,7 +74,37 @@ const SqlQueryUIDesign: React.FC = () => {
     .map((row, i) => {
       const lat = Number(row.latitude || row.lat);
       const lon = Number(row.longitude || row.lon);
-      const label = row.species || row.spot || row.label || `Eintrag ${i + 1}`;
+      
+      // Try to create a meaningful label from available data
+      // Exclude lat/lon fields from the label
+      const excludeFields = ['latitude', 'longitude', 'lat', 'lon', 'id'];
+      const labelParts: string[] = [];
+      
+      // Common field names to prioritize for labels
+      const priorityFields = ['species', 'name', 'spot', 'location', 'site', 'place', 'title', 'label'];
+      
+      // First try priority fields
+      for (const field of priorityFields) {
+        if (field in row && row[field] != null && row[field] !== '') {
+          labelParts.push(String(row[field]));
+          break; // Use only the first priority field found
+        }
+      }
+      
+      // If no priority field found, use other available fields (up to 2)
+      if (labelParts.length === 0) {
+        const otherFields = Object.keys(row).filter(
+          key => !excludeFields.includes(key.toLowerCase()) && row[key] != null && row[key] !== ''
+        );
+        
+        for (let j = 0; j < Math.min(2, otherFields.length); j++) {
+          labelParts.push(String(row[otherFields[j]]));
+        }
+      }
+      
+      // Fallback to generic label if nothing found
+      const label = labelParts.length > 0 ? labelParts.join(' — ') : `Eintrag ${i + 1}`;
+      
       return { lat, lon, label: String(label) };
     });
 
