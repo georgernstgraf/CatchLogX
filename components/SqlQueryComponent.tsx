@@ -2,63 +2,63 @@
 
 import React, { useState } from "react";
 
-const exampleResults = [
-  {
-    id: 1,
-    species: "Hecht",
-    weight_kg: 8.2,
-    length_cm: 98,
-    spot: "Alte Donau",
-    latitude: 48.226,
-    longitude: 16.414,
-  },
-  {
-    id: 2,
-    species: "Zander",
-    weight_kg: 4.1,
-    length_cm: 72,
-    spot: "Donaukanal",
-    latitude: 48.208,
-    longitude: 16.373,
-  },
-  {
-    id: 3,
-    species: "Karpfen",
-    weight_kg: 12.5,
-    length_cm: 82,
-    spot: "Neue Donau",
-    latitude: 48.265,
-    longitude: 16.457,
-  },
-];
 
-const exampleLocations = [
-  { lat: 48.226, lon: 16.414, label: "Hecht — Alte Donau" },
-  { lat: 48.208, lon: 16.373, label: "Zander — Donaukanal" },
-  { lat: 48.265, lon: 16.457, label: "Karpfen — Neue Donau" },
-];
 
 const SqlQueryUIDesign: React.FC = () => {
   const defaultQuery = "SELECT * FROM fish;";
   const [query, setQuery] = useState<string>(defaultQuery);
+  const [results, setResults] = useState<Record<string, unknown>[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSqlQuery = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
-    const response = await fetch("/api/query/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        query: query,
-      }),
-    });
+    setIsLoading(true);
+    setError(null);
 
-    const data = await response.json();
+    try {
+      const response = await fetch("/api/query/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query: query,
+        }),
+      });
 
-    // WIP: console.log(data) ersetzen mit einer State Variablen für die Ergebnisse
-    console.log(data);
+      const data = await response.json();
+
+      if (!response.ok) {
+        // Handle error response
+        setError(data.details || data.error || "Ein Fehler ist aufgetreten");
+        setResults([]);
+      } else {
+        // Handle success response
+        setResults(data.data.result || []);
+        setError(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Netzwerkfehler");
+      setResults([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  // Extract locations from results if they have lat/lon fields
+  const locations = results
+    .filter((row) => {
+      const hasLat = 'latitude' in row || 'lat' in row;
+      const hasLon = 'longitude' in row || 'lon' in row;
+      return hasLat && hasLon;
+    })
+    .map((row, i) => {
+      const lat = Number(row.latitude || row.lat);
+      const lon = Number(row.longitude || row.lon);
+      const label = row.species || row.spot || row.label || `Eintrag ${i + 1}`;
+      return { lat, lon, label: String(label) };
+    });
 
   return (
     <div className="flex-1 bg-[#f5f8fa]">
@@ -70,9 +70,10 @@ const SqlQueryUIDesign: React.FC = () => {
             <h2 className="text-sm font-medium text-gray-700">SQL Query</h2>
             <button
               onClick={handleSqlQuery}
-              className="inline-flex items-center gap-2 rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
+              disabled={isLoading}
+              className="inline-flex items-center gap-2 rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-              Ausführen
+              {isLoading ? "Wird ausgeführt..." : "Ausführen"}
             </button>
           </div>
           <div className="px-6 pb-6 pt-4">
@@ -95,12 +96,28 @@ const SqlQueryUIDesign: React.FC = () => {
             <h2 className="text-sm font-medium text-gray-700">Ergebnisse</h2>
           </div>
           <div className="px-6 py-8">
-            <div className="overflow-auto">
-              <ResultsTable rows={exampleResults} />
-              <div className="mt-3 text-xs text-gray-500">
-                {exampleResults.length} Zeilen
+            {error && (
+              <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-4">
+                <p className="text-sm font-medium text-red-800">Fehler</p>
+                <p className="text-sm text-red-700 mt-1">{error}</p>
               </div>
-            </div>
+            )}
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="text-sm text-gray-500">Wird geladen...</div>
+              </div>
+            ) : results.length > 0 ? (
+              <div className="overflow-auto">
+                <ResultsTable rows={results} />
+                <div className="mt-3 text-xs text-gray-500">
+                  {results.length} Zeilen
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-gray-500 text-center py-8">
+                Keine Ergebnisse. Führen Sie eine Query aus.
+              </div>
+            )}
           </div>
         </section>
 
@@ -110,19 +127,25 @@ const SqlQueryUIDesign: React.FC = () => {
               <h2 className="text-sm font-medium text-gray-700">Standorte</h2>
             </div>
             <div className="px-6 py-6">
-              <ul className="space-y-2">
-                {exampleLocations.map((loc, i) => (
-                  <li
-                    key={i}
-                    className="flex items-center justify-between rounded-md border border-gray-200 px-3 py-2"
-                  >
-                    <span className="text-sm text-gray-800">{loc.label}</span>
-                    <span className="text-xs text-gray-500">
-                      {loc.lat.toFixed(5)}, {loc.lon.toFixed(5)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              {locations.length > 0 ? (
+                <ul className="space-y-2">
+                  {locations.map((loc, i) => (
+                    <li
+                      key={i}
+                      className="flex items-center justify-between rounded-md border border-gray-200 px-3 py-2"
+                    >
+                      <span className="text-sm text-gray-800">{loc.label}</span>
+                      <span className="text-xs text-gray-500">
+                        {loc.lat.toFixed(5)}, {loc.lon.toFixed(5)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="text-sm text-gray-500 text-center py-8">
+                  Keine Standorte mit Koordinaten gefunden
+                </div>
+              )}
             </div>
           </section>
 
