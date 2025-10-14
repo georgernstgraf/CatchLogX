@@ -7,7 +7,8 @@ import L from "leaflet";
 // Fix for default marker icons in React-Leaflet
 const icon = L.icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconRetinaUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
   iconSize: [25, 41],
   iconAnchor: [12, 41],
@@ -31,9 +32,7 @@ function MapBoundsUpdater({ locations }: { locations: Location[] }) {
 
   useEffect(() => {
     if (locations.length > 0) {
-      const bounds = L.latLngBounds(
-        locations.map((loc) => [loc.lat, loc.lon])
-      );
+      const bounds = L.latLngBounds(locations.map((loc) => [loc.lat, loc.lon]));
       map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
     }
   }, [locations, map]);
@@ -43,7 +42,7 @@ function MapBoundsUpdater({ locations }: { locations: Location[] }) {
 
 const MapComponent: React.FC<MapComponentProps> = ({ locations }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  
+
   // Default center (Vienna, Austria)
   const defaultCenter: [number, number] = [48.2082, 16.3738];
   const defaultZoom = 11;
@@ -62,7 +61,7 @@ const MapComponent: React.FC<MapComponentProps> = ({ locations }) => {
   return (
     <>
       {/* Normal map view */}
-      <div className={`${isExpanded ? 'hidden' : 'h-[320px]'} w-full relative`}>
+      <div className={`${isExpanded ? "hidden" : "h-full"} w-full relative`}>
         <MapContainer
           center={defaultCenter}
           zoom={defaultZoom}
@@ -73,7 +72,7 @@ const MapComponent: React.FC<MapComponentProps> = ({ locations }) => {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          
+
           {locations.map((location, index) => (
             <Marker
               key={index}
@@ -94,7 +93,7 @@ const MapComponent: React.FC<MapComponentProps> = ({ locations }) => {
 
           {locations.length > 0 && <MapBoundsUpdater locations={locations} />}
         </MapContainer>
-        
+
         {/* Expand button */}
         <button
           onClick={toggleExpand}
@@ -124,7 +123,7 @@ const MapComponent: React.FC<MapComponentProps> = ({ locations }) => {
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
-                
+
                 {locations.map((location, index) => (
                   <Marker
                     key={index}
@@ -143,10 +142,12 @@ const MapComponent: React.FC<MapComponentProps> = ({ locations }) => {
                   </Marker>
                 ))}
 
-                {locations.length > 0 && <MapBoundsUpdater locations={locations} />}
+                {locations.length > 0 && (
+                  <MapBoundsUpdater locations={locations} />
+                )}
               </MapContainer>
             </div>
-            
+
             {/* Close button */}
             <button
               onClick={() => setIsExpanded(false)}
