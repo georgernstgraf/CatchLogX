@@ -190,7 +190,7 @@ export async function POST(req: NextRequest) {
       dateNF: "dd.mm.yyyy", // Erwartetes Datumsformat
     });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    const rows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
     if (rows.length === 0) {
       return NextResponse.json({ error: "Excel ist leer" }, { status: 400 });

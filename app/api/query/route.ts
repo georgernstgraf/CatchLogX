@@ -84,15 +84,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Query direkt ausführen ohne Parameter-Substitution
+    // Query direkt ausführen
     const data = await prisma.$queryRawUnsafe(query);
+
+    // bigint zu string
+    const serializedData = JSON.parse(JSON.stringify(data, (key, value) =>
+      typeof value === 'bigint' ? value.toString() : value
+    ));
 
     return NextResponse.json({
       message: "Query erfolgreich ausgeführt.",
       data: {
         timestamp: new Date(),
         query: query,
-        result: data,
+        result: serializedData,
       },
     });
   } catch (error) {
