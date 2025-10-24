@@ -64,6 +64,7 @@ export async function GET(request: NextRequest) {
       {
         authenticated: true,
         user: session.user,
+        id: session.userId,
       },
       { status: 200 }
     );
