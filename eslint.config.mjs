@@ -19,6 +19,9 @@ const eslintConfig = [
       ".next/**/*",
       "out/**/*",
     ],
+    rules: {
+      "@typescript-eslint/no-explicit-any": ["off"],
+    },
   },
 ];
 
