@@ -19,6 +19,7 @@ model User {
   username       String   @unique
   hashedPassword String
   name           String?
+  email          String   @unique
   role           String   @default("viewer")
   sessions       Session[]
   uploads        Uploads[]
