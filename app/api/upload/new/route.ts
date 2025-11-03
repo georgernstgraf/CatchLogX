@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
+import fs from "fs";
+import { prisma } from "@/lib/prisma";
 
 type ValidationRule = {
   required?: boolean;
@@ -343,6 +345,73 @@ export async function POST(req: NextRequest) {
         },
         { status: 400 }
       );
+    }
+
+    // Speicherung der Datei und Eintrag in der Datenbank
+
+    if (errors.length === 0) {
+      try {
+        // Check ob Ordner existiert oder nicht
+        const uploadsDir = "./uploads";
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+
+        // Dateiname = Username + Timestamp
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+
+        const sessionResponse = await fetch(
+          `${req.nextUrl.origin}/api/auth/session`,
+          {
+            method: "GET",
+            headers: {
+              Cookie: req.headers.get("cookie") || "",
+            },
+          }
+        );
+
+        const sessionData = await sessionResponse.json();
+
+        let username = "user";
+
+        if (sessionData.authenticated && sessionData.user) {
+          username =
+            sessionData.user.username || sessionData.user.name || "user";
+        }
+
+        // Dateiname und Pfad
+        const fileName = `${username}_${timestamp}.xlsx`;
+        const filePath = `${uploadsDir}/${fileName}`;
+
+        // Datei speichern
+        fs.writeFileSync(filePath, fileBuffer);
+
+        try {
+          await prisma.uploads.create({
+            data: {
+              link: filePath,
+              state: "In Bearbeitung",
+              user: {
+                connect: {
+                  id: sessionData.user.id,
+                },
+              },
+            },
+          });
+        } catch (error) {
+          return NextResponse.json({
+            message: "Fehler beim Eintragen der Informationen in der Datenbank",
+            timestamp: new Date(),
+            error: error,
+          });
+        }
+      } catch (error) {
+        return NextResponse.json({
+          message: "Fehler bei der Speicherung der Datei",
+          timestamp: new Date(),
+          error: error,
+        });
+      }
     }
 
     return NextResponse.json({
