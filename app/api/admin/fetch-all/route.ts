@@ -1,8 +1,14 @@
 import { prisma } from "@/lib/prisma";
-import { NextResponse } from "next/server";
-import { withAdminAuth } from "@/lib/admin-middleware";
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdminAuth } from "@/lib/admin-middleware";
 
-export const GET = withAdminAuth(async () => {
+export async function GET(request: NextRequest) {
+  // Check admin authentication
+  const authResult = await requireAdminAuth(request);
+  if (authResult instanceof NextResponse) {
+    return authResult;
+  }
+
   try {
     const users = await prisma.user.findMany({
       select: {
@@ -37,4 +43,4 @@ export const GET = withAdminAuth(async () => {
       { status: 500 }
     );
   }
-});
+}

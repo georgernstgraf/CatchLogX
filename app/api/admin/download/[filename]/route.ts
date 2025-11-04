@@ -5,7 +5,7 @@ import { requireAdminAuth } from "@/lib/admin-middleware";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { filename: string } }
+  context: { params: Promise<{ filename: string }> }
 ) {
   // Check admin authentication
   const authResult = await requireAdminAuth(request);
@@ -14,7 +14,7 @@ export async function GET(
   }
 
   try {
-    const { filename } = await params;
+    const { filename } = await context.params;
 
     // Construct file path
     const filePath = path.join("uploads", filename);
