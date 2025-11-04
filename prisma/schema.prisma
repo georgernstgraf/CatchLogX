@@ -21,6 +21,7 @@ model User {
   name           String?
   email          String   @unique
   role           String   @default("viewer")
+  isFirstLogin   Boolean  @default(true)
   sessions       Session[]
   uploads        Uploads[]
 }
