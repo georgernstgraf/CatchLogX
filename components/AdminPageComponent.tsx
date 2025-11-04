@@ -287,9 +287,9 @@ const AdminPageComponent = () => {
 
       if (response.ok) {
         // Update user in the list
-        setUsers(users.map(user => 
-          user.id === editingUserId ? data.user : user
-        ));
+        setUsers(
+          users.map((user) => (user.id === editingUserId ? data.user : user))
+        );
         setShowEditUserModal(false);
         setEditingUserId(null);
         setEditUser({
@@ -512,7 +512,9 @@ const AdminPageComponent = () => {
                                   Bearbeiten
                                 </button>
                                 <button
-                                  onClick={() => setDeleteConfirmUserId(user.id)}
+                                  onClick={() =>
+                                    setDeleteConfirmUserId(user.id)
+                                  }
                                   className="text-red-600 hover:text-red-800 flex items-center"
                                   title="Benutzer löschen"
                                 >
