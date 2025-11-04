@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Sidebar from "./Sidebar";
 import {
   Users,
@@ -13,37 +13,30 @@ import {
 } from "lucide-react";
 
 type Upload = {
-  id: number;
-  filename: string;
-  uploadedBy: string;
-  uploadDate: string;
-  size: string;
-  status: string;
+  id: string;
+  link: string;
+  uploaded_by: string;
+  createdAt: string;
+  state: string;
 };
 
 type User = {
-  id: number;
+  id: string;
   username: string;
   email: string;
   name: string;
   createdAt: string;
 };
 
-// Mock data for uploads - replace with actual API call
-const mockUploads: Upload[] = [];
-
-// Mock data for users - replace with actual API call
-const mockUsers: User[] = [];
-
 const AdminPageComponent = () => {
   const [activeTab, setActiveTab] = useState("uploads");
-  const [uploads, setUploads] = useState(mockUploads);
-  const [users, setUsers] = useState(mockUsers);
+  const [uploads, setUploads] = useState<Upload[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [showDenyModal, setShowDenyModal] = useState(false);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
-  const [selectedUploadId, setSelectedUploadId] = useState<number | null>(null);
+  const [selectedUploadId, setSelectedUploadId] = useState<string | null>(null);
   const [denyReason, setDenyReason] = useState("");
-  const [deleteConfirmUserId, setDeleteConfirmUserId] = useState<number | null>(
+  const [deleteConfirmUserId, setDeleteConfirmUserId] = useState<string | null>(
     null
   );
 
@@ -55,36 +48,108 @@ const AdminPageComponent = () => {
     password: "",
   });
 
-  const handleDownload = (uploadId: number, filename: string) => {
-    // TODO: Implement actual download
-    console.log(`Downloading file ${filename} with ID ${uploadId}`);
-    alert(`Download wird gestartet: ${filename}`);
+  useEffect(() => {
+    const fetchUsersAndUploads = async () => {
+      const response = await fetch("/api/admin/fetch-all/", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setUsers(data.users);
+        setUploads(data.uploads);
+      }
+    };
+    fetchUsersAndUploads();
+  }, []);
+
+  const handleDownload = async (filename: string) => {
+    filename = filename.split("/")[2];
+
+    try {
+      const response = await fetch(`/api/admin/download/${filename}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.style.display = "none";
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        const errorData = await response.json();
+        alert(
+          `Download fehlgeschlagen: ${
+            errorData.message || "Unbekannter Fehler"
+          }`
+        );
+      }
+    } catch (error) {
+      console.error("Error downloading file:", error);
+      alert("Netzwerkfehler beim Download. Bitte versuchen Sie es erneut.");
+    }
   };
 
-  const handleAccept = (uploadId: number) => {
+  const handleAccept = (uploadId: string) => {
     // TODO: Implement actual accept API call
-    console.log(`Accepting upload ${uploadId}`);
-    setUploads(uploads.filter((upload) => upload.id !== uploadId));
-    alert("Upload wurde akzeptiert!");
+    alert(uploadId);
   };
 
-  const handleDenyClick = (uploadId: number) => {
+  const handleDenyClick = (uploadId: string) => {
     setSelectedUploadId(uploadId);
     setShowDenyModal(true);
   };
 
-  const handleDenyConfirm = () => {
+  const handleDenyConfirm = async () => {
     if (!denyReason.trim()) {
       alert("Bitte geben Sie einen Grund für die Ablehnung an.");
       return;
     }
-    // TODO: Implement actual deny API call
-    console.log(`Denying upload ${selectedUploadId} with reason: ${denyReason}`);
-    setUploads(uploads.filter((upload) => upload.id !== selectedUploadId));
-    setShowDenyModal(false);
-    setDenyReason("");
-    setSelectedUploadId(null);
-    alert("Upload wurde abgelehnt!");
+
+    try {
+      const response = await fetch("/api/admin/deny/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          uploadId: selectedUploadId,
+          reason: denyReason,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Remove the denied upload from the list
+        setUploads(uploads.filter((upload) => upload.id !== selectedUploadId));
+
+        // Reset modal state
+        setShowDenyModal(false);
+        setDenyReason("");
+        setSelectedUploadId(null);
+
+        alert("Upload wurde erfolgreich abgelehnt.");
+      } else {
+        alert(`Fehler beim Ablehnen: ${data.message || "Unbekannter Fehler"}`);
+      }
+    } catch (error) {
+      console.error("Error denying upload:", error);
+      alert(
+        "Netzwerkfehler beim Ablehnen des Uploads. Bitte versuchen Sie es erneut."
+      );
+    }
   };
 
   const handleCreateUser = () => {
@@ -98,22 +163,15 @@ const AdminPageComponent = () => {
       return;
     }
     // TODO: Implement actual create user API call
-    console.log("Creating user:", newUser);
-    const user = {
-      id: users.length + 1,
-      ...newUser,
-      createdAt: new Date().toISOString().split("T")[0],
-    };
-    setUsers([...users, user]);
     setShowCreateUserModal(false);
     setNewUser({ email: "", username: "", name: "", password: "" });
     alert("Benutzer wurde erfolgreich erstellt!");
   };
 
-  const handleDeleteUser = (userId: number) => {
+  const handleDeleteUser = (userId: string) => {
     // TODO: Implement actual delete user API call
     console.log(`Deleting user ${userId}`);
-    setUsers(users.filter((user) => user.id !== userId));
+    /*     setUsers(users.filter((user) => user.id !== userId)); */
     setDeleteConfirmUserId(null);
     alert("Benutzer wurde gelöscht!");
   };
@@ -191,23 +249,18 @@ const AdminPageComponent = () => {
                               />
                               <div>
                                 <h3 className="font-semibold text-gray-800">
-                                  {upload.filename}
+                                  {upload.link}
                                 </h3>
                                 <p className="text-sm text-gray-500">
-                                  Hochgeladen von {upload.uploadedBy} am{" "}
-                                  {upload.uploadDate}
-                                </p>
-                                <p className="text-sm text-gray-400">
-                                  Größe: {upload.size}
+                                  Hochgeladen von {upload.uploaded_by} am{" "}
+                                  {upload.createdAt}
                                 </p>
                               </div>
                             </div>
                           </div>
                           <div className="flex space-x-2">
                             <button
-                              onClick={() =>
-                                handleDownload(upload.id, upload.filename)
-                              }
+                              onClick={() => handleDownload(upload.link)}
                               className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors flex items-center"
                               title="Datei herunterladen"
                             >
@@ -447,7 +500,12 @@ const AdminPageComponent = () => {
               <button
                 onClick={() => {
                   setShowCreateUserModal(false);
-                  setNewUser({ email: "", username: "", name: "", password: "" });
+                  setNewUser({
+                    email: "",
+                    username: "",
+                    name: "",
+                    password: "",
+                  });
                 }}
                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors"
               >
