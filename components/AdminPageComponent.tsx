@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Sidebar from "./Sidebar";
 import {
   Users,
@@ -10,40 +10,37 @@ import {
   X,
   Trash2,
   UserPlus,
+  Edit,
 } from "lucide-react";
 
 type Upload = {
-  id: number;
-  filename: string;
-  uploadedBy: string;
-  uploadDate: string;
-  size: string;
-  status: string;
+  id: string;
+  link: string;
+  uploaded_by: string;
+  createdAt: string;
+  state: string;
 };
 
 type User = {
-  id: number;
+  id: string;
   username: string;
   email: string;
   name: string;
+  role?: string;
   createdAt: string;
 };
 
-// Mock data for uploads - replace with actual API call
-const mockUploads: Upload[] = [];
-
-// Mock data for users - replace with actual API call
-const mockUsers: User[] = [];
-
 const AdminPageComponent = () => {
   const [activeTab, setActiveTab] = useState("uploads");
-  const [uploads, setUploads] = useState(mockUploads);
-  const [users, setUsers] = useState(mockUsers);
+  const [uploads, setUploads] = useState<Upload[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [showDenyModal, setShowDenyModal] = useState(false);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
-  const [selectedUploadId, setSelectedUploadId] = useState<number | null>(null);
+  const [showEditUserModal, setShowEditUserModal] = useState(false);
+  const [selectedUploadId, setSelectedUploadId] = useState<string | null>(null);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [denyReason, setDenyReason] = useState("");
-  const [deleteConfirmUserId, setDeleteConfirmUserId] = useState<number | null>(
+  const [deleteConfirmUserId, setDeleteConfirmUserId] = useState<string | null>(
     null
   );
 
@@ -55,39 +52,138 @@ const AdminPageComponent = () => {
     password: "",
   });
 
-  const handleDownload = (uploadId: number, filename: string) => {
-    // TODO: Implement actual download
-    console.log(`Downloading file ${filename} with ID ${uploadId}`);
-    alert(`Download wird gestartet: ${filename}`);
+  // Edit user form state
+  const [editUser, setEditUser] = useState({
+    email: "",
+    username: "",
+    name: "",
+    role: "",
+    password: "",
+  });
+
+  useEffect(() => {
+    const fetchUsersAndUploads = async () => {
+      const response = await fetch("/api/admin/fetch-all/", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setUsers(data.users);
+        setUploads(data.uploads);
+      }
+    };
+    fetchUsersAndUploads();
+  }, []);
+
+  const handleDownload = async (filename: string) => {
+    filename = filename.split("/")[2];
+
+    try {
+      const response = await fetch(`/api/admin/download/${filename}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.style.display = "none";
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        const errorData = await response.json();
+        alert(
+          `Download fehlgeschlagen: ${
+            errorData.message || "Unbekannter Fehler"
+          }`
+        );
+      }
+    } catch (error) {
+      console.error("Error downloading file:", error);
+      alert("Netzwerkfehler beim Download. Bitte versuchen Sie es erneut.");
+    }
   };
 
-  const handleAccept = (uploadId: number) => {
-    // TODO: Implement actual accept API call
-    console.log(`Accepting upload ${uploadId}`);
-    setUploads(uploads.filter((upload) => upload.id !== uploadId));
-    alert("Upload wurde akzeptiert!");
+  const handleAccept = async (uploadId: string) => {
+    try {
+      const response = await fetch(`/api/admin/uploads/${uploadId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "accept" }),
+      });
+
+      if (response.ok) {
+        setUploads(uploads.filter((upload) => upload.id !== uploadId));
+        alert("Upload wurde akzeptiert!");
+      } else {
+        const errorData = await response.json();
+        alert(`Fehler: ${errorData.error || "Unbekannter Fehler"}`);
+      }
+    } catch (error) {
+      console.error("Error accepting upload:", error);
+      alert("Netzwerkfehler. Bitte versuchen Sie es erneut.");
+    }
   };
 
-  const handleDenyClick = (uploadId: number) => {
+  const handleDenyClick = (uploadId: string) => {
     setSelectedUploadId(uploadId);
     setShowDenyModal(true);
   };
 
-  const handleDenyConfirm = () => {
+  const handleDenyConfirm = async () => {
     if (!denyReason.trim()) {
       alert("Bitte geben Sie einen Grund für die Ablehnung an.");
       return;
     }
-    // TODO: Implement actual deny API call
-    console.log(`Denying upload ${selectedUploadId} with reason: ${denyReason}`);
-    setUploads(uploads.filter((upload) => upload.id !== selectedUploadId));
-    setShowDenyModal(false);
-    setDenyReason("");
-    setSelectedUploadId(null);
-    alert("Upload wurde abgelehnt!");
+
+    try {
+      const response = await fetch(`/api/admin/uploads/${selectedUploadId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "deny",
+          reason: denyReason,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Remove the denied upload from the list
+        setUploads(uploads.filter((upload) => upload.id !== selectedUploadId));
+
+        // Reset modal state
+        setShowDenyModal(false);
+        setDenyReason("");
+        setSelectedUploadId(null);
+
+        alert("Upload wurde erfolgreich abgelehnt.");
+      } else {
+        alert(`Fehler beim Ablehnen: ${data.error || "Unbekannter Fehler"}`);
+      }
+    } catch (error) {
+      console.error("Error denying upload:", error);
+      alert(
+        "Netzwerkfehler beim Ablehnen des Uploads. Bitte versuchen Sie es erneut."
+      );
+    }
   };
 
-  const handleCreateUser = () => {
+  const handleCreateUser = async () => {
     if (
       !newUser.email ||
       !newUser.username ||
@@ -97,25 +193,120 @@ const AdminPageComponent = () => {
       alert("Bitte füllen Sie alle Felder aus.");
       return;
     }
-    // TODO: Implement actual create user API call
-    console.log("Creating user:", newUser);
-    const user = {
-      id: users.length + 1,
-      ...newUser,
-      createdAt: new Date().toISOString().split("T")[0],
-    };
-    setUsers([...users, user]);
-    setShowCreateUserModal(false);
-    setNewUser({ email: "", username: "", name: "", password: "" });
-    alert("Benutzer wurde erfolgreich erstellt!");
+
+    try {
+      const response = await fetch("/api/admin/users/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(newUser),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Add new user to the list
+        setUsers([...users, data.user]);
+        setShowCreateUserModal(false);
+        setNewUser({ email: "", username: "", name: "", password: "" });
+        alert("Benutzer wurde erfolgreich erstellt!");
+      } else {
+        alert(`Fehler: ${data.error || "Unbekannter Fehler"}`);
+      }
+    } catch (error) {
+      console.error("Error creating user:", error);
+      alert("Netzwerkfehler. Bitte versuchen Sie es erneut.");
+    }
   };
 
-  const handleDeleteUser = (userId: number) => {
-    // TODO: Implement actual delete user API call
-    console.log(`Deleting user ${userId}`);
-    setUsers(users.filter((user) => user.id !== userId));
-    setDeleteConfirmUserId(null);
-    alert("Benutzer wurde gelöscht!");
+  const handleDeleteUser = async (userId: string) => {
+    try {
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setUsers(users.filter((user) => user.id !== userId));
+        setDeleteConfirmUserId(null);
+        alert("Benutzer wurde gelöscht!");
+      } else {
+        alert(`Fehler: ${data.error || "Unbekannter Fehler"}`);
+      }
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      alert("Netzwerkfehler. Bitte versuchen Sie es erneut.");
+    }
+  };
+
+  const handleEditUserClick = (user: User) => {
+    setEditUser({
+      email: user.email,
+      username: user.username,
+      name: user.name || "",
+      role: user.role || "viewer",
+      password: "",
+    });
+    setEditingUserId(user.id);
+    setShowEditUserModal(true);
+  };
+
+  const handleEditUser = async () => {
+    if (!editUser.email || !editUser.username) {
+      alert("E-Mail und Benutzername sind erforderlich.");
+      return;
+    }
+
+    try {
+      const updateData: any = {
+        email: editUser.email,
+        username: editUser.username,
+        name: editUser.name,
+        role: editUser.role,
+      };
+
+      // Only include password if it was changed
+      if (editUser.password.trim()) {
+        updateData.password = editUser.password;
+      }
+
+      const response = await fetch(`/api/admin/users/${editingUserId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Update user in the list
+        setUsers(
+          users.map((user) => (user.id === editingUserId ? data.user : user))
+        );
+        setShowEditUserModal(false);
+        setEditingUserId(null);
+        setEditUser({
+          email: "",
+          username: "",
+          name: "",
+          role: "",
+          password: "",
+        });
+        alert("Benutzer wurde erfolgreich aktualisiert!");
+      } else {
+        alert(`Fehler: ${data.error || "Unbekannter Fehler"}`);
+      }
+    } catch (error) {
+      console.error("Error updating user:", error);
+      alert("Netzwerkfehler. Bitte versuchen Sie es erneut.");
+    }
   };
 
   return (
@@ -191,23 +382,18 @@ const AdminPageComponent = () => {
                               />
                               <div>
                                 <h3 className="font-semibold text-gray-800">
-                                  {upload.filename}
+                                  {upload.link}
                                 </h3>
                                 <p className="text-sm text-gray-500">
-                                  Hochgeladen von {upload.uploadedBy} am{" "}
-                                  {upload.uploadDate}
-                                </p>
-                                <p className="text-sm text-gray-400">
-                                  Größe: {upload.size}
+                                  Hochgeladen von {upload.uploaded_by} am{" "}
+                                  {upload.createdAt}
                                 </p>
                               </div>
                             </div>
                           </div>
                           <div className="flex space-x-2">
                             <button
-                              onClick={() =>
-                                handleDownload(upload.id, upload.filename)
-                              }
+                              onClick={() => handleDownload(upload.link)}
                               className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors flex items-center"
                               title="Datei herunterladen"
                             >
@@ -316,13 +502,26 @@ const AdminPageComponent = () => {
                                 </button>
                               </div>
                             ) : (
-                              <button
-                                onClick={() => setDeleteConfirmUserId(user.id)}
-                                className="text-red-600 hover:text-red-800 flex items-center"
-                              >
-                                <Trash2 size={16} className="mr-1" />
-                                Löschen
-                              </button>
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  onClick={() => handleEditUserClick(user)}
+                                  className="text-blue-600 hover:text-blue-800 flex items-center"
+                                  title="Benutzer bearbeiten"
+                                >
+                                  <Edit size={16} className="mr-1" />
+                                  Bearbeiten
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    setDeleteConfirmUserId(user.id)
+                                  }
+                                  className="text-red-600 hover:text-red-800 flex items-center"
+                                  title="Benutzer löschen"
+                                >
+                                  <Trash2 size={16} className="mr-1" />
+                                  Löschen
+                                </button>
+                              </div>
                             )}
                           </td>
                         </tr>
@@ -447,7 +646,12 @@ const AdminPageComponent = () => {
               <button
                 onClick={() => {
                   setShowCreateUserModal(false);
-                  setNewUser({ email: "", username: "", name: "", password: "" });
+                  setNewUser({
+                    email: "",
+                    username: "",
+                    name: "",
+                    password: "",
+                  });
                 }}
                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors"
               >
@@ -458,6 +662,117 @@ const AdminPageComponent = () => {
                 className="px-4 py-2 bg-[#357174] text-white rounded hover:bg-[#2a5a5d] transition-colors"
               >
                 Erstellen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {showEditUserModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-semibold text-gray-800 mb-4">
+              Benutzer bearbeiten
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  E-Mail
+                </label>
+                <input
+                  type="email"
+                  value={editUser.email}
+                  onChange={(e) =>
+                    setEditUser({ ...editUser, email: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174]"
+                  placeholder="max.mustermann@example.com"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Benutzername
+                </label>
+                <input
+                  type="text"
+                  value={editUser.username}
+                  onChange={(e) =>
+                    setEditUser({ ...editUser, username: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174]"
+                  placeholder="max.mustermann"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Name
+                </label>
+                <input
+                  type="text"
+                  value={editUser.name}
+                  onChange={(e) =>
+                    setEditUser({ ...editUser, name: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174]"
+                  placeholder="Max Mustermann"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Rolle
+                </label>
+                <select
+                  value={editUser.role}
+                  onChange={(e) =>
+                    setEditUser({ ...editUser, role: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174]"
+                >
+                  <option value="viewer">Viewer</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Neues Passwort (optional)
+                </label>
+                <input
+                  type="password"
+                  value={editUser.password}
+                  onChange={(e) =>
+                    setEditUser({ ...editUser, password: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174]"
+                  placeholder="Neues Passwort (leer lassen für keine Änderung)"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Leer lassen, um das Passwort nicht zu ändern.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowEditUserModal(false);
+                  setEditingUserId(null);
+                  setEditUser({
+                    email: "",
+                    username: "",
+                    name: "",
+                    role: "",
+                    password: "",
+                  });
+                }}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={handleEditUser}
+                className="px-4 py-2 bg-[#357174] text-white rounded hover:bg-[#2a5a5d] transition-colors"
+              >
+                Speichern
               </button>
             </div>
           </div>

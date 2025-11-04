@@ -24,6 +24,7 @@ const Sidebar = () => {
     title: string;
     path: string;
     icon: LucideIcon;
+    protected: boolean;
   };
 
   const links: LinkType[] = [
@@ -31,31 +32,37 @@ const Sidebar = () => {
       title: "SQL Abfrage",
       path: "/",
       icon: SearchCode,
+      protected: false,
     },
     {
       title: "Karte",
       path: "/map",
       icon: Globe,
+      protected: false,
     },
     {
       title: "Upload",
       path: "/upload",
       icon: FilePlus2Icon,
+      protected: false,
     },
     {
       title: "Meine Uploads",
       path: "/my-uploads",
       icon: FileInputIcon,
+      protected: false,
     },
     {
       title: "Fischsuche",
       path: "/search/fish",
+      protected: false,
       icon: Fish,
     },
     {
       title: "Admin",
       path: "/admin",
       icon: ShieldEllipsis,
+      protected: true,
     },
   ];
 
@@ -71,15 +78,17 @@ const Sidebar = () => {
         <hr className="mt-3 w-[95%] text-[#e5e5e5] mx-auto" />
         <div className="flex-1">
           <div className="space-y-4 mt-4">
-            {links.map((link) => (
-              <div
-                key={link.title}
-                className="ml-3 flex flex-row items-center transition-colors duration-200 text-[#e5e5e5] hover:text-[#357174]"
-              >
-                <link.icon className="mr-2" size={18} />
-                <Link href={link.path}>{link.title}</Link>
-              </div>
-            ))}
+            {links
+              .filter((link) => !link.protected || user?.role === "admin")
+              .map((link) => (
+                <div
+                  key={link.title}
+                  className="ml-3 flex flex-row items-center transition-colors duration-200 text-[#e5e5e5] hover:text-[#357174]"
+                >
+                  <link.icon className="mr-2" size={18} />
+                  <Link href={link.path}>{link.title}</Link>
+                </div>
+              ))}
           </div>
         </div>
 

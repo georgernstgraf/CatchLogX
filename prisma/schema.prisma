@@ -22,6 +22,8 @@ model User {
   email          String   @unique
   role           String   @default("viewer")
   isFirstLogin   Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
   sessions       Session[]
   uploads        Uploads[]
 }
@@ -38,6 +40,9 @@ model Uploads {
     uploaded_by     String
     link            String
     state           String
+    note            String?     
+    createdAt       DateTime    @default(now())
+    updatedAt       DateTime    @updatedAt
 
     user            User        @relation(fields: [uploaded_by], references: [id])
 }
