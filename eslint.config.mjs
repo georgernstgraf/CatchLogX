@@ -10,15 +10,23 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
     ignores: [
-      "app/generated/**/*",
-      "prisma/migrations/**/*",
-      "node_modules/**/*",
-      ".next/**/*",
-      "out/**/*",
+      "app/generated/**",
+      "prisma/migrations/**",
+      "node_modules/**",
+      ".next/**",
+      "out/**",
+      "**/generated/**",
+      "**/*.generated.*",
+      "**/runtime/**",
+      "**/wasm*.js",
+      "**/client.js",
+      "**/query_engine-*.node",
     ],
+  },
+  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  {
     rules: {
       "@typescript-eslint/no-explicit-any": ["off"],
     },

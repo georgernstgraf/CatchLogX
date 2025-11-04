@@ -1,9 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { withAdminAuth } from "@/lib/admin-middleware";
+import { requireAdminAuth } from "@/lib/admin-middleware";
 import bcrypt from "bcrypt";
 
-export const POST = withAdminAuth(async (request, sessionData) => {
+export async function POST(request: NextRequest) {
+  // Check admin authentication
+  const authResult = await requireAdminAuth(request);
+  if (authResult instanceof NextResponse) {
+    return authResult;
+  }
+  const sessionData = authResult;
+
   try {
     const body = await request.json();
     const { username, email, name, password } = body;
@@ -72,4 +79,4 @@ export const POST = withAdminAuth(async (request, sessionData) => {
       { status: 500 }
     );
   }
-});
+}
