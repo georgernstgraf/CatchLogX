@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { withAdminAuth } from "@/lib/admin-middleware";
 
-export async function GET() {
+export const GET = withAdminAuth(async () => {
   try {
     const users = await prisma.user.findMany({
       select: {
@@ -36,4 +37,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+});
