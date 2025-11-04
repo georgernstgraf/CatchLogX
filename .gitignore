@@ -42,5 +42,5 @@ yarn-error.log*
 next-env.d.ts
 
 /app/generated/prisma
-fische.db
+/prisma/prisma/test_db.sqlite
 samples/.~lock.data.xlsx#
