@@ -12,7 +12,7 @@ async function main() {
       username: username,
       hashedPassword: hashed,
       email: email,
-      role: "admin"
+      role: "admin",
     },
   });
 
