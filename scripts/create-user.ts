@@ -4,7 +4,7 @@ import bcrypt from "bcrypt";
 async function main() {
   const username = "admin";
   const plainPassword = "admin";
-  const email = "admin@testmail.com"
+  const email = "admin@testmail.com";
   const hashed = await bcrypt.hash(plainPassword, 10);
 
   await prisma.user.create({
@@ -13,6 +13,7 @@ async function main() {
       hashedPassword: hashed,
       email: email,
       role: "admin",
+      isFirstLogin: false,
     },
   });
 
@@ -21,9 +22,10 @@ async function main() {
       username: "user1",
       hashedPassword: await bcrypt.hash("user1", 10),
       email: "user1@testmail.com",
-      role: "viewer"
-    }
-  })
+      role: "viewer",
+      isFirstLogin: false,
+    },
+  });
 
   console.log("Users created");
 }
