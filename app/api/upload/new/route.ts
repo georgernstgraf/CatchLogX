@@ -359,7 +359,7 @@ export async function POST(req: NextRequest) {
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
 
       const sessionResponse = await fetch(
-        `${req.nextUrl.origin}/api/auth/session`,
+        `http://localhost:3001/api/auth/session`,
         {
           method: "GET",
           headers: {
