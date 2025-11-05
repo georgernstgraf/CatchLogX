@@ -28,7 +28,6 @@ services:
       - ./:/app
       - /app/node_modules
     environment:
-      NODE_ENV: development
       DATABASE_URL: postgresql://clxadmin:clxadmin@db:5432/clx?schema=public
       NEXT_TELEMETRY_DISABLED: "1"
       WATCHPACK_POLLING: "true"
@@ -39,9 +38,7 @@ services:
     depends_on:
       - db
     command: >
-      sh -c "npm install
-      && npm run build
-      && npm start
+      sh -c "npm ci --include=dev || install --include=dev
       && npx prisma generate
       && npx prisma db push
       && npx tsx scripts/create-user.ts
@@ -49,6 +46,8 @@ services:
       && npx tsx scripts/insert-river-sites.ts
       && npx tsx scripts/insert-samplings.ts
       && npx tsx scripts/insert-fish-catches.ts
+      && npm run build
+      && npx next start -p 3001
       "
     restart: unless-stopped
 
