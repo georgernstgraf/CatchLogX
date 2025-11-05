@@ -28,7 +28,10 @@ services:
       - ./:/app
       - /app/node_modules
     environment:
+      NODE_ENV: production
       DATABASE_URL: postgresql://clxadmin:clxadmin@db:5432/clx?schema=public
+      NEXTAUTH_URL: https://catchlogx.test.a19.at
+      NEXTAUTH_SECRET: "your-secure-secret-change-in-production"
       NEXT_TELEMETRY_DISABLED: "1"
       WATCHPACK_POLLING: "true"
       HOSTNAME: "0.0.0.0"
