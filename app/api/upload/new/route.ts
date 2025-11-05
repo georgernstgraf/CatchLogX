@@ -348,70 +348,81 @@ export async function POST(req: NextRequest) {
     }
 
     // Speicherung der Datei und Eintrag in der Datenbank
+    try {
+      // Check ob Ordner existiert oder nicht
+      const uploadsDir = "./uploads";
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
 
-    if (errors.length === 0) {
-      try {
-        // Check ob Ordner existiert oder nicht
-        const uploadsDir = "./uploads";
-        if (!fs.existsSync(uploadsDir)) {
-          fs.mkdirSync(uploadsDir, { recursive: true });
+      // Dateiname = Username + Timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+
+      const sessionResponse = await fetch(
+        `${req.nextUrl.origin}/api/auth/session`,
+        {
+          method: "GET",
+          headers: {
+            Cookie: req.headers.get("cookie") || "",
+          },
         }
+      );
 
-        // Dateiname = Username + Timestamp
-        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const sessionData = await sessionResponse.json();
+      console.log("Session response:", sessionData); // Debug-Log
 
-        const sessionResponse = await fetch(
-          `${req.nextUrl.origin}/api/auth/session`,
-          {
-            method: "GET",
-            headers: {
-              Cookie: req.headers.get("cookie") || "",
-            },
-          }
+      if (!sessionData.authenticated || !sessionData.user?.id) {
+        return NextResponse.json(
+          { error: "Nicht authentifiziert oder User-ID fehlt" },
+          { status: 401 }
         );
+      }
 
-        const sessionData = await sessionResponse.json();
+      const username =
+        sessionData.user.username || sessionData.user.name || "user";
 
-        let username = "user";
+      // Dateiname und Pfad
+      const fileName = `${username}_${timestamp}.xlsx`;
+      const filePath = `${uploadsDir}/${fileName}`;
 
-        if (sessionData.authenticated && sessionData.user) {
-          username =
-            sessionData.user.username || sessionData.user.name || "user";
-        }
+      // Datei speichern
+      fs.writeFileSync(filePath, fileBuffer);
+      console.log("Datei gespeichert:", filePath); // Debug-Log
 
-        // Dateiname und Pfad
-        const fileName = `${username}_${timestamp}.xlsx`;
-        const filePath = `${uploadsDir}/${fileName}`;
-
-        // Datei speichern
-        fs.writeFileSync(filePath, fileBuffer);
-
-        try {
-          await prisma.uploads.create({
-            data: {
-              link: filePath,
-              state: "In Bearbeitung",
-              user: {
-                connect: {
-                  id: sessionData.user.id,
-                },
+      try {
+        const uploadRecord = await prisma.uploads.create({
+          data: {
+            link: filePath,
+            state: "In Bearbeitung",
+            user: {
+              connect: {
+                id: sessionData.user.id,
               },
             },
-          });
-        } catch (error) {
-          return NextResponse.json({
+          },
+        });
+        console.log("DB-Eintrag erstellt:", uploadRecord.id); // Debug-Log
+      } catch (error) {
+        console.error("DB-Fehler:", error);
+        return NextResponse.json(
+          {
             message: "Fehler beim Eintragen der Informationen in der Datenbank",
             timestamp: new Date(),
-            error: error,
-          });
-        }
-      } catch (error) {
-        return NextResponse.json({
+            error: error instanceof Error ? error.message : String(error),
+          },
+          { status: 500 }
+        );
+      }
+    } catch (error) {
+      console.error("File-Speicher-Fehler:", error);
+      return NextResponse.json(
+        {
           message: "Fehler bei der Speicherung der Datei",
           timestamp: new Date(),
-          error: error,
-        });
-      }
+          error: error instanceof Error ? error.message : String(error),
+        },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
