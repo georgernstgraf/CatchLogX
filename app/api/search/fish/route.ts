@@ -37,8 +37,6 @@ export async function GET(
       );
     }
 
-    const searchPattern = `%${query}%`;
-
     // Datenbankabfrage
     const suggestions: FishSuggestion[] = await prisma.fishSpecies.findMany({
       select: {
