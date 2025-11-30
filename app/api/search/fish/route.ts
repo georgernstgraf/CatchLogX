@@ -4,9 +4,9 @@ import { NextRequest, NextResponse } from "next/server";
 interface FishSuggestion {
   id: number;
   speciesName: string;
-  germanName: string;
-  latinName: string;
-  family: string;
+  germanName: string | null;
+  latinName: string | null;
+  family: string | null;
 }
 
 interface SearchResponse {
