@@ -1,0 +1,58 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: clx-postgres
+    environment:
+      POSTGRES_USER: clxadmin
+      POSTGRES_PASSWORD: clxadmin
+      POSTGRES_DB: clx
+    ports:
+      - "5432:5432"
+    volumes:
+      - clx_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clxadmin -d clx"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  app:
+    image: node:20-alpine
+    container_name: clx-web
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://clxadmin:clxadmin@db:5432/clx?schema=public
+      NEXTAUTH_URL: https://catchlogx.test.a19.at
+      NEXTAUTH_SECRET: "your-secure-secret-change-in-production"
+      NEXT_TELEMETRY_DISABLED: "1"
+      WATCHPACK_POLLING: "true"
+      HOSTNAME: "0.0.0.0"
+      PORT: "3001"
+    ports:
+      - "3001:3001"
+    depends_on:
+      - db
+    command: >
+      sh -c "npm ci --include=dev || install --include=dev
+      && npx prisma generate
+      && npx prisma db push
+      && npx tsx scripts/create-user.ts
+      && npx tsx scripts/insert-fish.ts
+      && npx tsx scripts/insert-river-sites.ts
+      && npx tsx scripts/insert-samplings.ts
+      && npx tsx scripts/insert-fish-catches.ts
+      && npm run build
+      && npx next start -p 3001
+      "
+    restart: unless-stopped
+
+volumes:
+  clx_pgdata:
