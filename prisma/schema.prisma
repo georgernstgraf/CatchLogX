@@ -26,6 +26,19 @@ model User {
   updatedAt      DateTime @updatedAt
   sessions       Session[]
   uploads        Uploads[]
+  userQueries    UserQueries[]
+}
+
+model UserQueries {
+    id          String    @id @default(uuid())
+    createdAt   DateTime  @default(now())
+    updatedAt   DateTime? @updatedAt
+    userId      String
+    query       String
+    name        String
+
+    // relations
+    user        User      @relation(fields: [userId], references: [id])
 }
 
 model PasswordResets {
