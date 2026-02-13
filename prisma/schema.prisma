@@ -41,6 +41,19 @@ model UserQueries {
     user        User      @relation(fields: [userId], references: [id])
 }
 
+model ExportedQueries {
+    id                  String   @id @default(uuid())
+    fileName            String   
+    filePath            String
+    exportedByUserId    String
+    query               String
+    createdAt           DateTime @default(now())
+
+    // relations
+    user                User     @relation(fields: [exportedByUserId], references: [id])
+
+}
+
 model DummyFiles {
     id                  String    @id @default(uuid())
     fileName            String
