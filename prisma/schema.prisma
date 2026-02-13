@@ -41,6 +41,17 @@ model UserQueries {
     user        User      @relation(fields: [userId], references: [id])
 }
 
+model DummyFiles {
+    id                  String    @id @default(uuid())
+    fileName            String
+    filePath            String
+    uploadedByUserId    String
+    createdAt           DateTime    @default(now())
+    isVisible           Boolean     @default(true)
+    isDeleted           Boolean?
+    deletedAt           DateTime?
+}
+
 model PasswordResets {
   id                String      @id @default(cuid())
   username          String
