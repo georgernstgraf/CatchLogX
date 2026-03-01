@@ -69,7 +69,7 @@ model DummyFiles {
 model PasswordResets {
   id                String      @id @default(cuid())
   username          String
-  token             String
+  token             String      @unique
   timestamp         DateTime
   state             PasswordResetStates
 }
