@@ -72,6 +72,7 @@ model PasswordResets {
   token             String      @unique
   timestamp         DateTime
   state             PasswordResetStates
+  passwordChangedAt DateTime?
 }
 
 model Uploads {
