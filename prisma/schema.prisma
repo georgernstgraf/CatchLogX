@@ -27,6 +27,7 @@ model User {
   sessions       Session[]
   uploads        Uploads[]
   userQueries    UserQueries[]
+  exportedQueries ExportedQueries[]
 }
 
 model UserQueries {
@@ -68,8 +69,9 @@ model DummyFiles {
 model PasswordResets {
   id                String      @id @default(cuid())
   username          String
+  token             String
   timestamp         DateTime
-  state             String
+  state             PasswordResetStates
 }
 
 model Uploads {
@@ -90,6 +92,12 @@ enum UploadStates {
     REJECTED
     DB_ERROR
     SAVED_IN_DB
+}
+
+enum PasswordResetStates {
+    REQUESTED
+    EXPIRED
+    DONE
 }
 
 model Session {
