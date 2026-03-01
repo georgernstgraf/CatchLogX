@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { newPassword, newPasswordConfirm, username, isValid } =
+  const { newPassword, newPasswordConfirm, username, token, isValid } =
     await req.json();
 
   if (newPassword !== newPasswordConfirm) {
@@ -92,26 +92,36 @@ export async function POST(req: NextRequest) {
   try {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    const updatedUser = await prisma.user.update({
-      where: {
-        username: username,
-      },
-      data: {
-        hashedPassword: hashedPassword,
-      },
-    });
-
-    if (updatedUser === null) {
+    try {
+      await prisma.user.update({
+        where: {
+          username: username,
+        },
+        data: {
+          hashedPassword: hashedPassword,
+        },
+      });
+    } catch {
       return NextResponse.json(
         {
-          message: "User not found.",
+          message: "Error while trying to set new password.",
           timestamp: new Date(),
         },
         {
-          status: 404,
+          status: 500,
         },
       );
     }
+
+    await prisma.passwordResets.update({
+      where: {
+        token: token,
+      },
+      data: {
+        state: "DONE",
+        passwordChangedAt: new Date(),
+      },
+    });
 
     return NextResponse.json(
       {
