@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 
 interface Location {
@@ -17,6 +17,14 @@ interface PresetQuery {
   hasParameter?: boolean;
   parameterLabel?: string;
   parameterPlaceholder?: string;
+}
+
+interface SavedQuery {
+  id: string;
+  name: string;
+  query: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Standardabfragen
@@ -154,6 +162,142 @@ const SqlQueryUIDesign: React.FC = () => {
   const [selectedSamplingId, setSelectedSamplingId] = useState<number | null>(null);
   const [samplingDetails, setSamplingDetails] = useState<Record<string, unknown>[]>([]);
   const [isLoadingDetails, setIsLoadingDetails] = useState<boolean>(false);
+
+  // Toast state
+  const [toast, setToast] = useState<{ message: string; type: "error" | "success" } | null>(null);
+  const toastTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((message: string, type: "error" | "success" = "error") => {
+    if (toastTimeout.current) clearTimeout(toastTimeout.current);
+    setToast({ message, type });
+    toastTimeout.current = setTimeout(() => setToast(null), 3500);
+  }, []);
+
+  // Saved queries state
+  const [savedQueries, setSavedQueries] = useState<SavedQuery[]>([]);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [saveQueryName, setSaveQueryName] = useState("");
+  const [editingQueryId, setEditingQueryId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [confirmLoad, setConfirmLoad] = useState<SavedQuery | null>(null);
+  const [previewQuery, setPreviewQuery] = useState<SavedQuery | null>(null);
+
+  const fetchSavedQueries = useCallback(async () => {
+    try {
+      const res = await fetch("/api/query/save");
+      if (res.ok) {
+        const data = await res.json();
+        setSavedQueries(data.data || []);
+      }
+    } catch (err) {
+      console.error("Fehler beim Laden der gespeicherten Queries:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSavedQueries();
+  }, [fetchSavedQueries]);
+
+  const handleSaveQuery = useCallback(async () => {
+    const trimmed = saveQueryName.trim();
+    if (!trimmed || !query.trim() || isSaving) return;
+
+    // Duplikat-Check: gleicher Name existiert bereits
+    const duplicateName = savedQueries.find(
+      (sq) => sq.name.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (duplicateName) {
+      showToast("Eine Abfrage mit diesem Namen existiert bereits.", "error");
+      return;
+    }
+
+    // Duplikat-Check: gleicher Query-Text existiert bereits
+    const duplicateQuery = savedQueries.find(
+      (sq) => sq.query.trim() === query.trim()
+    );
+    if (duplicateQuery) {
+      showToast(`Diese Abfrage ist bereits unter "${duplicateQuery.name}" gespeichert.`, "error");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/query/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed, query }),
+      });
+      if (res.ok) {
+        await fetchSavedQueries();
+        setSaveQueryName("");
+        setShowSaveDialog(false);
+        showToast("Abfrage gespeichert.", "success");
+      }
+    } catch (err) {
+      console.error("Fehler beim Speichern:", err);
+      showToast("Fehler beim Speichern der Abfrage.", "error");
+    } finally {
+      setIsSaving(false);
+    }
+  }, [saveQueryName, query, isSaving, fetchSavedQueries, savedQueries, showToast]);
+
+  const handleLoadSavedQuery = useCallback((sq: SavedQuery) => {
+    // Wenn im Editor bereits etwas steht, Warnung zeigen
+    if (query.trim() && query !== presetQueries[0].query) {
+      setConfirmLoad(sq);
+      return;
+    }
+    setQuery(sq.query);
+    setSelectedPreset("custom");
+    setParameter("");
+    setSelectedSamplingId(null);
+    setSamplingDetails([]);
+  }, [query]);
+
+  const confirmLoadQuery = useCallback(() => {
+    if (!confirmLoad) return;
+    setQuery(confirmLoad.query);
+    setSelectedPreset("custom");
+    setParameter("");
+    setSelectedSamplingId(null);
+    setSamplingDetails([]);
+    setConfirmLoad(null);
+  }, [confirmLoad]);
+
+  const handleRenameSavedQuery = useCallback(async (id: string) => {
+    const trimmed = editingName.trim();
+    if (!trimmed) return;
+    try {
+      const res = await fetch("/api/query/save", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, name: trimmed }),
+      });
+      if (res.ok) {
+        await fetchSavedQueries();
+        setEditingQueryId(null);
+        setEditingName("");
+      }
+    } catch (err) {
+      console.error("Fehler beim Umbenennen:", err);
+    }
+  }, [editingName, fetchSavedQueries]);
+
+  const handleDeleteSavedQuery = useCallback(async (id: string) => {
+    try {
+      const res = await fetch("/api/query/save", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (res.ok) {
+        await fetchSavedQueries();
+      }
+    } catch (err) {
+      console.error("Fehler beim Löschen:", err);
+    }
+  }, [fetchSavedQueries]);
 
   const currentPreset = presetQueries.find((p) => p.id === selectedPreset);
 
@@ -312,7 +456,7 @@ ORDER BY "Anzahl" DESC;`;
       <div className="max-w-6xl mx-auto px-6 py-8">
         <h1 className="text-2xl font-semibold text-gray-800 mb-6">SQL Query</h1>
 
-        {/* Preset-Auswahl */}
+        {/* Abfragen — Standardabfragen + Gespeicherte in einer Karte */}
         <section className="bg-white border border-gray-200 rounded-xl shadow-sm mb-6">
           <div className="px-6 py-4 border-b border-gray-200">
             <h2 className="text-sm font-medium text-gray-700">Standardabfragen</h2>
@@ -351,18 +495,106 @@ ORDER BY "Anzahl" DESC;`;
               </div>
             )}
           </div>
+
+          {/* Gespeicherte Abfragen — gleiche Karte */}
+          {savedQueries.length > 0 && (
+            <>
+              <div className="px-6 py-3 flex items-center justify-between border-t border-gray-200">
+                <h2 className="text-sm font-medium text-gray-700">Gespeicherte Abfragen ({savedQueries.length})</h2>
+              </div>
+              <div className="px-6 py-3 pt-0 max-h-48 overflow-y-auto">
+                <table className="w-full text-sm">
+                  <tbody>
+                    {savedQueries.map((sq) => (
+                      <tr key={sq.id} className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
+                        <td className="py-2 pr-3 w-full">
+                          {editingQueryId === sq.id ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={editingName}
+                                onChange={(e) => setEditingName(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") handleRenameSavedQuery(sq.id);
+                                  if (e.key === "Escape") { setEditingQueryId(null); setEditingName(""); }
+                                }}
+                                autoFocus
+                                className="flex-1 px-2 py-1 border border-teal-400 rounded text-sm focus:ring-2 focus:ring-teal-500 outline-none"
+                              />
+                              <button
+                                onClick={() => handleRenameSavedQuery(sq.id)}
+                                className="text-xs px-2 py-1 rounded bg-teal-600 text-white hover:bg-teal-700"
+                              >OK</button>
+                              <button
+                                onClick={() => { setEditingQueryId(null); setEditingName(""); }}
+                                className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
+                              >Abbrechen</button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleLoadSavedQuery(sq)}
+                              className="text-left w-full truncate text-gray-800 hover:text-teal-700 font-medium"
+                              title={sq.query}
+                            >
+                              {sq.name}
+                            </button>
+                          )}
+                        </td>
+                        {editingQueryId !== sq.id && (
+                          <td className="py-2 whitespace-nowrap">
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setPreviewQuery(sq); }}
+                                title="Vorschau"
+                                className="p-1 rounded text-gray-400 hover:text-teal-600 hover:bg-teal-50"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z" /><path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" /></svg>
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setEditingQueryId(sq.id); setEditingName(sq.name); }}
+                                title="Umbenennen"
+                                className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteSavedQuery(sq.id); }}
+                                title="Löschen"
+                                className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </section>
 
         <section className="bg-white border border-gray-200 rounded-xl shadow-sm mb-6">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h2 className="text-sm font-medium text-gray-700">SQL Query</h2>
-            <button
-              onClick={handleSqlQuery}
-              disabled={isLoading || (currentPreset?.hasParameter && !parameter)}
-              className="inline-flex items-center gap-2 rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-            >
-              {isLoading ? "Wird ausgeführt..." : "Ausführen"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowSaveDialog(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z" /></svg>
+                Speichern
+              </button>
+              <button
+                onClick={handleSqlQuery}
+                disabled={isLoading || (currentPreset?.hasParameter && !parameter)}
+                className="inline-flex items-center gap-2 rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                {isLoading ? "Wird ausgeführt..." : "Ausführen"}
+              </button>
+            </div>
           </div>
           <div className="px-6 pb-6 pt-4">
             <textarea
@@ -383,6 +615,118 @@ ORDER BY "Anzahl" DESC;`;
             )}
           </div>
         </section>
+
+        {/* Preview Query Dialog */}
+        {previewQuery && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-semibold text-gray-800">{previewQuery.name}</h3>
+                <button
+                  onClick={() => setPreviewQuery(null)}
+                  className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                </button>
+              </div>
+              <pre className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm font-mono text-gray-800 whitespace-pre-wrap break-words max-h-72 overflow-y-auto">{previewQuery.query}</pre>
+              <div className="flex justify-end gap-2 mt-4">
+                <button
+                  onClick={() => setPreviewQuery(null)}
+                  className="px-4 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                >Schließen</button>
+                <button
+                  onClick={() => { handleLoadSavedQuery(previewQuery); setPreviewQuery(null); }}
+                  className="px-4 py-2 text-sm rounded-md bg-teal-600 text-white hover:bg-teal-700 font-medium"
+                >In Editor laden</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Toast Notification */}
+        {toast && (
+          <div className={`fixed top-6 right-6 z-[60] px-4 py-3 rounded-lg shadow-lg text-sm font-medium transition-all animate-in fade-in slide-in-from-top-2 ${
+            toast.type === "error"
+              ? "bg-red-50 border border-red-200 text-red-800"
+              : "bg-teal-50 border border-teal-200 text-teal-800"
+          }`}>
+            <div className="flex items-center gap-2">
+              {toast.type === "error" ? (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+              )}
+              {toast.message}
+              <button onClick={() => setToast(null)} className="ml-2 opacity-60 hover:opacity-100">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Confirm Load Dialog */}
+        {confirmLoad && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-6">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-600" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+                </div>
+                <h3 className="text-base font-semibold text-gray-800">Query ersetzen?</h3>
+              </div>
+              <p className="text-sm text-gray-600 mb-1">Die aktuelle Eingabe im Editor wird durch die gespeicherte Abfrage <strong>&ldquo;{confirmLoad.name}&rdquo;</strong> ersetzt.</p>
+              <p className="text-xs text-gray-400 mb-4">Diese Aktion kann nicht rückgängig gemacht werden.</p>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setConfirmLoad(null)}
+                  className="px-4 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                >Abbrechen</button>
+                <button
+                  onClick={confirmLoadQuery}
+                  className="px-4 py-2 text-sm rounded-md bg-teal-600 text-white hover:bg-teal-700 font-medium"
+                >Ersetzen</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Save Query Dialog */}
+        {showSaveDialog && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Query speichern</h3>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+              <input
+                type="text"
+                value={saveQueryName}
+                onChange={(e) => setSaveQueryName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSaveQuery(); if (e.key === "Escape") setShowSaveDialog(false); }}
+                placeholder="z.B. Meine Fischarten-Abfrage"
+                autoFocus
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none mb-3"
+              />
+              <div className="text-xs text-gray-400 mb-4 font-mono bg-gray-50 rounded p-2 max-h-20 overflow-auto">
+                {query.slice(0, 200)}{query.length > 200 ? "..." : ""}
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => { setShowSaveDialog(false); setSaveQueryName(""); }}
+                  className="px-4 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={handleSaveQuery}
+                  disabled={!saveQueryName.trim() || isSaving}
+                  className="px-4 py-2 text-sm rounded-md bg-teal-600 text-white hover:bg-teal-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
+                >
+                  {isSaving ? "Wird gespeichert..." : "Speichern"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <section className="bg-white border border-gray-200 rounded-xl shadow-sm mb-6">
           <div className="px-6 py-4 border-b border-gray-200">
