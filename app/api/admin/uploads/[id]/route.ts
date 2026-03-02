@@ -29,16 +29,19 @@ export async function PATCH(
       );
     }
 
-    const updatedUpload = await updateUpload(id, action, reason);
+    const result = await updateUpload(id, action, reason);
 
-    if (!updatedUpload) {
+    if (!result) {
       return NextResponse.json({ error: "Upload not found" }, { status: 404 });
     }
 
     return NextResponse.json(
       {
         message: `Upload ${action}ed successfully`,
-        upload: updatedUpload,
+        upload: result.upload,
+        ...(result.emailError && {
+          warning: "Upload updated but failed to send rejection email.",
+        }),
       },
       { status: 200 },
     );

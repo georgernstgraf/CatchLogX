@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma";
-import { promises as fs } from "fs";
+import { promises as fsPromises } from "fs";
+import fs from "fs";
 import path from "path";
 import bcrypt from "bcrypt";
+import * as XLSX from "xlsx";
 import { Uploads } from "@/app/generated/prisma";
 import nodemailer from "nodemailer";
 import SMTPTransport from "nodemailer/lib/smtp-transport";
-import { NextResponse } from "next/server";
 
 export async function fetchAllData() {
   const users = await prisma.user.findMany({
@@ -26,6 +27,9 @@ export async function fetchAllData() {
       uploaded_by: true,
       createdAt: true,
     },
+    where: {
+      state: { not: "REJECTED" },
+    },
   });
 
   return { uploads, users };
@@ -37,8 +41,8 @@ export function getContentType(): string {
 
 export async function downloadFile(filename: string) {
   const filePath = path.join("uploads", filename);
-  await fs.access(filePath);
-  const fileBuffer = await fs.readFile(filePath);
+  await fsPromises.access(filePath);
+  const fileBuffer = await fsPromises.readFile(filePath);
   return fileBuffer;
 }
 
@@ -168,12 +172,277 @@ async function sendRejectEmail(upload: Uploads) {
   });
 }
 
+async function acceptUploadAndPushToDb(upload: Uploads) {
+  const absolutePath = path.join(
+    process.cwd(),
+    upload.link.replace(/^\.\//, ""),
+  );
+
+  let rows: Record<string, any>[];
+
+  try {
+    const fileBuffer = fs.readFileSync(absolutePath);
+    const workbook = XLSX.read(fileBuffer, { type: "buffer" });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+  } catch (error) {
+    console.error(
+      "[acceptUploadAndPushToDb] Failed to read Excel file:",
+      error,
+    );
+    await prisma.uploads.update({
+      where: { id: upload.id },
+      data: { state: "DB_ERROR", note: "Failed to read Excel file." },
+    });
+    throw new Error("Failed to read Excel file.");
+  }
+
+  if (rows.length === 0) {
+    await prisma.uploads.update({
+      where: { id: upload.id },
+      data: { state: "DB_ERROR", note: "Excel file contains no data rows." },
+    });
+    throw new Error("Excel file contains no data rows.");
+  }
+
+  console.log(
+    `[acceptUploadAndPushToDb] Processing ${rows.length} rows from ${absolutePath}`,
+  );
+
+  function parseDate(value: any): Date | null {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    if (typeof value === "number") {
+      return new Date((value - 25569) * 86400 * 1000);
+    }
+    if (typeof value === "string") {
+      const parts = value.split(".");
+      if (parts.length === 3) {
+        const [d, m, y] = parts.map(Number);
+        if (d && m && y) return new Date(y, m - 1, d);
+      }
+      const d = new Date(value);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return null;
+  }
+
+  function toFloat(value: any): number | null {
+    if (value === null || value === undefined || value === "") return null;
+    const n = parseFloat(String(value));
+    return isNaN(n) ? null : n;
+  }
+
+  function toInt(value: any): number | null {
+    if (value === null || value === undefined || value === "") return null;
+    const n = parseInt(String(value), 10);
+    return isNaN(n) ? null : n;
+  }
+
+  function toBoolean(value: any): boolean | null {
+    if (value === null || value === undefined) return null;
+    const str = String(value).toLowerCase().trim();
+    if (str === "yes") return true;
+    if (str === "no") return false;
+    return null;
+  }
+
+  const errors: string[] = [];
+  let processedRows = 0;
+  const samplingMap = new Map<string, number>();
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowNum = i + 2;
+
+    const siteCode = row["site_code"];
+    if (!siteCode) {
+      errors.push(`Row ${rowNum}: Missing site_code, skipping row.`);
+      continue;
+    }
+
+    let riverSite;
+    try {
+      riverSite = await prisma.riverSite.upsert({
+        where: { siteCode: String(siteCode) },
+        create: {
+          siteCode: String(siteCode),
+          riverName: String(row["river_name"] ?? ""),
+          siteName: row["site_name"] ? String(row["site_name"]) : null,
+          landmarkUp: row["landmark_up"] ? String(row["landmark_up"]) : null,
+          latitude: toFloat(row["latitude"]),
+          longitude: toFloat(row["longitude"]),
+          landmarkDown: row["landmark_down"]
+            ? String(row["landmark_down"])
+            : null,
+          latDown: toFloat(row["lat_down"]),
+          longDown: toFloat(row["long_down"]),
+          localityLength: toFloat(row["locality_length"]),
+          localityWidth: toFloat(row["locality_width"]),
+        },
+        update: {
+          riverName: String(row["river_name"] ?? ""),
+          siteName: row["site_name"] ? String(row["site_name"]) : null,
+          landmarkUp: row["landmark_up"] ? String(row["landmark_up"]) : null,
+          latitude: toFloat(row["latitude"]),
+          longitude: toFloat(row["longitude"]),
+          landmarkDown: row["landmark_down"]
+            ? String(row["landmark_down"])
+            : null,
+          latDown: toFloat(row["lat_down"]),
+          longDown: toFloat(row["long_down"]),
+          localityLength: toFloat(row["locality_length"]),
+          localityWidth: toFloat(row["locality_width"]),
+        },
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error(
+        `[acceptUploadAndPushToDb] Row ${rowNum}: Failed to upsert RiverSite (siteCode: ${siteCode}): ${msg}`,
+      );
+      errors.push(`Row ${rowNum}: Failed to upsert RiverSite: ${msg}`);
+      continue;
+    }
+
+    const catchDate = parseDate(row["catchdate"]);
+    const samplingKey = `${siteCode}|${catchDate?.toISOString() ?? "null"}`;
+
+    let samplingId: number;
+    if (samplingMap.has(samplingKey)) {
+      samplingId = samplingMap.get(samplingKey)!;
+    } else {
+      try {
+        const sampling = await prisma.sampling.create({
+          data: {
+            siteId: riverSite.id,
+            year: toInt(row["year"]) ?? new Date().getFullYear(),
+            catchDate,
+            dataProvider: row["data_provider/contact person"]
+              ? String(row["data_provider/contact person"])
+              : null,
+            askProviderBeforeUse: toBoolean(
+              row["ask Data provider before use"],
+            ),
+            source: row["source"] ? String(row["source"]) : null,
+            project: row["project"] ? String(row["project"]) : null,
+            fishingAuthority: row["Fishing authority"]
+              ? String(row["Fishing authority"])
+              : null,
+            preclassificationStressor: row["Preclassification Stressor"]
+              ? String(row["Preclassification Stressor"])
+              : null,
+            temp: toFloat(row["temp"]),
+            conductivity: toFloat(row["conductivity"]),
+            pHValue: toFloat(row["pH_value"]),
+            oCont: toFloat(row["ox_cont"]),
+            oSat: toFloat(row["ox_sat"]),
+            method: row["method"] ? String(row["method"]) : null,
+            assessment: row["assessment"] ? String(row["assessment"]) : null,
+            samplingStrategy: row["sampling strategy"]
+              ? String(row["sampling strategy"])
+              : null,
+            anodes: toInt(row["anodes"]),
+            numSubsections: toInt(row["Number of Subsections"]),
+            lengthSubsection: toFloat(row["Length Subsection [m]"]),
+            widthSubsection: toFloat(row["Width Subsection [m]"]),
+            typeOfStrip: row["Type of strip"]
+              ? String(row["Type of strip"])
+              : null,
+            habitat: row["Habitat"] ? String(row["Habitat"]) : null,
+            runStrip: row["Run/Strip"] ? String(row["Run/Strip"]) : null,
+            catchEfficiency: toFloat(row["Catch Efficiency [%]"]),
+            remarksRawData: row["remark raw data"]
+              ? String(row["remark raw data"])
+              : null,
+            remarkImport: row["remark import"]
+              ? String(row["remark import"])
+              : null,
+          },
+        });
+        samplingId = sampling.id;
+        samplingMap.set(samplingKey, samplingId);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error(
+          `[acceptUploadAndPushToDb] Row ${rowNum}: Failed to create Sampling: ${msg}`,
+        );
+        errors.push(`Row ${rowNum}: Failed to create Sampling: ${msg}`);
+        continue;
+      }
+    }
+
+    const speciesName = row["species"];
+    if (!speciesName) {
+      errors.push(`Row ${rowNum}: Missing species, skipping fish catch.`);
+      continue;
+    }
+
+    let fishSpecies;
+    try {
+      fishSpecies = await prisma.fishSpecies.findUnique({
+        where: { speciesName: String(speciesName) },
+      });
+      if (!fishSpecies) {
+        errors.push(
+          `Row ${rowNum}: Fish species "${speciesName}" not found in database, skipping fish catch.`,
+        );
+        continue;
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error(
+        `[acceptUploadAndPushToDb] Row ${rowNum}: Failed to find FishSpecies (${speciesName}): ${msg}`,
+      );
+      errors.push(`Row ${rowNum}: Failed to lookup fish species: ${msg}`);
+      continue;
+    }
+
+    try {
+      await prisma.fishCatch.create({
+        data: {
+          samplingId,
+          speciesId: fishSpecies.id,
+          fishId: row["Fish ID"] ? String(row["Fish ID"]) : null,
+          lengthMm: toInt(row["length [mm]"]),
+          totalWeightGr: toFloat(row["Total weight [gr]"]),
+        },
+      });
+      processedRows++;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error(
+        `[acceptUploadAndPushToDb] Row ${rowNum}: Failed to create FishCatch: ${msg}`,
+      );
+      errors.push(`Row ${rowNum}: Failed to create FishCatch: ${msg}`);
+    }
+  }
+
+  console.log(
+    `[acceptUploadAndPushToDb] Done. ${processedRows}/${rows.length} fish catches inserted.`,
+  );
+
+  if (errors.length > 0) {
+    console.warn(
+      `[acceptUploadAndPushToDb] ${errors.length} non-fatal error(s):`,
+      errors,
+    );
+  }
+
+  await prisma.uploads.update({
+    where: { id: upload.id },
+    data: {
+      state: errors.length > 0 ? "DB_ERROR" : "SAVED_IN_DB",
+      note: errors.length > 0 ? errors.join("\n") : null,
+    },
+  });
+}
+
 export async function updateUpload(
   id: string,
   action: string,
   reason: string | undefined,
-  adminUsername: string,
-) {
+): Promise<{ upload: Uploads; emailError?: boolean } | null> {
   const upload = await prisma.uploads.findUnique({
     where: { id },
     select: { id: true, link: true, state: true },
@@ -197,36 +466,22 @@ export async function updateUpload(
   if (newState === "REJECTED") {
     try {
       await sendRejectEmail(updatedUpload);
-      return NextResponse.json(
-        {
-          message: "The upload was rejected successfully.",
-          timestamp: new Date(),
-        },
-        {
-          status: 200,
-        },
-      );
-    } catch {
-      return NextResponse.json(
-        {
-          message:
-            "There was an error while trying to reject the upload. Please try again later.",
-          timestamp: new Date(),
-        },
-        {
-          status: 500,
-        },
-      );
+      return { upload: updatedUpload };
+    } catch (error) {
+      console.error("[updateUpload] Failed to send reject email:", error);
+      return { upload: updatedUpload, emailError: true };
     }
   }
 
-  console.log(
-    `[ADMIN] Upload ${action}ed by ${adminUsername}:`,
-    upload.link,
-    reason ? `(Reason: ${reason})` : "",
-  );
+  if (newState === "ACCEPTED") {
+    try {
+      await acceptUploadAndPushToDb(updatedUpload);
+    } catch (error) {
+      console.error("[updateUpload] Error processing Excel file:", error);
+    }
+  }
 
-  return updatedUpload;
+  return { upload: updatedUpload };
 }
 
 export async function updateUser(
