@@ -984,14 +984,14 @@ ORDER BY "Anzahl" DESC;`;
         )}
 
         <section className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm mb-6">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Ergebnisse
             </h2>
             {results.length > 0 && (
               <button
                 onClick={handleDownloadCsv}
-                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -1153,7 +1153,7 @@ function ResultsTable({
               key={i}
               className={`
                 ${isClickable ? "cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-900/30 transition-colors" : ""}
-                ${isSelected ? "bg-teal-100 dark:bg-teal-900/50 ring-1 ring-teal-400 dark:ring-teal-600" : "odd:bg-white even:bg-slate-50 dark:odd:bg-gray-800 dark:even:bg-gray-750"}
+                ${isSelected ? "bg-teal-100 dark:bg-teal-900/50 ring-1 ring-teal-400 dark:ring-teal-600" : "odd:bg-white even:bg-slate-50 dark:odd:bg-gray-800 dark:even:bg-gray-900"}
               `}
               onClick={() => {
                 if (isClickable && onRowClick && rowId !== null) {
