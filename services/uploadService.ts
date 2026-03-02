@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import * as ExcelJS from 'exceljs';
 import { z } from "zod";
 
 // Types
@@ -48,9 +49,16 @@ function inList(lists: Record<string, Set<string>>, listName: string) {
   const set = lists[normalize(listName)];
 
   return z.string().min(1).refine(
-    (v) => set.has(normalize(v)),
+    (v) => {
+      if (!set) {
+        return false; // Liste existiert nicht
+      }
+      return set.has(normalize(v));
+    },
     {
-      message: `Value not found in List sheet: ${listName}`
+      message: set 
+        ? `Value not found in List sheet: ${listName}`
+        : `List column '${listName}' missing in List sheet`
     }
   );
 
@@ -63,52 +71,53 @@ function buildSchema(lists: Record<string, Set<string>>) {
   return z.object({
 
     country: inList(lists, "country"),
-    river_name: z.string().min(1),
-    year: z.number().int().min(1990).max(2100),
-    data_provider: z.string().min(1),
-    approval_required: z.enum(["yes", "no"]),
-    source: z.string().min(1),
-    project: z.string().max(30),
-    site_name: z.string().min(1),
-    date: z.date(),
-    fishing_district: z.string().optional(),
-    preclassification_stressor: z.string().optional(),
-    landmark_up: z.union([z.string(), z.number()]).refine(v => String(v).length <= 20).optional(),
-    lat_up: z.number().min(46).max(49.1),
-    long_up: z.number().min(9.5).max(17.4),
-    landmark_down: z.union([z.string(), z.number()]).refine(v => String(v).length <= 20).optional(),
-    lat_down: z.number().optional(),
-    long_down: z.number().optional(),
-    length_site: z.number().optional(),
-    width_site: z.number().optional(),
-    temp: z.number().optional(),
-    conductivity: z.number().min(50).max(1500).optional(),
-    pH_value: z.number().min(0).max(14).optional(),
-    ox_cont: z.number().min(0).max(20).optional(),
-    ox_sat: z.number().min(20).max(130).optional(),
-    mean_water_depth: z.number().optional(),
-    discharge: z.number().optional(),
+    river_name: z.coerce.string({message: "River name must be a text value"}).min(1, { message: "River name is required" }),
+    year: z.coerce.number({message: "Year must be a number"}).int({message: "Year must be a whole number"
+    }).min(1990, {message: "Year must be between 1990 and 2100"}).max(2100, {message: "Year must be between 1990 and 2100"}),
+    data_provider: z.coerce.string({message: "Data provider must be a text value"}).min(1, { message: "Data provider is required" }),
+    approval_required: z.enum(["yes", "no"], { message: "Approval must be 'yes' or 'no'" }),
+    source: z.coerce.string({message: "Source must be a text value"}).min(1, { message: "Source is required" }),
+    project: z.coerce.string({message: "Project name must be a text value"}).max(30, { message: "Project name must be less than 30 characters long" }),
+    site_name: z.coerce.string({message: "Site name must be a text value"}).min(1, { message: "Site name is required" }),
+    date: z.coerce.date({ message: "Invalid date format" }),
+    fishing_district: z.coerce.string({message: "Fishing district must be a text value"}).optional(),
+    preclassification_stressor: z.coerce.string({message: "Preclassification stressor must be a text value"}).optional(),
+    landmark_up: z.union([z.coerce.string({message: "Landmark up must be a text value"}), z.coerce.number()]).refine(v => String(v).length <= 20, { message: "Landmark up must be at most 20 characters long" }).optional(),
+    lat_up: z.coerce.number({message: "Latitude up must be a number"}).min(46, { message: "Latitude up must be between 46 and 49.1" }).max(49.1, { message: "Latitude up must be between 46 and 49.1" }),
+    long_up: z.coerce.number({message: "Longitude up must be a number"}).min(9.5, { message: "Longitude up must be between 9.5 and 17.4" }).max(17.4, { message: "Longitude up must be between 9.5 and 17.4" }),
+    landmark_down: z.union([z.coerce.string({message: "Landmark down must be a text value"}), z.coerce.number()]).refine(v => String(v).length <= 20, { message: "Landmark down must be at most 20 characters long" }).optional(),
+    lat_down: z.coerce.number({message: "Latitude down must be a number"}).optional(),
+    long_down: z.coerce.number({message: "Longitude down must be a number"}).optional(),
+    length_site: z.coerce.number({message: "Length site must be a number"}).optional(),
+    width_site: z.coerce.number({message: "Width site must be a number"}).optional(),
+    temp: z.coerce.number({message: "Temperature must be a number"}).optional(),
+    conductivity: z.coerce.number({message: "Conductivity must be a number"}).min(50, { message: "Conductivity must be at least 50" }).max(1500, { message: "Conductivity must be at most 1500" }).optional(),
+    pH_value: z.coerce.number({message: "pH value must be a number"}).min(0, { message: "pH value must be at least 0" }).max(14, { message: "pH value must be at most 14" }).optional(),
+    ox_cont: z.coerce.number({message: "Oxygen content must be a number"}).min(0, { message: "Oxygen content must be at least 0" }).max(20, { message: "Oxygen content must be at most 20" }).optional(),
+    ox_sat: z.coerce.number({message: "Oxygen saturation must be a number"}).min(20, { message: "Oxygen saturation must be at least 20" }).max(130, { message: "Oxygen saturation must be at most 130" }).optional(),
+    mean_water_depth: z.coerce.number({message: "Mean water depth must be a number"}).optional(),
+    discharge: z.coerce.number({message: "Discharge must be a number"}).optional(),
     method: inList(lists, "method"),
     sampling_time: inList(lists, "sampling time"),
     assessment: inList(lists, "assessment"),
-    anodes: z.number().int().min(1).max(10).optional(),
-    fished_length: z.number().optional(),
-    fished_width: z.number().optional(),
-    type_of_strip: z.string().optional(),
-    habitat: z.string().optional(),
-    sample_id: z.string().optional(),
-    fish_id: z.number().int().optional(),
+    anodes: z.coerce.number({message: "Anodes must be a number"}).int({message: "Anodes must be a whole number"}).min(1, { message: "Anodes must be at least 1" }).max(10, { message: "Anodes must be at most 10" }).optional(),
+    fished_length: z.coerce.number({message: "Fished length must be a number"}).optional(),
+    fished_width: z.coerce.number({message: "Fished width must be a number"}).optional(),
+    type_of_strip: z.coerce.string({message: "Type of strip must be a text value"}).optional(),
+    habitat: z.coerce.string({message: "Habitat must be a text value"}).optional(),
+    sample_id: z.coerce.string({message: "Sample ID must be a text value"}).optional(),
+    fish_id: z.coerce.number({message: "Fish ID must be a number"}).int({message: "Fish ID must be a whole number"}).optional(),
     species: inList(lists, "name of species"),
-    total_length: z.number().optional(),
-    weight: z.number().optional(),
-    reader_id: z.string().optional(),
-    memory_id: z.number().int().optional(),
-    pit_dec: z.string().optional(),
-    pit_hex: z.string().optional(),
-    recapture: z.number().int().min(0).max(1).optional(),
-    catch_efficiency: z.number().min(0).max(100).optional(),
-    remark_raw_data: z.string().optional(),
-    remark_import: z.string().optional(),
+    total_length: z.coerce.number({message: "Total length must be a number"}).optional(),
+    weight: z.coerce.number({message: "Weight must be a number"}).optional(),
+    reader_id: z.coerce.string({message: "Reader ID must be a text value"}).optional(),
+    memory_id: z.coerce.number({message: "Memory ID must be a number"}).int({message: "Memory ID must be a whole number"}).optional(),
+    pit_dec: z.coerce.string({message: "Pit decimal must be a text value"}).optional(),
+    pit_hex: z.coerce.string({message: "Pit hex must be a text value"}).optional(),
+    recapture: z.coerce.number({message: "Recapture must be a number"}).int({message: "Recapture must be a whole number"}).min(0, { message: "Recapture must be at least 0" }).max(1, { message: "Recapture must be at most 1" }).optional(),
+    catch_efficiency: z.coerce.number({message: "Catch efficiency must be a number"}).min(0, { message: "Catch efficiency must be at least 0" }).max(100, { message: "Catch efficiency must be at most 100" }).optional(),
+    remark_raw_data: z.coerce.string({message: "Remark raw data must be a text value"}).optional(),
+    remark_import: z.coerce.string({message: "Remark import must be a text value"}).optional(),
   });
 }
 
@@ -119,20 +128,75 @@ export async function processUpload(fileBuffer: Buffer, cookieHeader: string) {
       cellDates: true
     });
 
+    // Prüfe ob List Sheet existiert
+    if (!workbook.Sheets["List"]) {
+      return {
+        success: false,
+        error: "List sheet missing",
+        details: "The Excel file must contain a 'List' sheet with allowed values",
+        status: 400
+      };
+    }
+
     const lists = readLists(workbook);
     const rowSchema = buildSchema(lists);
 
     //DATA Sheet einlesen
     const sheet = workbook.Sheets["DATA"];
+    
+    if (!sheet) {
+      return {
+        success: false,
+        error: "DATA sheet missing",
+        details: "Required 'DATA' sheet is missing in the Excel file",
+        status: 400
+      };
+    }
 
     const rows: SheetRow[] = XLSX.utils.sheet_to_json(sheet, {
       header: 1,
       raw: true
     }) as SheetRow[];
 
+    if (!rows || rows.length === 0) {
+      return {
+        success: false,
+        error: "No data found",
+        details: "The DATA sheet contains no data",
+        status: 400
+      };
+    }
+
     const headers = rows[0] as string[];
     
-    const validationErrors: any[] = [];
+    if (!headers || headers.length === 0) {
+      return {
+        success: false,
+        error: "No headers found",
+        details: "The DATA sheet contains no column headers",
+        status: 400
+      };
+    }
+
+    // Prüfe erforderliche Spalten
+    const requiredColumns = [
+      "country", "river_name", "year", "data_provider", "approval_required", 
+      "source", "project", "site_name", "date", "lat_up", "long_up", 
+      "method", "sampling_time", "assessment", "species"
+    ];
+    
+    const missingColumns = requiredColumns.filter(col => !headers.includes(col));
+    
+    if (missingColumns.length > 0) {
+      return {
+        success: false,
+        error: "Missing required columns",
+        details: `Missing required columns: ${missingColumns.join(", ")}`,
+        status: 400
+      };
+    }
+    
+    const errorMap = new Map<string, string>(); // row_column -> message
 
     //Validierung der Datenzeilen
     for (let i = 1; i < rows.length; i++) {
@@ -158,20 +222,60 @@ export async function processUpload(fileBuffer: Buffer, cookieHeader: string) {
       const result = rowSchema.safeParse(obj);
 
       if (!result.success) {
-        const rowErrors = result.error.issues.map((issue) => ({
-          row: i + 1,
-          column: issue.path[0],
-          message: issue.message
-        }));
-        validationErrors.push(...rowErrors);
+        // Speichere nur Fehler für Excel-Markierung
+        result.error.issues.forEach((issue) => {
+          const columnIndex = headers.indexOf(issue.path[0] as string);
+          if (columnIndex !== -1) {
+            errorMap.set(`${i + 1}_${columnIndex}`, issue.message);
+          }
+        });
       }
     }
 
-    if (validationErrors.length > 0) {
+    if (errorMap.size > 0) {
+      const excelWorkbook = new ExcelJS.Workbook();
+      
+      // Erstelle DATA Worksheet
+      const dataWorksheet = excelWorkbook.addWorksheet('DATA');
+      
+      // Füge Headers hinzu
+      dataWorksheet.addRow(headers);
+      
+      // Füge Datenzeilen hinzu
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const isEmptyRow = row.every(cell => 
+          cell === null || cell === undefined || (typeof cell === "string" && cell.trim() === "")
+        );
+        if (isEmptyRow) break;
+        
+        dataWorksheet.addRow(row);
+      }
+      
+      // Markiere Fehlerzellen mit rotem Hintergrund und Fehlernachricht als Notiz
+      for (const [key, message] of errorMap) {
+        const [rowIdx, colIdx] = key.split('_').map(Number);
+        
+        const cell = dataWorksheet.getCell(rowIdx, colIdx + 1);
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFF9999' } // Hellrot
+        };
+        cell.font = {
+          color: { argb: 'FFCC0000' }, // Dunkelrot
+          bold: true
+        };
+        cell.note = message;
+      }
+      
+      const excelBuffer = await excelWorkbook.xlsx.writeBuffer();
+      
       return {
         success: false,
         error: "Validation failed",
-        validationErrors,
+        excelError: true,
+        fileBuffer: excelBuffer,
         status: 400
       };
     }
