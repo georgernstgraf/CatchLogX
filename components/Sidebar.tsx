@@ -3,7 +3,6 @@
 import {
   FileInputIcon,
   FilePlus2Icon,
-  Fish,
   Globe,
   LucideIcon,
   SearchCode,
@@ -51,12 +50,6 @@ const Sidebar = () => {
       path: "/my-uploads",
       icon: FileInputIcon,
       protected: false,
-    },
-    {
-      title: "Fischsuche",
-      path: "/search/fish",
-      protected: false,
-      icon: Fish,
     },
     {
       title: "Admin",
