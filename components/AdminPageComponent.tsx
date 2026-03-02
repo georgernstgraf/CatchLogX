@@ -26,7 +26,7 @@ type User = {
   username: string;
   email: string;
   name: string;
-  role?: string;
+  role: string;
   createdAt: string;
 };
 
@@ -41,7 +41,7 @@ const AdminPageComponent = () => {
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [denyReason, setDenyReason] = useState("");
   const [deleteConfirmUserId, setDeleteConfirmUserId] = useState<string | null>(
-    null
+    null,
   );
 
   // New user form state
@@ -105,7 +105,7 @@ const AdminPageComponent = () => {
         alert(
           `Download fehlgeschlagen: ${
             errorData.message || "Unbekannter Fehler"
-          }`
+          }`,
         );
       }
     } catch (error) {
@@ -178,7 +178,7 @@ const AdminPageComponent = () => {
     } catch (error) {
       console.error("Error denying upload:", error);
       alert(
-        "Netzwerkfehler beim Ablehnen des Uploads. Bitte versuchen Sie es erneut."
+        "Netzwerkfehler beim Ablehnen des Uploads. Bitte versuchen Sie es erneut.",
       );
     }
   };
@@ -245,11 +245,12 @@ const AdminPageComponent = () => {
   };
 
   const handleEditUserClick = (user: User) => {
+    console.log(user);
     setEditUser({
       email: user.email,
       username: user.username,
       name: user.name || "",
-      role: user.role || "viewer",
+      role: user.role,
       password: "",
     });
     setEditingUserId(user.id);
@@ -288,7 +289,7 @@ const AdminPageComponent = () => {
       if (response.ok) {
         // Update user in the list
         setUsers(
-          users.map((user) => (user.id === editingUserId ? data.user : user))
+          users.map((user) => (user.id === editingUserId ? data.user : user)),
         );
         setShowEditUserModal(false);
         setEditingUserId(null);
