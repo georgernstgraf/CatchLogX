@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import bcrypt from "bcrypt";
+import { validateResetToken, changePassword } from "@/services/passwordService";
 
 export async function GET(req: NextRequest) {
   const token = await req?.nextUrl?.searchParams.get("token");
@@ -17,15 +16,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const resetRequest = await prisma.passwordResets.findFirst({
-    where: {
-      token: token,
-      state: "REQUESTED",
-      timestamp: {
-        gte: new Date(Date.now() - 1000 * 60 * 15),
-      },
-    },
-  });
+  const resetRequest = await validateResetToken(token);
 
   if (!resetRequest) {
     return NextResponse.json(
@@ -38,15 +29,6 @@ export async function GET(req: NextRequest) {
       },
     );
   }
-
-  await prisma.passwordResets.update({
-    where: {
-      id: resetRequest.id,
-    },
-    data: {
-      state: "EXPIRED",
-    },
-  });
 
   return NextResponse.json(
     {
@@ -90,17 +72,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-
     try {
-      await prisma.user.update({
-        where: {
-          username: username,
-        },
-        data: {
-          hashedPassword: hashedPassword,
-        },
-      });
+      await changePassword(username, newPassword, token);
     } catch {
       return NextResponse.json(
         {
@@ -112,16 +85,6 @@ export async function POST(req: NextRequest) {
         },
       );
     }
-
-    await prisma.passwordResets.update({
-      where: {
-        token: token,
-      },
-      data: {
-        state: "DONE",
-        passwordChangedAt: new Date(),
-      },
-    });
 
     return NextResponse.json(
       {

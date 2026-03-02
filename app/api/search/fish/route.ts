@@ -1,5 +1,5 @@
-import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
+import { searchFish } from "@/services/fishSearchService";
 
 interface FishSuggestion {
   id: number;
@@ -17,13 +17,12 @@ interface SearchResponse {
 }
 
 export async function GET(
-  req: NextRequest
+  req: NextRequest,
 ): Promise<NextResponse<SearchResponse>> {
   try {
     const searchParams = req.nextUrl.searchParams;
     const query = searchParams.get("q")?.trim();
 
-    // Eingabevalidierung
     if (!query) {
       console.log("Warnung: Leerer Suchbegriff empfangen");
       return NextResponse.json(
@@ -33,29 +32,11 @@ export async function GET(
           count: 0,
           message: "Kein Suchbegriff angegeben",
         },
-        { status: 200 }
+        { status: 200 },
       );
     }
 
-    // Datenbankabfrage
-    const suggestions: FishSuggestion[] = await prisma.fishSpecies.findMany({
-      select: {
-        speciesName: true,
-        germanName: true,
-        family: true,
-        id: true,
-        latinName: true,
-      },
-      where: {
-        OR: [
-          { speciesName: { contains: query, mode: "insensitive" } },
-          { germanName: { contains: query, mode: "insensitive" } },
-          { latinName: { contains: query, mode: "insensitive" } },
-          { family: { contains: query, mode: "insensitive" } },
-        ],
-      },
-    });
-
+    const suggestions = await searchFish(query);
     const suggestionCount = suggestions.length;
 
     return NextResponse.json(
@@ -66,12 +47,11 @@ export async function GET(
         message:
           suggestionCount === 0 ? "Keine Fischarten gefunden" : undefined,
       },
-      { status: 200 }
+      { status: 200 },
     );
   } catch (error) {
     console.error("Fehler beim Durchsuchen der Datenbank:", error);
 
-    // Detailliert
     if (error instanceof Error) {
       console.error("Fehlermeldung:", error.message);
       console.error("Stack Trace:", error.stack);
@@ -84,7 +64,7 @@ export async function GET(
         count: 0,
         message: "Ein Fehler ist bei der Suche aufgetreten",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
