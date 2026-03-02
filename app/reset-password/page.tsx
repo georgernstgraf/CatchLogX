@@ -5,6 +5,7 @@ import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import bokuLogo from "@/assets/img/Logo.png";
+import DarkModeToggle from "@/components/DarkModeToggle";
 
 
 type ToastType = "success" | "error" | "info";
@@ -48,19 +49,22 @@ type PageState = "loading" | "invalid" | "form" | "submitting" | "done";
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col justify-center items-center min-h-screen bg-[#f5f4f2]">
-      <div className="bg-[#FCFBF9] rounded-xl shadow-lg flex flex-col items-center p-10 w-[420px]">
+    <div className="flex flex-col justify-center items-center min-h-screen bg-[#f5f4f2] dark:bg-gray-900 relative">
+      <div className="absolute top-4 right-4">
+        <DarkModeToggle variant="page" />
+      </div>
+      <div className="bg-[#FCFBF9] dark:bg-gray-800 rounded-xl shadow-lg flex flex-col items-center p-10 w-[420px]">
         <div className="flex flex-row justify-center items-center gap-9 w-full mb-6">
           <div className="flex items-center h-full">
             <Image src={bokuLogo} alt="Boku Logo" width={150} height={150} className="object-contain" />
           </div>
-          <span className="text-black text-[25px] font-medium leading-tight">
+          <span className="text-black dark:text-gray-100 text-[25px] font-medium leading-tight">
             Universität für
             <br />
             Bodenkultur Wien
           </span>
         </div>
-        <div className="text-black text-5xl font-bold mb-8 text-center w-full">
+        <div className="text-black dark:text-gray-100 text-5xl font-bold mb-8 text-center w-full">
           Reset
           <br />
           Password
@@ -193,7 +197,7 @@ export default function ResetPasswordPage() {
         <Card>
           <div className="flex flex-col items-center gap-4 w-full py-4">
             <div className="w-10 h-10 border-4 border-[#357174] border-t-transparent rounded-full animate-spin" />
-            <p className="text-gray-500 text-base">Verifying link…</p>
+            <p className="text-gray-500 dark:text-gray-400 text-base">Verifying link…</p>
           </div>
         </Card>
       </>
@@ -205,7 +209,7 @@ export default function ResetPasswordPage() {
       <>
         <ToastContainer toasts={toasts} />
         <Card>
-          <div className="w-full bg-red-50 border border-red-300 text-red-700 px-4 py-4 rounded-lg mb-6 text-base text-center">
+          <div className="w-full bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-4 rounded-lg mb-6 text-base text-center">
             {invalidReason}
           </div>
           <Link
@@ -216,7 +220,7 @@ export default function ResetPasswordPage() {
           </Link>
           <Link
             href="/login"
-            className="text-black text-base font-normal w-full text-center mt-4 block"
+            className="text-black dark:text-gray-300 text-base font-normal w-full text-center mt-4 block"
           >
             Back to Login
           </Link>
@@ -230,9 +234,9 @@ export default function ResetPasswordPage() {
       <>
         <ToastContainer toasts={toasts} />
         <Card>
-          <div className="w-full bg-[#e8f5f5] border border-[#357174] text-[#357174] px-4 py-4 rounded-lg mb-6 text-base text-center font-medium">
+          <div className="w-full bg-[#e8f5f5] dark:bg-teal-900/30 border border-[#357174] text-[#357174] dark:text-teal-300 px-4 py-4 rounded-lg mb-6 text-base text-center font-medium">
             Password successfully reset!<br />
-            <span className="text-gray-500 text-sm font-normal">Redirecting to login…</span>
+            <span className="text-gray-500 dark:text-gray-400 text-sm font-normal">Redirecting to login…</span>
           </div>
           <Link
             href="/login"
@@ -257,7 +261,7 @@ export default function ResetPasswordPage() {
             onChange={(e) => setNewPassword(e.target.value)}
             required
             disabled={pageState === "submitting"}
-            className="w-full bg-white text-black border border-[#e5e5e5] p-4 rounded-lg mb-4 text-lg focus:outline-none focus:ring-2 focus:ring-[#357174] disabled:bg-gray-100 disabled:cursor-not-allowed"
+            className="w-full bg-white dark:bg-gray-900 text-black dark:text-gray-200 border border-[#e5e5e5] dark:border-gray-600 p-4 rounded-lg mb-4 text-lg focus:outline-none focus:ring-2 focus:ring-[#357174] disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:cursor-not-allowed"
           />
           <input
             type="password"
@@ -266,7 +270,7 @@ export default function ResetPasswordPage() {
             onChange={(e) => setNewPasswordConfirm(e.target.value)}
             required
             disabled={pageState === "submitting"}
-            className="w-full bg-white text-black border border-[#e5e5e5] p-4 rounded-lg mb-6 text-lg focus:outline-none focus:ring-2 focus:ring-[#357174] disabled:bg-gray-100 disabled:cursor-not-allowed"
+            className="w-full bg-white dark:bg-gray-900 text-black dark:text-gray-200 border border-[#e5e5e5] dark:border-gray-600 p-4 rounded-lg mb-6 text-lg focus:outline-none focus:ring-2 focus:ring-[#357174] disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:cursor-not-allowed"
           />
           <button
             type="submit"
@@ -278,7 +282,7 @@ export default function ResetPasswordPage() {
         </form>
         <Link
           href="/login"
-          className="text-black text-base font-normal w-full text-center block"
+          className="text-black dark:text-gray-300 text-base font-normal w-full text-center block"
         >
           Back to Login
         </Link>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import bokuLogo from "@/assets/img/Logo.png";
 import Image from "next/image";
 import { useAuth } from "@/components/AuthProvider";
+import DarkModeToggle from "@/components/DarkModeToggle";
 
 const LoginForm = () => {
   const [username, setUsername] = React.useState("");
@@ -65,8 +66,11 @@ const LoginForm = () => {
     }
   };
   return (
-    <div className="flex flex-col justify-center items-center min-h-screen bg-[#f5f4f2]">
-      <div className="bg-[#FCFBF9] rounded-xl shadow-lg flex flex-col items-center p-10 w-[400px]">
+    <div className="flex flex-col justify-center items-center min-h-screen bg-[#f5f4f2] dark:bg-gray-900 relative">
+      <div className="absolute top-4 right-4">
+        <DarkModeToggle variant="page" />
+      </div>
+      <div className="bg-[#FCFBF9] dark:bg-gray-800 rounded-xl shadow-lg flex flex-col items-center p-10 w-[400px]">
         <div className="flex flex-row items-center gap-9 w-full mb-6">
           <div className="flex items-center h-full">
             <Image
@@ -77,13 +81,13 @@ const LoginForm = () => {
               className="object-contain"
             />
           </div>
-          <span className="text-black text-[25px] font-medium leading-tight">
+          <span className="text-black dark:text-gray-100 text-[25px] font-medium leading-tight">
             Universität für
             <br />
             Bodenkultur Wien
           </span>
         </div>
-        <div className="text-black text-5xl font-bold mb-8 text-center w-full">
+        <div className="text-black dark:text-gray-100 text-5xl font-bold mb-8 text-center w-full">
           Login
         </div>
 
@@ -103,7 +107,7 @@ const LoginForm = () => {
             onChange={(e) => setUsername(e.target.value)}
             required
             disabled={isLoading}
-            className="w-full bg-white text-black border border-[#e5e5e5] p-4 rounded-lg mb-4 text-lg focus:outline-none focus:ring-2 focus:ring-[#357174] disabled:bg-gray-100 disabled:cursor-not-allowed"
+            className="w-full bg-white dark:bg-gray-900 text-black dark:text-gray-200 border border-[#e5e5e5] dark:border-gray-600 p-4 rounded-lg mb-4 text-lg focus:outline-none focus:ring-2 focus:ring-[#357174] disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:cursor-not-allowed"
           />
           <input
             type="password"
@@ -114,7 +118,7 @@ const LoginForm = () => {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={isLoading}
-            className="w-full bg-white text-black border border-[#e5e5e5] p-4 rounded-lg mb-6 text-lg focus:outline-none focus:ring-2 focus:ring-[#357174] disabled:bg-gray-100 disabled:cursor-not-allowed"
+            className="w-full bg-white dark:bg-gray-900 text-black dark:text-gray-200 border border-[#e5e5e5] dark:border-gray-600 p-4 rounded-lg mb-6 text-lg focus:outline-none focus:ring-2 focus:ring-[#357174] disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:cursor-not-allowed"
           />
           <button
             type="submit"
@@ -126,7 +130,7 @@ const LoginForm = () => {
         </form>
         <Link
           href="/forgot-password"
-          className="text-black text-base font-normal w-full text-center mb-4"
+          className="text-black dark:text-gray-300 text-base font-normal w-full text-center mb-4"
         >
           Passwort vergessen?
         </Link>

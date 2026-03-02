@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
+import DarkModeToggle from "./DarkModeToggle";
 
 interface Location {
   lat: number;
@@ -144,8 +145,8 @@ const MapComponent = dynamic<{ locations: Location[] }>(
   {
     ssr: false,
     loading: () => (
-      <div className="h-[320px] w-full bg-gray-100 flex items-center justify-center">
-        <span className="text-sm text-gray-500">Karte wird geladen...</span>
+      <div className="h-[320px] w-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+        <span className="text-sm text-gray-500 dark:text-gray-400">Karte wird geladen...</span>
       </div>
     ),
   }
@@ -452,14 +453,17 @@ ORDER BY "Anzahl" DESC;`;
     });
 
   return (
-    <div className="flex-1 bg-[#f5f8fa]">
+    <div className="flex-1 bg-[#f5f8fa] dark:bg-gray-900">
       <div className="max-w-6xl mx-auto px-6 py-8">
-        <h1 className="text-2xl font-semibold text-gray-800 mb-6">SQL Query</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">SQL Query</h1>
+          <DarkModeToggle variant="page" />
+        </div>
 
         {/* Abfragen — Standardabfragen + Gespeicherte in einer Karte */}
-        <section className="bg-white border border-gray-200 rounded-xl shadow-sm mb-6">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-sm font-medium text-gray-700">Standardabfragen</h2>
+        <section className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm mb-6">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300">Standardabfragen</h2>
           </div>
           <div className="px-6 py-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -469,20 +473,20 @@ ORDER BY "Anzahl" DESC;`;
                   onClick={() => handlePresetChange(preset.id)}
                   className={`text-left p-3 rounded-lg border transition-all ${
                     selectedPreset === preset.id
-                      ? "border-teal-500 bg-teal-50 ring-2 ring-teal-200"
-                      : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                      ? "border-teal-500 bg-teal-50 dark:bg-teal-900/30 ring-2 ring-teal-200 dark:ring-teal-800"
+                      : "border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700"
                   }`}
                 >
-                  <div className="text-sm font-medium text-gray-800">{preset.label}</div>
-                  <div className="text-xs text-gray-500 mt-1">{preset.description}</div>
+                  <div className="text-sm font-medium text-gray-800 dark:text-gray-200">{preset.label}</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{preset.description}</div>
                 </button>
               ))}
             </div>
 
             {/* Parameter-Eingabe */}
             {currentPreset?.hasParameter && (
-              <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+              <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   {currentPreset.parameterLabel}
                 </label>
                 <input
@@ -490,7 +494,7 @@ ORDER BY "Anzahl" DESC;`;
                   value={parameter}
                   onChange={(e) => setParameter(e.target.value)}
                   placeholder={currentPreset.parameterPlaceholder}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
                 />
               </div>
             )}
@@ -499,14 +503,14 @@ ORDER BY "Anzahl" DESC;`;
           {/* Gespeicherte Abfragen — gleiche Karte */}
           {savedQueries.length > 0 && (
             <>
-              <div className="px-6 py-3 flex items-center justify-between border-t border-gray-200">
-                <h2 className="text-sm font-medium text-gray-700">Gespeicherte Abfragen ({savedQueries.length})</h2>
+              <div className="px-6 py-3 flex items-center justify-between border-t border-gray-200 dark:border-gray-700">
+                <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300">Gespeicherte Abfragen ({savedQueries.length})</h2>
               </div>
               <div className="px-6 py-3 pt-0 max-h-48 overflow-y-auto">
                 <table className="w-full text-sm">
                   <tbody>
                     {savedQueries.map((sq) => (
-                      <tr key={sq.id} className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
+                      <tr key={sq.id} className="border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-700">
                         <td className="py-2 pr-3 w-full">
                           {editingQueryId === sq.id ? (
                             <div className="flex items-center gap-2">
@@ -519,7 +523,7 @@ ORDER BY "Anzahl" DESC;`;
                                   if (e.key === "Escape") { setEditingQueryId(null); setEditingName(""); }
                                 }}
                                 autoFocus
-                                className="flex-1 px-2 py-1 border border-teal-400 rounded text-sm focus:ring-2 focus:ring-teal-500 outline-none"
+                                className="flex-1 px-2 py-1 border border-teal-400 rounded text-sm focus:ring-2 focus:ring-teal-500 outline-none bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
                               />
                               <button
                                 onClick={() => handleRenameSavedQuery(sq.id)}
@@ -527,13 +531,13 @@ ORDER BY "Anzahl" DESC;`;
                               >OK</button>
                               <button
                                 onClick={() => { setEditingQueryId(null); setEditingName(""); }}
-                                className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
+                                className="text-xs px-2 py-1 rounded bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500"
                               >Abbrechen</button>
                             </div>
                           ) : (
                             <button
                               onClick={() => handleLoadSavedQuery(sq)}
-                              className="text-left w-full truncate text-gray-800 hover:text-teal-700 font-medium"
+                              className="text-left w-full truncate text-gray-800 dark:text-gray-200 hover:text-teal-700 dark:hover:text-teal-400 font-medium"
                               title={sq.query}
                             >
                               {sq.name}
@@ -546,21 +550,21 @@ ORDER BY "Anzahl" DESC;`;
                               <button
                                 onClick={(e) => { e.stopPropagation(); setPreviewQuery(sq); }}
                                 title="Vorschau"
-                                className="p-1 rounded text-gray-400 hover:text-teal-600 hover:bg-teal-50"
+                                className="p-1 rounded text-gray-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-900/30"
                               >
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z" /><path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" /></svg>
                               </button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); setEditingQueryId(sq.id); setEditingName(sq.name); }}
                                 title="Umbenennen"
-                                className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                                className="p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                               >
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>
                               </button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleDeleteSavedQuery(sq.id); }}
                                 title="Löschen"
-                                className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50"
+                                className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
                               >
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
                               </button>
@@ -576,13 +580,13 @@ ORDER BY "Anzahl" DESC;`;
           )}
         </section>
 
-        <section className="bg-white border border-gray-200 rounded-xl shadow-sm mb-6">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-            <h2 className="text-sm font-medium text-gray-700">SQL Query</h2>
+        <section className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm mb-6">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300">SQL Query</h2>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowSaveDialog(true)}
-                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z" /></svg>
                 Speichern
@@ -603,12 +607,12 @@ ORDER BY "Anzahl" DESC;`;
                 setQuery(e.target.value);
                 setSelectedPreset("custom");
               }}
-              className="w-full h-40 resize-y rounded-lg border border-gray-200 bg-[#f7fafc] p-4 font-mono text-sm text-gray-800 outline-none focus:ring-2 focus:ring-teal-500"
+              className="w-full h-40 resize-y rounded-lg border border-gray-200 dark:border-gray-600 bg-[#f7fafc] dark:bg-gray-900 p-4 font-mono text-sm text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-teal-500"
             />
             {currentPreset?.hasParameter && parameter && (
-              <div className="mt-2 text-xs text-gray-500">
+              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                 <span className="font-medium">Ausgeführte Query:</span>
-                <pre className="mt-1 p-2 bg-gray-100 rounded text-xs overflow-auto">
+                <pre className="mt-1 p-2 bg-gray-100 dark:bg-gray-900 rounded text-xs overflow-auto text-gray-800 dark:text-gray-200">
                   {getExecutableQuery()}
                 </pre>
               </div>
@@ -619,21 +623,21 @@ ORDER BY "Anzahl" DESC;`;
         {/* Preview Query Dialog */}
         {previewQuery && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg mx-4 p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-semibold text-gray-800">{previewQuery.name}</h3>
+                <h3 className="text-base font-semibold text-gray-800 dark:text-gray-100">{previewQuery.name}</h3>
                 <button
                   onClick={() => setPreviewQuery(null)}
-                  className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                  className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
                 </button>
               </div>
-              <pre className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm font-mono text-gray-800 whitespace-pre-wrap break-words max-h-72 overflow-y-auto">{previewQuery.query}</pre>
+              <pre className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-sm font-mono text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words max-h-72 overflow-y-auto">{previewQuery.query}</pre>
               <div className="flex justify-end gap-2 mt-4">
                 <button
                   onClick={() => setPreviewQuery(null)}
-                  className="px-4 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                  className="px-4 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                 >Schließen</button>
                 <button
                   onClick={() => { handleLoadSavedQuery(previewQuery); setPreviewQuery(null); }}
@@ -648,8 +652,8 @@ ORDER BY "Anzahl" DESC;`;
         {toast && (
           <div className={`fixed top-6 right-6 z-[60] px-4 py-3 rounded-lg shadow-lg text-sm font-medium transition-all animate-in fade-in slide-in-from-top-2 ${
             toast.type === "error"
-              ? "bg-red-50 border border-red-200 text-red-800"
-              : "bg-teal-50 border border-teal-200 text-teal-800"
+              ? "bg-red-50 dark:bg-red-900/40 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300"
+              : "bg-teal-50 dark:bg-teal-900/40 border border-teal-200 dark:border-teal-800 text-teal-800 dark:text-teal-300"
           }`}>
             <div className="flex items-center gap-2">
               {toast.type === "error" ? (
@@ -668,19 +672,19 @@ ORDER BY "Anzahl" DESC;`;
         {/* Confirm Load Dialog */}
         {confirmLoad && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-6">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm mx-4 p-6">
               <div className="flex items-center gap-3 mb-3">
-                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-600" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
                 </div>
-                <h3 className="text-base font-semibold text-gray-800">Query ersetzen?</h3>
+                <h3 className="text-base font-semibold text-gray-800 dark:text-gray-100">Query ersetzen?</h3>
               </div>
-              <p className="text-sm text-gray-600 mb-1">Die aktuelle Eingabe im Editor wird durch die gespeicherte Abfrage <strong>&ldquo;{confirmLoad.name}&rdquo;</strong> ersetzt.</p>
-              <p className="text-xs text-gray-400 mb-4">Diese Aktion kann nicht rückgängig gemacht werden.</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Die aktuelle Eingabe im Editor wird durch die gespeicherte Abfrage <strong>&ldquo;{confirmLoad.name}&rdquo;</strong> ersetzt.</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">Diese Aktion kann nicht rückgängig gemacht werden.</p>
               <div className="flex justify-end gap-2">
                 <button
                   onClick={() => setConfirmLoad(null)}
-                  className="px-4 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                  className="px-4 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                 >Abbrechen</button>
                 <button
                   onClick={confirmLoadQuery}
@@ -694,9 +698,9 @@ ORDER BY "Anzahl" DESC;`;
         {/* Save Query Dialog */}
         {showSaveDialog && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Query speichern</h3>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Query speichern</h3>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
               <input
                 type="text"
                 value={saveQueryName}
@@ -704,15 +708,15 @@ ORDER BY "Anzahl" DESC;`;
                 onKeyDown={(e) => { if (e.key === "Enter") handleSaveQuery(); if (e.key === "Escape") setShowSaveDialog(false); }}
                 placeholder="z.B. Meine Fischarten-Abfrage"
                 autoFocus
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none mb-3"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none mb-3 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
               />
-              <div className="text-xs text-gray-400 mb-4 font-mono bg-gray-50 rounded p-2 max-h-20 overflow-auto">
+              <div className="text-xs text-gray-400 dark:text-gray-500 mb-4 font-mono bg-gray-50 dark:bg-gray-900 rounded p-2 max-h-20 overflow-auto">
                 {query.slice(0, 200)}{query.length > 200 ? "..." : ""}
               </div>
               <div className="flex justify-end gap-2">
                 <button
                   onClick={() => { setShowSaveDialog(false); setSaveQueryName(""); }}
-                  className="px-4 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                  className="px-4 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   Abbrechen
                 </button>
@@ -728,20 +732,20 @@ ORDER BY "Anzahl" DESC;`;
           </div>
         )}
 
-        <section className="bg-white border border-gray-200 rounded-xl shadow-sm mb-6">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-sm font-medium text-gray-700">Ergebnisse</h2>
+        <section className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm mb-6">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300">Ergebnisse</h2>
           </div>
           <div className="px-6 py-8">
             {error && (
-              <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-4">
-                <p className="text-sm font-medium text-red-800">Fehler</p>
-                <p className="text-sm text-red-700 mt-1">{error}</p>
+              <div className="mb-4 rounded-lg bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 p-4">
+                <p className="text-sm font-medium text-red-800 dark:text-red-300">Fehler</p>
+                <p className="text-sm text-red-700 dark:text-red-400 mt-1">{error}</p>
               </div>
             )}
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
-                <div className="text-sm text-gray-500">Wird geladen...</div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">Wird geladen...</div>
               </div>
             ) : results.length > 0 ? (
               <div className="overflow-auto">
@@ -751,10 +755,10 @@ ORDER BY "Anzahl" DESC;`;
                   clickableColumn="Befischungs-ID"
                   selectedId={selectedSamplingId}
                 />
-                <div className="mt-3 text-xs text-gray-500">
+                <div className="mt-3 text-xs text-gray-500 dark:text-gray-400">
                   {results.length} Zeilen
                   {results.some(r => 'Befischungs-ID' in r) && (
-                    <span className="ml-2 text-teal-600">
+                    <span className="ml-2 text-teal-600 dark:text-teal-400">
                       (Klicken Sie auf eine Zeile, um Details zu sehen)
                     </span>
                   )}
@@ -762,18 +766,18 @@ ORDER BY "Anzahl" DESC;`;
 
                 {/* Details einer ausgewählten Befischung */}
                 {selectedSamplingId !== null && (
-                  <div className="mt-6 p-4 bg-teal-50 border border-teal-200 rounded-lg">
-                    <h3 className="text-sm font-medium text-teal-800 mb-3">
+                  <div className="mt-6 p-4 bg-teal-50 dark:bg-teal-900/30 border border-teal-200 dark:border-teal-800 rounded-lg">
+                    <h3 className="text-sm font-medium text-teal-800 dark:text-teal-300 mb-3">
                       Fänge der Befischung #{selectedSamplingId}
                     </h3>
                     {isLoadingDetails ? (
-                      <div className="text-sm text-gray-500">Wird geladen...</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">Wird geladen...</div>
                     ) : samplingDetails.length > 0 ? (
                       <div className="overflow-auto">
                         <ResultsTable rows={samplingDetails} />
                       </div>
                     ) : (
-                      <div className="text-sm text-gray-500">
+                      <div className="text-sm text-gray-500 dark:text-gray-400">
                         Keine Fänge für diese Befischung gefunden.
                       </div>
                     )}
@@ -781,7 +785,7 @@ ORDER BY "Anzahl" DESC;`;
                 )}
               </div>
             ) : (
-              <div className="text-sm text-gray-500 text-center py-8">
+              <div className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">
                 Keine Ergebnisse. Führen Sie eine Query aus.
               </div>
             )}
@@ -789,9 +793,9 @@ ORDER BY "Anzahl" DESC;`;
         </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <section className="lg:col-span-2 bg-white border border-gray-200 rounded-xl shadow-sm">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-sm font-medium text-gray-700">Standorte</h2>
+          <section className="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300">Standorte</h2>
             </div>
             <div className="px-6 py-6">
               {locations.length > 0 ? (
@@ -799,24 +803,24 @@ ORDER BY "Anzahl" DESC;`;
                   {locations.map((loc, i) => (
                     <li
                       key={i}
-                      className="flex items-center justify-between rounded-md border border-gray-200 px-3 py-2"
+                      className="flex items-center justify-between rounded-md border border-gray-200 dark:border-gray-700 px-3 py-2"
                     >
-                      <span className="text-sm text-gray-800">{loc.label}</span>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-sm text-gray-800 dark:text-gray-200">{loc.label}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
                         {loc.lat.toFixed(5)}, {loc.lon.toFixed(5)}
                       </span>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <div className="text-sm text-gray-500 text-center py-8">
+                <div className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">
                   Keine Standorte mit Koordinaten gefunden
                 </div>
               )}
             </div>
           </section>
 
-          <section className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+          <section className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden">
             <MapComponent locations={locations} />
           </section>
         </div>
@@ -843,11 +847,11 @@ function ResultsTable({
   return (
     <table className="min-w-full text-sm">
       <thead>
-        <tr className="bg-slate-50">
+        <tr className="bg-slate-50 dark:bg-gray-700">
           {columns.map((c) => (
             <th
               key={c}
-              className="whitespace-nowrap px-3 py-2 text-left font-medium text-gray-700 border-b border-gray-200"
+              className="whitespace-nowrap px-3 py-2 text-left font-medium text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-600"
             >
               {c}
             </th>
@@ -863,8 +867,8 @@ function ResultsTable({
             <tr 
               key={i} 
               className={`
-                ${isClickable ? 'cursor-pointer hover:bg-teal-50 transition-colors' : ''}
-                ${isSelected ? 'bg-teal-100 ring-1 ring-teal-400' : 'odd:bg-white even:bg-slate-50'}
+                ${isClickable ? 'cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-900/30 transition-colors' : ''}
+                ${isSelected ? 'bg-teal-100 dark:bg-teal-900/50 ring-1 ring-teal-400 dark:ring-teal-600' : 'odd:bg-white even:bg-slate-50 dark:odd:bg-gray-800 dark:even:bg-gray-750'}
               `}
               onClick={() => {
                 if (isClickable && onRowClick && rowId !== null) {
@@ -875,8 +879,8 @@ function ResultsTable({
               {columns.map((c) => (
                 <td
                   key={c}
-                  className={`whitespace-nowrap px-3 py-2 border-b border-gray-100 ${
-                    isSelected ? 'text-teal-900 font-medium' : 'text-gray-800'
+                  className={`whitespace-nowrap px-3 py-2 border-b border-gray-100 dark:border-gray-700 ${
+                    isSelected ? 'text-teal-900 dark:text-teal-300 font-medium' : 'text-gray-800 dark:text-gray-200'
                   }`}
                 >
                   {String(r[c] ?? '')}
