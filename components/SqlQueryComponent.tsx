@@ -312,12 +312,12 @@ const SqlQueryUIDesign: React.FC = () => {
     }
   };
 
-  const getExecutableQuery = () => {
+  const getExecutableQuery = useCallback(() => {
     if (currentPreset?.hasParameter && parameter) {
       return query.replace(/\{\{PARAMETER\}\}/g, parameter);
     }
     return query;
-  };
+  }, [currentPreset, parameter, query]);
 
   // Handler für Klick auf eine Befischungszeile
   const handleSamplingClick = async (samplingId: number) => {
@@ -406,6 +406,39 @@ ORDER BY "Anzahl" DESC;`;
       setIsLoading(false);
     }
   };
+
+  const handleDownloadCsv = useCallback(() => {
+    if (results.length === 0) return;
+    const columns = Object.keys(results[0]);
+    const escapeCsv = (val: unknown) => {
+      const str = String(val ?? "");
+      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+        return '"' + str.replace(/"/g, '""') + '"';
+      }
+      return str;
+    };
+
+    const lines: string[] = [];
+    // 1. SQL query
+    lines.push("# SQL Query");
+    lines.push(escapeCsv(getExecutableQuery()));
+    lines.push("");
+    // 2. Column headers + data
+    lines.push(columns.map(escapeCsv).join(","));
+    for (const row of results) {
+      lines.push(columns.map((c) => escapeCsv(row[c])).join(","));
+    }
+
+  
+    const bom = "\uFEFF";
+    const blob = new Blob([bom + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `query-ergebnis-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [results, getExecutableQuery]);
 
   // Extract locations from results if they have lat/lon fields
   const locations = results
@@ -729,8 +762,17 @@ ORDER BY "Anzahl" DESC;`;
         )}
 
         <section className="bg-white border border-gray-200 rounded-xl shadow-sm mb-6">
-          <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h2 className="text-sm font-medium text-gray-700">Ergebnisse</h2>
+            {results.length > 0 && (
+              <button
+                onClick={handleDownloadCsv}
+                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                CSV herunterladen
+              </button>
+            )}
           </div>
           <div className="px-6 py-8">
             {error && (
