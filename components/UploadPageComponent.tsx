@@ -2,6 +2,7 @@
 
 import React, { useState, useRef } from "react";
 import Sidebar from "./Sidebar";
+import DarkModeToggle from "./DarkModeToggle";
 
 const UploadPageComponent = () => {
   const [isDragOver, setIsDragOver] = useState(false);
@@ -123,21 +124,24 @@ const UploadPageComponent = () => {
   };
 
   return (
-    <div className="flex flex-row">
+    <div className="flex flex-row min-h-screen bg-gray-50 dark:bg-gray-900">
       <Sidebar />
-      <div className="min-h-screen bg-gray-50 p-6 flex flex-row justify-center mx-auto">
+      <div className="flex-1 min-h-screen bg-gray-50 dark:bg-gray-900 p-6 flex flex-row justify-center relative">
+        <div className="absolute top-6 right-6">
+          <DarkModeToggle variant="page" />
+        </div>
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
               Excel-Datei hochladen
             </h1>
-            <p className="text-gray-600">
+            <p className="text-gray-600 dark:text-gray-400">
               Lade deine Excel-Datei hoch zur Überprüfung durch den
               Administrator
             </p>
           </div>
           {/* Disclaimer Box */}
-          <div className="bg-orange-50 border border-orange-200 rounded-lg p-6 mb-8">
+          <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-6 mb-8">
             <div className="flex items-start">
               <div className="flex-shrink-0">
                 <svg
@@ -153,10 +157,10 @@ const UploadPageComponent = () => {
                 </svg>
               </div>
               <div className="ml-3">
-                <h3 className="text-sm font-medium text-orange-800 mb-2">
+                <h3 className="text-sm font-medium text-orange-800 dark:text-orange-300 mb-2">
                   Wichtige Hinweise zur Dateistruktur
                 </h3>
-                <div className="text-sm text-orange-700">
+                <div className="text-sm text-orange-700 dark:text-orange-400">
                   <p className="mb-2">
                     Bitte stelle sicher, dass deine Excel-Datei die folgenden
                     Kriterien erfüllt:
@@ -177,7 +181,7 @@ const UploadPageComponent = () => {
                     <li>Keine zusätzlichen oder gelöschten Spalten</li>
                     <li>Maximal 10.000 Zeilen pro Datei</li>
                   </ul>
-                  <p className="mt-3 text-xs bg-orange-100 p-2 rounded">
+                  <p className="mt-3 text-xs bg-orange-100 dark:bg-orange-900/40 p-2 rounded">
                     <strong>Wichtig:</strong> Nach dem Upload wird deine Datei
                     vom Administrator manuell überprüft und freigegeben. Du
                     erhältst eine Benachrichtigung über den Status deiner
@@ -188,13 +192,13 @@ const UploadPageComponent = () => {
             </div>
           </div>
           {/* Upload Area */}
-          <div className="bg-white rounded-lg shadow-lg p-8">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8">
             {!selectedFile ? (
               <div
                 className={`border-2 border-dashed rounded-lg p-12 text-center transition-all duration-300 ${
                   isDragOver
                     ? "border-[#357174] bg-[#357174]/5"
-                    : "border-gray-300 hover:border-[#357174] hover:bg-gray-50"
+                    : "border-gray-300 dark:border-gray-600 hover:border-[#357174] hover:bg-gray-50 dark:hover:bg-gray-700"
                 }`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
@@ -223,12 +227,12 @@ const UploadPageComponent = () => {
                     </svg>
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
                       {isDragOver
                         ? "Datei hier ablegen..."
                         : "Excel-Datei hier ablegen"}
                     </h3>
-                    <p className="text-gray-500 mb-4">
+                    <p className="text-gray-500 dark:text-gray-400 mb-4">
                       oder klicke hier, um eine Datei auszuwählen
                     </p>
                     {/* WIP - Link zur Dummy Datei einfügen */}
@@ -261,7 +265,7 @@ const UploadPageComponent = () => {
             ) : (
               <div className="space-y-6">
                 {/* Selected File Info */}
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
                       <svg
@@ -279,10 +283,10 @@ const UploadPageComponent = () => {
                       </svg>
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900">
+                      <p className="font-medium text-gray-900 dark:text-gray-100">
                         {selectedFile.name}
                       </p>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
                         {formatFileSize(selectedFile.size)}
                       </p>
                     </div>
@@ -407,30 +411,30 @@ const UploadPageComponent = () => {
                     </div>
                     
                     {headerErrors.length > 0 ? (
-                      <div className="bg-white rounded p-3 border border-red-100">
-                        <h4 className="font-medium text-red-700 mb-2">Fehler in der Spaltenstruktur:</h4>
-                        <ul className="list-disc list-inside space-y-1 text-sm text-red-600">
+                      <div className="bg-white dark:bg-gray-900 rounded p-3 border border-red-100 dark:border-red-800">
+                        <h4 className="font-medium text-red-700 dark:text-red-400 mb-2">Fehler in der Spaltenstruktur:</h4>
+                        <ul className="list-disc list-inside space-y-1 text-sm text-red-600 dark:text-red-400">
                           {headerErrors.map((error, index) => (
                             <li key={index}>{error}</li>
                           ))}
                         </ul>
                       </div>
                     ) : validationErrors.length > 0 ? (
-                      <div className="max-h-60 overflow-y-auto bg-white rounded p-3 border border-red-100">
+                      <div className="max-h-60 overflow-y-auto bg-white dark:bg-gray-900 rounded p-3 border border-red-100 dark:border-red-800">
                         <table className="min-w-full">
-                          <thead className="bg-red-50 sticky top-0">
+                          <thead className="bg-red-50 dark:bg-red-900/30 sticky top-0">
                             <tr>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-red-700">Zeile</th>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-red-700">Spalte</th>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-red-700">Fehlermeldung</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-red-700 dark:text-red-400">Zeile</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-red-700 dark:text-red-400">Spalte</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-red-700 dark:text-red-400">Fehlermeldung</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-red-100">
+                          <tbody className="divide-y divide-red-100 dark:divide-red-800">
                             {validationErrors.map((error, index) => (
                               <tr key={index} className="text-sm">
-                                <td className="px-4 py-2 text-gray-900">{error.row}</td>
-                                <td className="px-4 py-2 text-gray-900">{error.column}</td>
-                                <td className="px-4 py-2 text-gray-600">{error.message}</td>
+                                <td className="px-4 py-2 text-gray-900 dark:text-gray-200">{error.row}</td>
+                                <td className="px-4 py-2 text-gray-900 dark:text-gray-200">{error.column}</td>
+                                <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{error.message}</td>
                               </tr>
                             ))}
                           </tbody>

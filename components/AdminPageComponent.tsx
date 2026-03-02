@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Sidebar from "./Sidebar";
+import DarkModeToggle from "./DarkModeToggle";
 import {
   Users,
   FileSpreadsheet,
@@ -313,20 +314,22 @@ const AdminPageComponent = () => {
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <div className="flex-1 p-8 bg-gray-50">
+      <div className="flex-1 p-8 bg-gray-50 dark:bg-gray-900">
         <div className="max-w-7xl mx-auto">
-          <h1 className="text-3xl font-bold text-gray-800 mb-8">
-            Admin Dashboard
-          </h1>
+          <div className="flex items-center justify-between mb-8">
+            <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">
+              Admin Dashboard
+            </h1>
+            <DarkModeToggle variant="page" />
+          </div>
 
-          {/* Tab Navigation */}
-          <div className="flex space-x-4 mb-6 border-b border-gray-200">
+          <div className="flex space-x-4 mb-6 border-b border-gray-200 dark:border-gray-700">
             <button
               onClick={() => setActiveTab("uploads")}
               className={`flex items-center px-4 py-2 border-b-2 transition-colors ${
                 activeTab === "uploads"
                   ? "border-[#357174] text-[#357174]"
-                  : "border-transparent text-gray-600 hover:text-gray-800"
+                  : "border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
               }`}
             >
               <FileSpreadsheet className="mr-2" size={20} />
@@ -342,7 +345,7 @@ const AdminPageComponent = () => {
               className={`flex items-center px-4 py-2 border-b-2 transition-colors ${
                 activeTab === "users"
                   ? "border-[#357174] text-[#357174]"
-                  : "border-transparent text-gray-600 hover:text-gray-800"
+                  : "border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
               }`}
             >
               <Users className="mr-2" size={20} />
@@ -351,19 +354,18 @@ const AdminPageComponent = () => {
           </div>
 
           {/* Tab Content */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            {/* Upload Management Tab */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
             {activeTab === "uploads" && (
               <div>
-                <h2 className="text-2xl font-semibold text-gray-800 mb-4">
+                <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-4">
                   Upload-Verwaltung
                 </h2>
-                <p className="text-gray-600 mb-6">
+                <p className="text-gray-600 dark:text-gray-400 mb-6">
                   Überprüfen und bestätigen Sie hochgeladene Excel-Dateien.
                 </p>
 
                 {uploads.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500">
+                  <div className="text-center py-12 text-gray-500 dark:text-gray-400">
                     <FileSpreadsheet className="mx-auto mb-4" size={48} />
                     <p>Keine ausstehenden Uploads vorhanden.</p>
                   </div>
@@ -372,7 +374,7 @@ const AdminPageComponent = () => {
                     {uploads.map((upload) => (
                       <div
                         key={upload.id}
-                        className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                        className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow"
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
@@ -382,10 +384,10 @@ const AdminPageComponent = () => {
                                 size={24}
                               />
                               <div>
-                                <h3 className="font-semibold text-gray-800">
+                                <h3 className="font-semibold text-gray-800 dark:text-gray-100">
                                   {upload.link}
                                 </h3>
-                                <p className="text-sm text-gray-500">
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
                                   Hochgeladen von {upload.uploaded_by} am{" "}
                                   {upload.createdAt}
                                 </p>
@@ -431,10 +433,10 @@ const AdminPageComponent = () => {
               <div>
                 <div className="flex justify-between items-center mb-6">
                   <div>
-                    <h2 className="text-2xl font-semibold text-gray-800">
+                    <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">
                       Benutzerverwaltung
                     </h2>
-                    <p className="text-gray-600">
+                    <p className="text-gray-600 dark:text-gray-400">
                       Erstellen und verwalten Sie Benutzerkonten.
                     </p>
                   </div>
@@ -448,39 +450,39 @@ const AdminPageComponent = () => {
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-700">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                           Benutzername
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                           E-Mail
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                           Name
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                           Erstellt am
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                           Aktionen
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                       {users.map((user) => (
-                        <tr key={user.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                             {user.username}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                             {user.email}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                             {user.name}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                             {user.createdAt}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -539,17 +541,17 @@ const AdminPageComponent = () => {
       {/* Deny Upload Modal */}
       {showDenyModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-4">
               Upload ablehnen
             </h3>
-            <p className="text-gray-600 mb-4">
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
               Bitte geben Sie einen Grund für die Ablehnung an:
             </p>
             <textarea
               value={denyReason}
               onChange={(e) => setDenyReason(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174] mb-4"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174] mb-4 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
               rows={4}
               placeholder="Grund für die Ablehnung..."
             />
@@ -560,7 +562,7 @@ const AdminPageComponent = () => {
                   setDenyReason("");
                   setSelectedUploadId(null);
                 }}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Abbrechen
               </button>
@@ -575,16 +577,15 @@ const AdminPageComponent = () => {
         </div>
       )}
 
-      {/* Create User Modal */}
       {showCreateUserModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-4">
               Neuen Benutzer erstellen
             </h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   E-Mail
                 </label>
                 <input
@@ -593,12 +594,12 @@ const AdminPageComponent = () => {
                   onChange={(e) =>
                     setNewUser({ ...newUser, email: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174]"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174] bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
                   placeholder="max.mustermann@example.com"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Benutzername
                 </label>
                 <input
@@ -607,12 +608,12 @@ const AdminPageComponent = () => {
                   onChange={(e) =>
                     setNewUser({ ...newUser, username: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174]"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174] bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
                   placeholder="max.mustermann"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Name
                 </label>
                 <input
@@ -621,12 +622,12 @@ const AdminPageComponent = () => {
                   onChange={(e) =>
                     setNewUser({ ...newUser, name: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174]"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174] bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
                   placeholder="Max Mustermann"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Passwort (temporär)
                 </label>
                 <input
@@ -635,10 +636,10 @@ const AdminPageComponent = () => {
                   onChange={(e) =>
                     setNewUser({ ...newUser, password: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174]"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174] bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
                   placeholder="Temporäres Passwort"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   Der Benutzer muss das Passwort beim ersten Login ändern.
                 </p>
               </div>
@@ -654,7 +655,7 @@ const AdminPageComponent = () => {
                     password: "",
                   });
                 }}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Abbrechen
               </button>
@@ -669,16 +670,15 @@ const AdminPageComponent = () => {
         </div>
       )}
 
-      {/* Edit User Modal */}
       {showEditUserModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-4">
               Benutzer bearbeiten
             </h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   E-Mail
                 </label>
                 <input
@@ -687,12 +687,12 @@ const AdminPageComponent = () => {
                   onChange={(e) =>
                     setEditUser({ ...editUser, email: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174]"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174] bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
                   placeholder="max.mustermann@example.com"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Benutzername
                 </label>
                 <input
@@ -701,12 +701,12 @@ const AdminPageComponent = () => {
                   onChange={(e) =>
                     setEditUser({ ...editUser, username: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174]"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174] bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
                   placeholder="max.mustermann"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Name
                 </label>
                 <input
@@ -715,12 +715,12 @@ const AdminPageComponent = () => {
                   onChange={(e) =>
                     setEditUser({ ...editUser, name: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174]"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174] bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
                   placeholder="Max Mustermann"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Rolle
                 </label>
                 <select
@@ -728,14 +728,14 @@ const AdminPageComponent = () => {
                   onChange={(e) =>
                     setEditUser({ ...editUser, role: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174]"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174] bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
                 >
                   <option value="viewer">Viewer</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Neues Passwort (optional)
                 </label>
                 <input
@@ -744,10 +744,10 @@ const AdminPageComponent = () => {
                   onChange={(e) =>
                     setEditUser({ ...editUser, password: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174]"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174] bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
                   placeholder="Neues Passwort (leer lassen für keine Änderung)"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   Leer lassen, um das Passwort nicht zu ändern.
                 </p>
               </div>
@@ -765,7 +765,7 @@ const AdminPageComponent = () => {
                     password: "",
                   });
                 }}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Abbrechen
               </button>
