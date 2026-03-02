@@ -10,6 +10,7 @@ export async function fetchAllData() {
       username: true,
       email: true,
       name: true,
+      role: true,
       createdAt: true,
     },
   });
