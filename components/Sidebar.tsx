@@ -3,7 +3,6 @@
 import {
   FileInputIcon,
   FilePlus2Icon,
-  Globe,
   LucideIcon,
   SearchCode,
   ShieldEllipsis,
@@ -31,12 +30,6 @@ const Sidebar = () => {
       title: "SQL Abfrage",
       path: "/",
       icon: SearchCode,
-      protected: false,
-    },
-    {
-      title: "Karte",
-      path: "/map",
-      icon: Globe,
       protected: false,
     },
     {
