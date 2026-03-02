@@ -10,8 +10,6 @@ export async function PATCH(
   if (authResult instanceof NextResponse) {
     return authResult;
   }
-  const sessionData = authResult;
-
   try {
     const { id } = await context.params;
     const body = await request.json();
@@ -31,12 +29,7 @@ export async function PATCH(
       );
     }
 
-    const updatedUpload = await updateUpload(
-      id,
-      action,
-      reason,
-      sessionData.user.username,
-    );
+    const updatedUpload = await updateUpload(id, action, reason);
 
     if (!updatedUpload) {
       return NextResponse.json({ error: "Upload not found" }, { status: 404 });
