@@ -2,6 +2,10 @@ import { prisma } from "@/lib/prisma";
 import { promises as fs } from "fs";
 import path from "path";
 import bcrypt from "bcrypt";
+import { Uploads } from "@/app/generated/prisma";
+import nodemailer from "nodemailer";
+import SMTPTransport from "nodemailer/lib/smtp-transport";
+import { NextResponse } from "next/server";
 
 export async function fetchAllData() {
   const users = await prisma.user.findMany({
@@ -38,6 +42,132 @@ export async function downloadFile(filename: string) {
   return fileBuffer;
 }
 
+async function sendRejectEmail(upload: Uploads) {
+  const transporter = nodemailer.createTransport({
+    host: process.env.NODEMAILER_HOST,
+    port: process.env.NODEMAILER_PORT,
+    secure: process.env.NODEMAILER_SECURE,
+    auth: {
+      user: process.env.NODEMAILER_USER,
+      pass: process.env.NODEMAILER_PASSWORD,
+    },
+  } as SMTPTransport.Options);
+
+  const uploadWithUserInfo = await prisma.uploads.findFirst({
+    where: {
+      id: upload.id,
+    },
+    include: {
+      user: true,
+    },
+  });
+
+  const userEmail = uploadWithUserInfo?.user.email;
+
+  console.log(userEmail);
+
+  const formattedDate = new Intl.DateTimeFormat("en-US", {
+    dateStyle: "long",
+    timeStyle: "short",
+  }).format(new Date(upload.createdAt));
+
+  const htmlBody = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Upload Rejected</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f7;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f7;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#e74c3c,#c0392b);padding:36px 40px;text-align:center;">
+              <h1 style="margin:0;color:#ffffff;font-size:26px;font-weight:700;letter-spacing:0.5px;">Upload Rejected</h1>
+              <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:14px;">CatchLogX Notification</p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:36px 40px;">
+              <p style="margin:0 0 20px;color:#2d2d2d;font-size:15px;line-height:1.6;">
+                Hello <strong>${uploadWithUserInfo?.user.name ?? uploadWithUserInfo?.user.username}</strong>,
+              </p>
+              <p style="margin:0 0 28px;color:#555555;font-size:15px;line-height:1.6;">
+                We regret to inform you that your recent upload has been reviewed and <strong style="color:#e74c3c;">rejected</strong> by our administration team. Please find the details below.
+              </p>
+
+              <!-- Upload Details Card -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#fdf3f3;border:1px solid #f5c6c6;border-radius:8px;margin-bottom:28px;">
+                <tr>
+                  <td style="padding:24px 28px;">
+                    <h2 style="margin:0 0 16px;color:#c0392b;font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">Upload Details</h2>
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="padding:6px 0;color:#888888;font-size:13px;width:140px;vertical-align:top;">Upload ID</td>
+                        <td style="padding:6px 0;color:#2d2d2d;font-size:13px;font-family:monospace;word-break:break-all;">${upload.id}</td>
+                      </tr>
+                      <tr>
+                        <td colspan="2" style="border-top:1px solid #f0d0d0;padding:0;"></td>
+                      </tr>
+                      <tr>
+                        <td style="padding:6px 0;color:#888888;font-size:13px;vertical-align:top;">Submitted At</td>
+                        <td style="padding:6px 0;color:#2d2d2d;font-size:13px;">${formattedDate}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Rejection Reason -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#fff8e1;border-left:4px solid #f39c12;border-radius:4px;margin-bottom:28px;">
+                <tr>
+                  <td style="padding:20px 24px;">
+                    <p style="margin:0 0 8px;color:#b7770d;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;">Reason for Rejection</p>
+                    <p style="margin:0;color:#4a4a4a;font-size:14px;line-height:1.7;">
+                      ${upload.note ?? "No specific reason was provided."}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0;color:#555555;font-size:14px;line-height:1.6;">
+                If you believe this decision was made in error or have any questions, please contact your administrator directly.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#f9f9f9;border-top:1px solid #eeeeee;padding:24px 40px;text-align:center;">
+              <p style="margin:0;color:#aaaaaa;font-size:12px;line-height:1.6;">
+                This is an automated message from <strong>CatchLogX</strong>. Please do not reply to this email.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+
+  await transporter.sendMail({
+    from: `"CatchLogX" <${process.env.NODEMAILER_USER}>`,
+    to: userEmail,
+    subject: "Your Upload Has Been Rejected",
+    html: htmlBody,
+  });
+}
+
 export async function updateUpload(
   id: string,
   action: string,
@@ -63,6 +193,32 @@ export async function updateUpload(
       updatedAt: new Date(),
     },
   });
+
+  if (newState === "REJECTED") {
+    try {
+      await sendRejectEmail(updatedUpload);
+      return NextResponse.json(
+        {
+          message: "The upload was rejected successfully.",
+          timestamp: new Date(),
+        },
+        {
+          status: 200,
+        },
+      );
+    } catch {
+      return NextResponse.json(
+        {
+          message:
+            "There was an error while trying to reject the upload. Please try again later.",
+          timestamp: new Date(),
+        },
+        {
+          status: 500,
+        },
+      );
+    }
+  }
 
   console.log(
     `[ADMIN] Upload ${action}ed by ${adminUsername}:`,
