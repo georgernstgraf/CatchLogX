@@ -9,26 +9,18 @@ export async function POST(req: NextRequest) {
     const result = await processUpload(fileBuffer, cookieHeader);
 
     if (!result.success) {
-      if ("validationErrors" in result) {
-        return NextResponse.json(
-          {
-            error: result.error,
-            validationErrors: result.validationErrors,
-          },
-          { status: result.status },
-        );
+      if ("excelError" in result && result.excelError && "fileBuffer" in result) {
+        return new NextResponse(result.fileBuffer, {
+          status: 400,
+          headers: {
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition': 'attachment; filename="validation_errors.xlsx"'
+          }
+        });
       }
-      if ("details" in result && result.details) {
-        return NextResponse.json(
-          {
-            error: result.error,
-            details: result.details,
-          },
-          { status: result.status },
-        );
-      }
+      
       return NextResponse.json(
-        { error: result.error },
+        { error: result.error, details: result.details },
         { status: result.status },
       );
     }

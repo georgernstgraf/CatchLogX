@@ -1,400 +1,297 @@
 import * as XLSX from "xlsx";
-import fs from "fs";
-import { prisma } from "@/lib/prisma";
+import * as ExcelJS from 'exceljs';
+import { z } from "zod";
 
-type ValidationRule = {
-  required?: boolean;
-  type?: "string" | "number" | "date";
-  options?: string[];
-  min?: number;
-  max?: number;
-  decimal?: number;
-  unit?: string;
-};
+// Types
+type CellValue = string | number | boolean | Date | null | undefined;
+type SheetRow = CellValue[];
+type DataObject = Record<string, CellValue>;
 
-export const expectedHeaders = [
-  "site_code",
-  "river_name",
-  "year",
-  "data_provider/contact person",
-  "ask Data provider before use",
-  "source",
-  "project",
-  "site_name",
-  "catchdate",
-  "Fishing authority",
-  "Preclassification Stressor",
-  "landmark_up",
-  "latitude",
-  "longitude",
-  "landmark_down",
-  "lat_down",
-  "long_down",
-  "locality_length",
-  "temp",
-  "conductivity",
-  "pH_value",
-  "ox_cont",
-  "ox_sat",
-  "method",
-  "assessment",
-  "sampling strategy",
-  "anodes",
-  "Number of Subsections",
-  "Length Subsection [m]",
-  "Width Subsection [m]",
-  "Type of strip",
-  "Habitat",
-  "Run/Strip",
-  "Fish ID",
-  "species",
-  "length [mm]",
-  "Total weight [gr]",
-  "Catch Efficiency [%]",
-  "remark raw data",
-  "remark import",
-  "Import",
-  "Import date",
-];
+// vereinheitlichen von Strings zum Vergleich
+const normalize = (v: unknown): string => String(v ?? "").trim().toLowerCase();
 
-export const validations: Record<string, ValidationRule> = {
-  site_code: { required: true, type: "string" },
-  river_name: { required: true, type: "string" },
-  year: { required: true, type: "number", decimal: 0 },
-  "data_provider/contact person": { required: true, type: "string" },
-  "ask Data provider before use": {
-    required: true,
-    type: "string",
-    options: ["yes", "no"],
-  },
-  source: { required: true, type: "string" },
-  project: { required: true, type: "string" },
-  site_name: { required: true, type: "string" },
-  catchdate: { required: true, type: "date" },
-  "Fishing authority": { type: "string" },
-  "Preclassification Stressor": {
-    type: "string",
-    options: ["hydropeaking", "residual flow", "head of impoundment"],
-  },
-  landmark_up: { type: "string" },
-  landmark_down: { type: "string" },
-  locality_length: { type: "number", decimal: 2, unit: "m" },
-  temp: { type: "number", decimal: 2, unit: "°C", min: 0.1 },
-  conductivity: { type: "number", min: 0, max: 50000, unit: "µS/cm" },
-  pH_value: { type: "number", min: 0, max: 14, decimal: 1 },
-  ox_cont: { type: "number", min: 0, max: 200, unit: "%" },
-  ox_sat: { type: "number", min: 0, max: 20, unit: "mg/L" },
-  method: {
-    required: true,
-    type: "string",
-    options: [
-      "Boat",
-      "Boat large",
-      "Boat small",
-      "bottomtrawl",
-      "drift net",
-      "e-bottomtrawl",
-      "fish trap",
-      "gillnet",
-      "longline",
-      "Multimesh-Gillnet",
-      "trammelnet",
-      "visual sighting",
-      "Wading",
-    ],
-  },
-  assessment: {
-    required: true,
-    type: "string",
-    options: [
-      "1 Run + FE%",
-      "DeLury",
-      "Mark/Recapture",
-      "qualitative",
-      "quantitative",
-      "Seber-LeCren",
-      "Shoreline strips",
-      "Strip",
-    ],
-  },
-  "sampling strategy": {
-    required: true,
-    type: "string",
-    options: ["whole", "partialprop"],
-  },
-  anodes: { type: "number", min: 0, max: 10 },
-  "Number of Subsections": { type: "number" },
-  "Length Subsection [m]": { type: "number", decimal: 2, unit: "m" },
-  "Width Subsection [m]": { type: "number", decimal: 2, unit: "m" },
-  "Type of strip": { type: "string" },
-  Habitat: { type: "string" },
-  "Run/Strip": { type: "string" },
-  "Fish ID": { type: "number" },
-  species: { required: true, type: "string" },
-  "length [mm]": { required: true, type: "number", decimal: 0, unit: "mm" },
-  "Total weight [gr]": { type: "number", decimal: 2, unit: "g" },
-  "Catch Efficiency [%]": {
-    type: "number",
-    min: 0,
-    max: 100,
-    decimal: 0,
-    unit: "%",
-  },
-  "remark raw data": { type: "string" },
-  "remark import": { type: "string" },
-  Import: { required: true, type: "string" },
-  "Import date": { required: true, type: "date" },
-};
+function readLists(workbook: XLSX.WorkBook) {
 
-export function parseExcelDate(value: any): Date | null {
-  if (!value) return null;
-  if (!value) return null;
-  if (value instanceof Date) return value;
-  if (typeof value === "number") {
-    return new Date((value - 25569) * 86400 * 1000);
-  }
-  if (typeof value === "string") {
-    const parts = value.split(".");
-    if (parts.length === 3) {
-      const [d, m, y] = parts.map(Number);
-      if (d && m && y) {
-        const date = new Date(y, m - 1, d);
-        return date.getDate() === d && date.getMonth() === m - 1 ? date : null;
+  const sheet = workbook.Sheets["List"];
+
+  const rows: SheetRow[] = XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    raw: true
+  }) as SheetRow[];
+
+  const headers = rows[0] as string[];
+
+  const lists: Record<string, Set<string>> = {};
+
+  for (let c = 0; c < headers.length; c++) {
+
+    const name = normalize(headers[c]);
+
+    const set = new Set<string>();
+
+    for (let r = 1; r < rows.length; r++) {
+
+      const value = rows[r][c];
+
+      if (value) {
+        set.add(normalize(value));
       }
     }
+    lists[name] = set;
   }
-  return null;
+  return lists;
 }
 
-export function isEmpty(value: any): boolean {
-  return (
-    value === undefined ||
-    value === null ||
-    value === "" ||
-    (typeof value === "string" && value.trim() === "")
+//Prüfung der Listen 
+
+function inList(lists: Record<string, Set<string>>, listName: string) {
+
+  const set = lists[normalize(listName)];
+
+  return z.string().min(1).refine(
+    (v) => {
+      if (!set) {
+        return false; // Liste existiert nicht
+      }
+      return set.has(normalize(v));
+    },
+    {
+      message: set 
+        ? `Value not found in List sheet: ${listName}`
+        : `List column '${listName}' missing in List sheet`
+    }
   );
+
+}
+
+//Zod Schema
+
+function buildSchema(lists: Record<string, Set<string>>) {
+
+  return z.object({
+
+    country: inList(lists, "country"),
+    river_name: z.coerce.string({message: "River name must be a text value"}).min(1, { message: "River name is required" }),
+    year: z.coerce.number({message: "Year must be a number"}).int({message: "Year must be a whole number"
+    }).min(1990, {message: "Year must be between 1990 and 2100"}).max(2100, {message: "Year must be between 1990 and 2100"}),
+    data_provider: z.coerce.string({message: "Data provider must be a text value"}).min(1, { message: "Data provider is required" }),
+    approval_required: z.enum(["yes", "no"], { message: "Approval must be 'yes' or 'no'" }),
+    source: z.coerce.string({message: "Source must be a text value"}).min(1, { message: "Source is required" }),
+    project: z.coerce.string({message: "Project name must be a text value"}).max(30, { message: "Project name must be less than 30 characters long" }),
+    site_name: z.coerce.string({message: "Site name must be a text value"}).min(1, { message: "Site name is required" }),
+    date: z.coerce.date({ message: "Invalid date format" }),
+    fishing_district: z.coerce.string({message: "Fishing district must be a text value"}).optional(),
+    preclassification_stressor: z.coerce.string({message: "Preclassification stressor must be a text value"}).optional(),
+    landmark_up: z.union([z.coerce.string({message: "Landmark up must be a text value"}), z.coerce.number()]).refine(v => String(v).length <= 20, { message: "Landmark up must be at most 20 characters long" }).optional(),
+    lat_up: z.coerce.number({message: "Latitude up must be a number"}).min(46, { message: "Latitude up must be between 46 and 49.1" }).max(49.1, { message: "Latitude up must be between 46 and 49.1" }),
+    long_up: z.coerce.number({message: "Longitude up must be a number"}).min(9.5, { message: "Longitude up must be between 9.5 and 17.4" }).max(17.4, { message: "Longitude up must be between 9.5 and 17.4" }),
+    landmark_down: z.union([z.coerce.string({message: "Landmark down must be a text value"}), z.coerce.number()]).refine(v => String(v).length <= 20, { message: "Landmark down must be at most 20 characters long" }).optional(),
+    lat_down: z.coerce.number({message: "Latitude down must be a number"}).optional(),
+    long_down: z.coerce.number({message: "Longitude down must be a number"}).optional(),
+    length_site: z.coerce.number({message: "Length site must be a number"}).optional(),
+    width_site: z.coerce.number({message: "Width site must be a number"}).optional(),
+    temp: z.coerce.number({message: "Temperature must be a number"}).optional(),
+    conductivity: z.coerce.number({message: "Conductivity must be a number"}).min(50, { message: "Conductivity must be at least 50" }).max(1500, { message: "Conductivity must be at most 1500" }).optional(),
+    pH_value: z.coerce.number({message: "pH value must be a number"}).min(0, { message: "pH value must be at least 0" }).max(14, { message: "pH value must be at most 14" }).optional(),
+    ox_cont: z.coerce.number({message: "Oxygen content must be a number"}).min(0, { message: "Oxygen content must be at least 0" }).max(20, { message: "Oxygen content must be at most 20" }).optional(),
+    ox_sat: z.coerce.number({message: "Oxygen saturation must be a number"}).min(20, { message: "Oxygen saturation must be at least 20" }).max(130, { message: "Oxygen saturation must be at most 130" }).optional(),
+    mean_water_depth: z.coerce.number({message: "Mean water depth must be a number"}).optional(),
+    discharge: z.coerce.number({message: "Discharge must be a number"}).optional(),
+    method: inList(lists, "method"),
+    sampling_time: inList(lists, "sampling time"),
+    assessment: inList(lists, "assessment"),
+    anodes: z.coerce.number({message: "Anodes must be a number"}).int({message: "Anodes must be a whole number"}).min(1, { message: "Anodes must be at least 1" }).max(10, { message: "Anodes must be at most 10" }).optional(),
+    fished_length: z.coerce.number({message: "Fished length must be a number"}).optional(),
+    fished_width: z.coerce.number({message: "Fished width must be a number"}).optional(),
+    type_of_strip: z.coerce.string({message: "Type of strip must be a text value"}).optional(),
+    habitat: z.coerce.string({message: "Habitat must be a text value"}).optional(),
+    sample_id: z.coerce.string({message: "Sample ID must be a text value"}).optional(),
+    fish_id: z.coerce.number({message: "Fish ID must be a number"}).int({message: "Fish ID must be a whole number"}).optional(),
+    species: inList(lists, "name of species"),
+    total_length: z.coerce.number({message: "Total length must be a number"}).optional(),
+    weight: z.coerce.number({message: "Weight must be a number"}).optional(),
+    reader_id: z.coerce.string({message: "Reader ID must be a text value"}).optional(),
+    memory_id: z.coerce.number({message: "Memory ID must be a number"}).int({message: "Memory ID must be a whole number"}).optional(),
+    pit_dec: z.coerce.string({message: "Pit decimal must be a text value"}).optional(),
+    pit_hex: z.coerce.string({message: "Pit hex must be a text value"}).optional(),
+    recapture: z.coerce.number({message: "Recapture must be a number"}).int({message: "Recapture must be a whole number"}).min(0, { message: "Recapture must be at least 0" }).max(1, { message: "Recapture must be at most 1" }).optional(),
+    catch_efficiency: z.coerce.number({message: "Catch efficiency must be a number"}).min(0, { message: "Catch efficiency must be at least 0" }).max(100, { message: "Catch efficiency must be at most 100" }).optional(),
+    remark_raw_data: z.coerce.string({message: "Remark raw data must be a text value"}).optional(),
+    remark_import: z.coerce.string({message: "Remark import must be a text value"}).optional(),
+  });
 }
 
 export async function processUpload(fileBuffer: Buffer, cookieHeader: string) {
-  const workbook = XLSX.read(fileBuffer, {
-    type: "buffer",
-    cellDates: false,
-    dateNF: "dd.mm.yyyy",
-  });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-
-  if (rows.length === 0) {
-    return { success: false, status: 400, error: "Excel ist leer" };
-  }
-
-  const actualHeaders = rows[0] as string[];
-  const headerMap: Record<string, number> = {};
-  const missingHeaders: string[] = [];
-
-  expectedHeaders.forEach((header) => {
-    const index = actualHeaders.indexOf(header);
-    if (index === -1) {
-      missingHeaders.push(header);
-    } else {
-      headerMap[header] = index;
-    }
-  });
-
-  if (missingHeaders.length > 0) {
-    return {
-      success: false,
-      status: 400,
-      error: "Fehlende Spalten",
-      details: [
-        {
-          row: 1,
-          errors: missingHeaders.map((h) => `Spalte "${h}" fehlt`),
-        },
-      ],
-    };
-  }
-
-  const data: Record<string, any>[] = [];
-  const errors: Array<{
-    row: number;
-    column: string;
-    message: string;
-  }> = [];
-
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    const rowObj: Record<string, any> = {};
-
-    for (const header of expectedHeaders) {
-      const rawValue = row[headerMap[header]];
-      let value = rawValue;
-
-      const rules = validations[header];
-      if (rules) {
-        if (rules.required && isEmpty(rawValue)) {
-          errors.push({
-            row: i + 1,
-            column: header,
-            message: `Pflichtfeld nicht ausgefüllt`,
-          });
-        }
-
-        if (!isEmpty(rawValue)) {
-          if (rules.type === "number") {
-            const num = Number(rawValue);
-            if (isNaN(num)) {
-              errors.push({
-                row: i + 1,
-                column: header,
-                message: `Muss eine Zahl sein (Wert: "${rawValue}")`,
-              });
-            } else {
-              if (rules.min !== undefined && num < rules.min) {
-                errors.push({
-                  row: i + 1,
-                  column: header,
-                  message: `Wert darf nicht kleiner als ${rules.min} sein (Wert: ${num})`,
-                });
-              }
-              if (rules.max !== undefined && num > rules.max) {
-                errors.push({
-                  row: i + 1,
-                  column: header,
-                  message: `Wert darf nicht größer als ${rules.max} sein (Wert: ${num})`,
-                });
-              }
-              if (rules.decimal !== undefined) {
-                const decimals = (String(num).split(".")[1] || "").length;
-                if (decimals > rules.decimal) {
-                  errors.push({
-                    row: i + 1,
-                    column: header,
-                    message: `Darf maximal ${rules.decimal} Nachkommastellen haben (Wert: ${num})`,
-                  });
-                }
-              }
-            }
-          }
-
-          if (rules.type === "string" && typeof rawValue !== "string") {
-            errors.push({
-              row: i + 1,
-              column: header,
-              message: `Muss ein Text sein (Typ: ${typeof rawValue})`,
-            });
-          }
-
-          if (rules.type === "date" && !isEmpty(rawValue)) {
-            const parsedDate = parseExcelDate(rawValue);
-            if (!parsedDate || isNaN(parsedDate.getTime())) {
-              errors.push({
-                row: i + 1,
-                column: header,
-                message: `Muss ein gültiges Datum sein (Wert: "${rawValue}")`,
-              });
-            } else {
-              value = parsedDate.toISOString().split("T")[0];
-            }
-          }
-
-          if (rules.options) {
-            const normalizedValue = String(rawValue).toLowerCase().trim();
-            const normalizedOptions = rules.options.map((opt) =>
-              opt.toLowerCase(),
-            );
-
-            if (!normalizedOptions.includes(normalizedValue)) {
-              errors.push({
-                row: i + 1,
-                column: header,
-                message: `Muss einer der Werte sein: ${rules.options.join(
-                  ", ",
-                )} (Wert: "${rawValue}")`,
-              });
-            }
-          }
-        }
-      }
-      rowObj[header] = value;
-    }
-
-    if (!errors.some((e) => e.row === i + 1)) {
-      data.push(rowObj);
-    }
-  }
-
-  if (errors.length > 0) {
-    return {
-      success: false,
-      status: 400,
-      error: "Validierung fehlgeschlagen",
-      validationErrors: errors,
-    };
-  }
-
-  const uploadsDir = "./uploads";
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-  }
-
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-
-  const sessionResponse = await fetch(
-    `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/session`,
-    {
-      method: "GET",
-      headers: {
-        Cookie: cookieHeader,
-      },
-    },
-  );
-
-  const sessionData = await sessionResponse.json();
-  console.log("Session response:", sessionData);
-
-  if (!sessionData.authenticated || !sessionData.user?.id) {
-    return {
-      success: false,
-      status: 401,
-      error: "Nicht authentifiziert oder User-ID fehlt",
-    };
-  }
-
-  const username = sessionData.user.username || sessionData.user.name || "user";
-
-  const fileName = `${username}_${timestamp}.xlsx`;
-  const filePath = `${uploadsDir}/${fileName}`;
-
-  fs.writeFileSync(filePath, fileBuffer);
-  console.log("Datei gespeichert:", filePath);
-
   try {
-    const uploadRecord = await prisma.uploads.create({
-      data: {
-        link: filePath,
-        state: "UPLOADED",
-        user: {
-          connect: {
-            id: sessionData.user.id,
-          },
-        },
-      },
+    const workbook = XLSX.read(fileBuffer, {
+      type: "buffer",
+      cellDates: true
     });
-    console.log("DB-Eintrag erstellt:", uploadRecord.id);
-  } catch (error) {
-    console.error("DB-Fehler:", error);
+
+    // Prüfe ob List Sheet existiert
+    if (!workbook.Sheets["List"]) {
+      return {
+        success: false,
+        error: "List sheet missing",
+        details: "The Excel file must contain a 'List' sheet with allowed values",
+        status: 400
+      };
+    }
+
+    const lists = readLists(workbook);
+    const rowSchema = buildSchema(lists);
+
+    //DATA Sheet einlesen
+    const sheet = workbook.Sheets["DATA"];
+    
+    if (!sheet) {
+      return {
+        success: false,
+        error: "DATA sheet missing",
+        details: "Required 'DATA' sheet is missing in the Excel file",
+        status: 400
+      };
+    }
+
+    const rows: SheetRow[] = XLSX.utils.sheet_to_json(sheet, {
+      header: 1,
+      raw: true
+    }) as SheetRow[];
+
+    if (!rows || rows.length === 0) {
+      return {
+        success: false,
+        error: "No data found",
+        details: "The DATA sheet contains no data",
+        status: 400
+      };
+    }
+
+    const headers = rows[0] as string[];
+    
+    if (!headers || headers.length === 0) {
+      return {
+        success: false,
+        error: "No headers found",
+        details: "The DATA sheet contains no column headers",
+        status: 400
+      };
+    }
+
+    // Prüfe erforderliche Spalten
+    const requiredColumns = [
+      "country", "river_name", "year", "data_provider", "approval_required", 
+      "source", "project", "site_name", "date", "lat_up", "long_up", 
+      "method", "sampling_time", "assessment", "species"
+    ];
+    
+    const missingColumns = requiredColumns.filter(col => !headers.includes(col));
+    
+    if (missingColumns.length > 0) {
+      return {
+        success: false,
+        error: "Missing required columns",
+        details: `Missing required columns: ${missingColumns.join(", ")}`,
+        status: 400
+      };
+    }
+    
+    const errorMap = new Map<string, string>(); // row_column -> message
+
+    //Validierung der Datenzeilen
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      
+      // Prüfung ob die Zeile komplett leer ist (alle Werte sind null, undefined oder leere Strings)
+      const isEmptyRow = row.every(cell => 
+        cell === null || cell === undefined || (typeof cell === "string" && cell.trim() === "")
+      );
+      
+      // Wenn leere Zeile gefunden, stoppe die Validierung
+      if (isEmptyRow) {
+        break;
+      }
+      
+      const obj: DataObject = {};
+
+      // Zod Objekt mit den Spaltennamen als Schlüssel und den Zellenwerten als Werte erstellen
+      headers.forEach((h: string, idx: number) => {
+        obj[h] = row[idx];
+      });
+
+      const result = rowSchema.safeParse(obj);
+
+      if (!result.success) {
+        // Speichere nur Fehler für Excel-Markierung
+        result.error.issues.forEach((issue) => {
+          const columnIndex = headers.indexOf(issue.path[0] as string);
+          if (columnIndex !== -1) {
+            errorMap.set(`${i + 1}_${columnIndex}`, issue.message);
+          }
+        });
+      }
+    }
+
+    if (errorMap.size > 0) {
+      const excelWorkbook = new ExcelJS.Workbook();
+      
+      // Erstelle DATA Worksheet
+      const dataWorksheet = excelWorkbook.addWorksheet('DATA');
+      
+      // Füge Headers hinzu
+      dataWorksheet.addRow(headers);
+      
+      // Füge Datenzeilen hinzu
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const isEmptyRow = row.every(cell => 
+          cell === null || cell === undefined || (typeof cell === "string" && cell.trim() === "")
+        );
+        if (isEmptyRow) break;
+        
+        dataWorksheet.addRow(row);
+      }
+      
+      // Markiere Fehlerzellen mit rotem Hintergrund und Fehlernachricht als Notiz
+      for (const [key, message] of errorMap) {
+        const [rowIdx, colIdx] = key.split('_').map(Number);
+        
+        const cell = dataWorksheet.getCell(rowIdx, colIdx + 1);
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFF9999' } // Hellrot
+        };
+        cell.font = {
+          color: { argb: 'FFCC0000' }, // Dunkelrot
+          bold: true
+        };
+        cell.note = message;
+      }
+      
+      const excelBuffer = await excelWorkbook.xlsx.writeBuffer();
+      
+      return {
+        success: false,
+        error: "Validation failed",
+        excelError: true,
+        fileBuffer: excelBuffer,
+        status: 400
+      };
+    }
+
+    return {
+      success: true,
+      data: { processedRows: rows.length - 1 },
+      summary: "Validation finished successfully"
+    };
+    
+  } catch (error: any) {
     return {
       success: false,
-      status: 500,
-      error: "Fehler beim Eintragen der Informationen in der Datenbank",
-      details: error instanceof Error ? error.message : String(error),
+      error: "Server error during file processing",
+      details: error.message,
+      status: 500
     };
   }
-
-  return {
-    success: true,
-    data,
-    summary: `${data.length} Zeilen erfolgreich validiert`,
-  };
 }
