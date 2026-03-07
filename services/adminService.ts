@@ -41,6 +41,7 @@ export function getContentType(): string {
 
 export async function downloadFile(filename: string) {
   const filePath = path.join("uploads", filename);
+  console.log(filePath);
   await fsPromises.access(filePath);
   const fileBuffer = await fsPromises.readFile(filePath);
   return fileBuffer;
@@ -175,6 +176,7 @@ async function sendRejectEmail(upload: Uploads) {
 async function acceptUploadAndPushToDb(upload: Uploads) {
   const absolutePath = path.join(
     process.cwd(),
+    "uploads",
     upload.link.replace(/^\.\//, ""),
   );
 
@@ -183,9 +185,17 @@ async function acceptUploadAndPushToDb(upload: Uploads) {
   try {
     const fileBuffer = fs.readFileSync(absolutePath);
     const workbook = XLSX.read(fileBuffer, { type: "buffer" });
-    const sheetName = workbook.SheetNames[0];
+    const sheetName = workbook.Sheets["DATA"] ? "DATA" : workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
-    rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+    const allRows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, {
+      defval: null,
+    });
+    // Filter trailing/empty rows where every value is null, undefined, or blank
+    rows = allRows.filter((row) =>
+      Object.values(row).some(
+        (v) => v !== null && v !== undefined && String(v).trim() !== "",
+      ),
+    );
   } catch (error) {
     console.error(
       "[acceptUploadAndPushToDb] Failed to read Excel file:",
@@ -252,50 +262,111 @@ async function acceptUploadAndPushToDb(upload: Uploads) {
   let processedRows = 0;
   const samplingMap = new Map<string, number>();
 
+  // Detect whether this is a legacy file (has site_code column) or the new schema
+  const hasLegacySiteCode = rows.length > 0 && "site_code" in rows[0];
+
+  console.log(
+    `[acceptUploadAndPushToDb] Schema detected: ${hasLegacySiteCode ? "legacy (site_code)" : "new (no site_code)"}`,
+  );
+
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const rowNum = i + 2;
 
-    const siteCode = row["site_code"];
-    if (!siteCode) {
-      errors.push(`Row ${rowNum}: Missing site_code, skipping row.`);
-      continue;
+    // --- Site Code resolution ---
+    let siteCode: string;
+    if (hasLegacySiteCode) {
+      const raw = row["site_code"];
+      if (!raw) {
+        errors.push(`Row ${rowNum}: Missing site_code, skipping row.`);
+        continue;
+      }
+      siteCode = String(raw);
+    } else {
+      // New schema: derive a deterministic synthetic site code so re-imports
+      // of the same site don't create duplicates.
+      const riverName = String(row["river_name"] ?? "").trim();
+      if (!riverName) {
+        errors.push(`Row ${rowNum}: Missing river_name, skipping row.`);
+        continue;
+      }
+      const siteName = String(row["site_name"] ?? "").trim();
+      const latUp = String(row["lat_up"] ?? "").trim();
+      const longUp = String(row["long_up"] ?? "").trim();
+      siteCode = `${riverName}__${siteName}__${latUp}__${longUp}`;
     }
 
+    // --- RiverSite upsert ---
     let riverSite;
     try {
-      riverSite = await prisma.riverSite.upsert({
-        where: { siteCode: String(siteCode) },
-        create: {
-          siteCode: String(siteCode),
-          riverName: String(row["river_name"] ?? ""),
-          siteName: row["site_name"] ? String(row["site_name"]) : null,
-          landmarkUp: row["landmark_up"] ? String(row["landmark_up"]) : null,
-          latitude: toFloat(row["latitude"]),
-          longitude: toFloat(row["longitude"]),
-          landmarkDown: row["landmark_down"]
-            ? String(row["landmark_down"])
-            : null,
-          latDown: toFloat(row["lat_down"]),
-          longDown: toFloat(row["long_down"]),
-          localityLength: toFloat(row["locality_length"]),
-          localityWidth: toFloat(row["locality_width"]),
-        },
-        update: {
-          riverName: String(row["river_name"] ?? ""),
-          siteName: row["site_name"] ? String(row["site_name"]) : null,
-          landmarkUp: row["landmark_up"] ? String(row["landmark_up"]) : null,
-          latitude: toFloat(row["latitude"]),
-          longitude: toFloat(row["longitude"]),
-          landmarkDown: row["landmark_down"]
-            ? String(row["landmark_down"])
-            : null,
-          latDown: toFloat(row["lat_down"]),
-          longDown: toFloat(row["long_down"]),
-          localityLength: toFloat(row["locality_length"]),
-          localityWidth: toFloat(row["locality_width"]),
-        },
-      });
+      if (hasLegacySiteCode) {
+        riverSite = await prisma.riverSite.upsert({
+          where: { siteCode },
+          create: {
+            siteCode,
+            riverName: String(row["river_name"] ?? ""),
+            siteName: row["site_name"] ? String(row["site_name"]) : null,
+            landmarkUp: row["landmark_up"] ? String(row["landmark_up"]) : null,
+            latitude: toFloat(row["latitude"]),
+            longitude: toFloat(row["longitude"]),
+            landmarkDown: row["landmark_down"]
+              ? String(row["landmark_down"])
+              : null,
+            latDown: toFloat(row["lat_down"]),
+            longDown: toFloat(row["long_down"]),
+            localityLength: toFloat(row["locality_length"]),
+            localityWidth: toFloat(row["locality_width"]),
+          },
+          update: {
+            riverName: String(row["river_name"] ?? ""),
+            siteName: row["site_name"] ? String(row["site_name"]) : null,
+            landmarkUp: row["landmark_up"] ? String(row["landmark_up"]) : null,
+            latitude: toFloat(row["latitude"]),
+            longitude: toFloat(row["longitude"]),
+            landmarkDown: row["landmark_down"]
+              ? String(row["landmark_down"])
+              : null,
+            latDown: toFloat(row["lat_down"]),
+            longDown: toFloat(row["long_down"]),
+            localityLength: toFloat(row["locality_length"]),
+            localityWidth: toFloat(row["locality_width"]),
+          },
+        });
+      } else {
+        // New schema: lat_up/long_up → latitude/longitude, length_site/width_site → localityLength/Width
+        riverSite = await prisma.riverSite.upsert({
+          where: { siteCode },
+          create: {
+            siteCode,
+            riverName: String(row["river_name"] ?? ""),
+            siteName: row["site_name"] ? String(row["site_name"]) : null,
+            landmarkUp: row["landmark_up"] ? String(row["landmark_up"]) : null,
+            latitude: toFloat(row["lat_up"]),
+            longitude: toFloat(row["long_up"]),
+            landmarkDown: row["landmark_down"]
+              ? String(row["landmark_down"])
+              : null,
+            latDown: toFloat(row["lat_down"]),
+            longDown: toFloat(row["long_down"]),
+            localityLength: toFloat(row["length_site"]),
+            localityWidth: toFloat(row["width_site"]),
+          },
+          update: {
+            riverName: String(row["river_name"] ?? ""),
+            siteName: row["site_name"] ? String(row["site_name"]) : null,
+            landmarkUp: row["landmark_up"] ? String(row["landmark_up"]) : null,
+            latitude: toFloat(row["lat_up"]),
+            longitude: toFloat(row["long_up"]),
+            landmarkDown: row["landmark_down"]
+              ? String(row["landmark_down"])
+              : null,
+            latDown: toFloat(row["lat_down"]),
+            longDown: toFloat(row["long_down"]),
+            localityLength: toFloat(row["length_site"]),
+            localityWidth: toFloat(row["width_site"]),
+          },
+        });
+      }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       console.error(
@@ -305,7 +376,10 @@ async function acceptUploadAndPushToDb(upload: Uploads) {
       continue;
     }
 
-    const catchDate = parseDate(row["catchdate"]);
+    // --- Sampling key & creation ---
+    const catchDate = hasLegacySiteCode
+      ? parseDate(row["catchdate"])
+      : parseDate(row["date"]);
     const samplingKey = `${siteCode}|${catchDate?.toISOString() ?? "null"}`;
 
     let samplingId: number;
@@ -314,51 +388,100 @@ async function acceptUploadAndPushToDb(upload: Uploads) {
     } else {
       try {
         const sampling = await prisma.sampling.create({
-          data: {
-            siteId: riverSite.id,
-            year: toInt(row["year"]) ?? new Date().getFullYear(),
-            catchDate,
-            dataProvider: row["data_provider/contact person"]
-              ? String(row["data_provider/contact person"])
-              : null,
-            askProviderBeforeUse: toBoolean(
-              row["ask Data provider before use"],
-            ),
-            source: row["source"] ? String(row["source"]) : null,
-            project: row["project"] ? String(row["project"]) : null,
-            fishingAuthority: row["Fishing authority"]
-              ? String(row["Fishing authority"])
-              : null,
-            preclassificationStressor: row["Preclassification Stressor"]
-              ? String(row["Preclassification Stressor"])
-              : null,
-            temp: toFloat(row["temp"]),
-            conductivity: toFloat(row["conductivity"]),
-            pHValue: toFloat(row["pH_value"]),
-            oCont: toFloat(row["ox_cont"]),
-            oSat: toFloat(row["ox_sat"]),
-            method: row["method"] ? String(row["method"]) : null,
-            assessment: row["assessment"] ? String(row["assessment"]) : null,
-            samplingStrategy: row["sampling strategy"]
-              ? String(row["sampling strategy"])
-              : null,
-            anodes: toInt(row["anodes"]),
-            numSubsections: toInt(row["Number of Subsections"]),
-            lengthSubsection: toFloat(row["Length Subsection [m]"]),
-            widthSubsection: toFloat(row["Width Subsection [m]"]),
-            typeOfStrip: row["Type of strip"]
-              ? String(row["Type of strip"])
-              : null,
-            habitat: row["Habitat"] ? String(row["Habitat"]) : null,
-            runStrip: row["Run/Strip"] ? String(row["Run/Strip"]) : null,
-            catchEfficiency: toFloat(row["Catch Efficiency [%]"]),
-            remarksRawData: row["remark raw data"]
-              ? String(row["remark raw data"])
-              : null,
-            remarkImport: row["remark import"]
-              ? String(row["remark import"])
-              : null,
-          },
+          data: hasLegacySiteCode
+            ? {
+                siteId: riverSite.id,
+                year: toInt(row["year"]) ?? new Date().getFullYear(),
+                catchDate,
+                dataProvider: row["data_provider/contact person"]
+                  ? String(row["data_provider/contact person"])
+                  : null,
+                askProviderBeforeUse: toBoolean(
+                  row["ask Data provider before use"],
+                ),
+                source: row["source"] ? String(row["source"]) : null,
+                project: row["project"] ? String(row["project"]) : null,
+                fishingAuthority: row["Fishing authority"]
+                  ? String(row["Fishing authority"])
+                  : null,
+                preclassificationStressor: row["Preclassification Stressor"]
+                  ? String(row["Preclassification Stressor"])
+                  : null,
+                temp: toFloat(row["temp"]),
+                conductivity: toFloat(row["conductivity"]),
+                pHValue: toFloat(row["pH_value"]),
+                oCont: toFloat(row["ox_cont"]),
+                oSat: toFloat(row["ox_sat"]),
+                method: row["method"] ? String(row["method"]) : null,
+                assessment: row["assessment"]
+                  ? String(row["assessment"])
+                  : null,
+                samplingStrategy: row["sampling strategy"]
+                  ? String(row["sampling strategy"])
+                  : null,
+                anodes: toInt(row["anodes"]),
+                numSubsections: toInt(row["Number of Subsections"]),
+                lengthSubsection: toFloat(row["Length Subsection [m]"]),
+                widthSubsection: toFloat(row["Width Subsection [m]"]),
+                typeOfStrip: row["Type of strip"]
+                  ? String(row["Type of strip"])
+                  : null,
+                habitat: row["Habitat"] ? String(row["Habitat"]) : null,
+                runStrip: row["Run/Strip"] ? String(row["Run/Strip"]) : null,
+                catchEfficiency: toFloat(row["Catch Efficiency [%]"]),
+                remarksRawData: row["remark raw data"]
+                  ? String(row["remark raw data"])
+                  : null,
+                remarkImport: row["remark import"]
+                  ? String(row["remark import"])
+                  : null,
+              }
+            : {
+                // New schema column names
+                siteId: riverSite.id,
+                year: toInt(row["year"]) ?? new Date().getFullYear(),
+                catchDate,
+                dataProvider: row["data_provider"]
+                  ? String(row["data_provider"])
+                  : null,
+                askProviderBeforeUse: toBoolean(row["approval_required"]),
+                source: row["source"] ? String(row["source"]) : null,
+                project: row["project"] ? String(row["project"]) : null,
+                fishingAuthority: row["fishing_district"]
+                  ? String(row["fishing_district"])
+                  : null,
+                preclassificationStressor: row["preclassification_stressor"]
+                  ? String(row["preclassification_stressor"])
+                  : null,
+                temp: toFloat(row["temp"]),
+                conductivity: toFloat(row["conductivity"]),
+                pHValue: toFloat(row["pH_value"]),
+                oCont: toFloat(row["ox_cont"]),
+                oSat: toFloat(row["ox_sat"]),
+                method: row["method"] ? String(row["method"]) : null,
+                assessment: row["assessment"]
+                  ? String(row["assessment"])
+                  : null,
+                samplingStrategy: row["sampling_time"]
+                  ? String(row["sampling_time"])
+                  : null,
+                anodes: toInt(row["anodes"]),
+                numSubsections: null,
+                lengthSubsection: toFloat(row["fished_length"]),
+                widthSubsection: toFloat(row["fished_width"]),
+                typeOfStrip: row["type_of_strip"]
+                  ? String(row["type_of_strip"])
+                  : null,
+                habitat: row["habitat"] ? String(row["habitat"]) : null,
+                runStrip: null,
+                catchEfficiency: toFloat(row["catch_efficiency"]),
+                remarksRawData: row["remark_raw_data"]
+                  ? String(row["remark_raw_data"])
+                  : null,
+                remarkImport: row["remark_import"]
+                  ? String(row["remark_import"])
+                  : null,
+              },
         });
         samplingId = sampling.id;
         samplingMap.set(samplingKey, samplingId);
@@ -403,9 +526,19 @@ async function acceptUploadAndPushToDb(upload: Uploads) {
         data: {
           samplingId,
           speciesId: fishSpecies.id,
-          fishId: row["Fish ID"] ? String(row["Fish ID"]) : null,
-          lengthMm: toInt(row["length [mm]"]),
-          totalWeightGr: toFloat(row["Total weight [gr]"]),
+          fishId: hasLegacySiteCode
+            ? row["Fish ID"]
+              ? String(row["Fish ID"])
+              : null
+            : row["fish_id"]
+              ? String(row["fish_id"])
+              : null,
+          lengthMm: toInt(
+            hasLegacySiteCode ? row["length [mm]"] : row["total_length"],
+          ),
+          totalWeightGr: toFloat(
+            hasLegacySiteCode ? row["Total weight [gr]"] : row["weight"],
+          ),
         },
       });
       processedRows++;
