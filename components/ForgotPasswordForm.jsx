@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import React, { useEffect, useRef, useState } from "react";
 import bokuLogo from "@/assets/img/Logo.png";
+import DarkModeToggle from "@/components/DarkModeToggle";
 
 const COOLDOWN_SECONDS = 60;
 
@@ -107,8 +108,11 @@ const ForgotPasswordForm = () => {
   return (
     <>
       <ToastContainer toasts={toasts} />
-      <div className="flex flex-col justify-center items-center min-h-screen bg-[#f5f4f2]">
-        <div className="bg-[#FCFBF9] rounded-xl shadow-lg flex flex-col items-center p-10 w-[400px]">
+      <div className="flex flex-col justify-center items-center min-h-screen bg-[#f5f4f2] dark:bg-gray-900 relative">
+        <div className="absolute top-4 right-4">
+          <DarkModeToggle variant="page" />
+        </div>
+        <div className="bg-[#FCFBF9] dark:bg-gray-800 rounded-xl shadow-lg flex flex-col items-center p-10 w-[400px]">
           <div className="flex flex-row justify-center items-center gap-9 w-full mb-6">
             <div className="flex items-center h-full">
               <Image
@@ -119,13 +123,13 @@ const ForgotPasswordForm = () => {
                 className="object-contain"
               />
             </div>
-            <span className="text-black text-[25px] font-medium leading-tight">
+            <span className="text-black dark:text-gray-100 text-[25px] font-medium leading-tight">
               Universität für
               <br />
               Bodenkultur Wien
             </span>
           </div>
-          <div className="text-black text-5xl font-bold mb-8 text-center w-full">
+          <div className="text-black dark:text-gray-100 text-5xl font-bold mb-8 text-center w-full">
             Passwort zurücksetzen
           </div>
           <form onSubmit={handleSubmit} className="w-full">
@@ -138,7 +142,7 @@ const ForgotPasswordForm = () => {
               onChange={(e) => setUsername(e.target.value)}
               required
               disabled={isDisabled}
-              className="w-full bg-white text-black border border-[#e5e5e5] p-4 rounded-lg mb-4 text-lg focus:outline-none focus:ring-2 focus:ring-[#357174] disabled:bg-gray-100 disabled:cursor-not-allowed"
+              className="w-full bg-white dark:bg-gray-900 text-black dark:text-gray-200 border border-[#e5e5e5] dark:border-gray-600 p-4 rounded-lg mb-4 text-lg focus:outline-none focus:ring-2 focus:ring-[#357174] disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:cursor-not-allowed"
             />
             <button
               type="submit"
