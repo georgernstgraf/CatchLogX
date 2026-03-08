@@ -1,24 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import { processUpload } from "@/services/uploadService";
+import { requireAuth } from "@/lib/auth-middleware";
 
 export async function POST(req: NextRequest) {
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) {
+    return authResult;
+  }
+
   try {
     const fileBuffer = Buffer.from(await req.arrayBuffer());
-    const cookieHeader = req.headers.get("cookie") || "";
 
-    const result = await processUpload(fileBuffer, cookieHeader);
+    const result = await processUpload(fileBuffer, authResult.user.id);
 
     if (!result.success) {
-      if ("excelError" in result && result.excelError && "fileBuffer" in result) {
+      if (
+        "excelError" in result &&
+        result.excelError &&
+        "fileBuffer" in result
+      ) {
         return new NextResponse(result.fileBuffer, {
           status: 400,
           headers: {
-            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'Content-Disposition': 'attachment; filename="validation_errors.xlsx"'
-          }
+            "Content-Type":
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "Content-Disposition":
+              'attachment; filename="validation_errors.xlsx"',
+          },
         });
       }
-      
+
       return NextResponse.json(
         { error: result.error, details: result.details },
         { status: result.status },
