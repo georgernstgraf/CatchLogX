@@ -80,8 +80,6 @@ const AdminPageComponent = () => {
   }, []);
 
   const handleDownload = async (filename: string) => {
-    filename = filename.split("/")[2];
-
     try {
       const response = await fetch(`/api/admin/download/${filename}`, {
         method: "GET",
@@ -396,7 +394,11 @@ const AdminPageComponent = () => {
                           </div>
                           <div className="flex space-x-2">
                             <button
-                              onClick={() => handleDownload(upload.link)}
+                              onClick={() => {
+                                console.log(upload);
+                                console.log(upload.link);
+                                handleDownload(upload.link);
+                              }}
                               className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors flex items-center"
                               title="Datei herunterladen"
                             >
@@ -472,7 +474,10 @@ const AdminPageComponent = () => {
                     </thead>
                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                       {users.map((user) => (
-                        <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <tr
+                          key={user.id}
+                          className="hover:bg-gray-50 dark:hover:bg-gray-700"
+                        >
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                             {user.username}
                           </td>

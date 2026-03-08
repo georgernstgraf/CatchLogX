@@ -28,17 +28,9 @@ async function main() {
   );
   console.log("Sequences reset to 1.");
 
-  const species = await prisma.fishSpecies.create({
-    data: {
-      speciesName: "test",
-      germanName: "Test Fisch",
-      latinName: "Testus fishus",
-      family: "Testidae",
-    },
-  });
-  console.log(
-    `Created fish_species: "${species.speciesName}" (id: ${species.id})`,
-  );
+  // Import the full species list from insert-fish.ts
+  const { execSync } = await import("child_process");
+  execSync("npx tsx scripts/insert-fish.ts", { stdio: "inherit" });
 
   console.log("Done.");
 }
