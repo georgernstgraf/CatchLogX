@@ -73,105 +73,32 @@ function inList(lists: Record<string, Set<string>>, listName: string) {
 function buildSchema(lists: Record<string, Set<string>>) {
   return z.object({
     country: inList(lists, "country"),
-    river_name: z.coerce
-      .string({ message: "River name must be a text value" })
-      .min(1, { message: "River name is required" }),
-    year: z.coerce
-      .number({ message: "Year must be a number" })
-      .int({ message: "Year must be a whole number" })
-      .min(1990, { message: "Year must be between 1990 and 2100" })
-      .max(2100, { message: "Year must be between 1990 and 2100" }),
-    data_provider: z.coerce
-      .string({ message: "Data provider must be a text value" })
-      .min(1, { message: "Data provider is required" }),
-    approval_required: z.enum(["yes", "no"], {
-      message: "Approval must be 'yes' or 'no'",
-    }),
-    source: z.coerce
-      .string({ message: "Source must be a text value" })
-      .min(1, { message: "Source is required" }),
-    project: z.coerce
-      .string({ message: "Project name must be a text value" })
-      .max(30, {
-        message: "Project name must be less than 30 characters long",
-      }),
-    site_name: z.coerce
-      .string({ message: "Site name must be a text value" })
-      .min(1, { message: "Site name is required" }),
+    river_name: z.coerce.string({message: "River name must be a text value"}).min(1, { message: "River name is required" }),
+    year: z.coerce.number({message: "Year must be a number"}).int({message: "Year must be a whole number"
+    }).min(1990, {message: "Year must be between 1990 and 2100"}).max(2100, {message: "Year must be between 1990 and 2100"}),
+    data_provider: z.coerce.string({message: "Data provider must be a text value"}).min(1, { message: "Data provider is required" }),
+    approval_required: z.enum(["yes", "no"], { message: "Approval must be 'yes' or 'no'" }),
+    source: z.coerce.string({message: "Source must be a text value"}).min(1, { message: "Source is required" }),
+    project: z.coerce.string({message: "Project name must be a text value"}).max(150, { message: "Project name must be less than 150 characters long" }),
+    site_name: z.coerce.string({message: "Site name must be a text value"}).min(1, { message: "Site name is required" }),
     date: z.coerce.date({ message: "Invalid date format" }),
-    fishing_district: z.coerce
-      .string({ message: "Fishing district must be a text value" })
-      .optional(),
-    preclassification_stressor: z.coerce
-      .string({ message: "Preclassification stressor must be a text value" })
-      .optional(),
-    landmark_up: z
-      .union([
-        z.coerce.string({ message: "Landmark up must be a text value" }),
-        z.coerce.number(),
-      ])
-      .refine((v) => String(v).length <= 20, {
-        message: "Landmark up must be at most 20 characters long",
-      })
-      .optional(),
-    lat_up: z.coerce
-      .number({ message: "Latitude up must be a number" })
-      .min(46, { message: "Latitude up must be between 46 and 49.1" })
-      .max(49.1, { message: "Latitude up must be between 46 and 49.1" }),
-    long_up: z.coerce
-      .number({ message: "Longitude up must be a number" })
-      .min(9.5, { message: "Longitude up must be between 9.5 and 17.4" })
-      .max(17.4, { message: "Longitude up must be between 9.5 and 17.4" }),
-    landmark_down: z
-      .union([
-        z.coerce.string({ message: "Landmark down must be a text value" }),
-        z.coerce.number(),
-      ])
-      .refine((v) => String(v).length <= 20, {
-        message: "Landmark down must be at most 20 characters long",
-      })
-      .optional(),
-    lat_down: z.coerce
-      .number({ message: "Latitude down must be a number" })
-      .optional(),
-    long_down: z.coerce
-      .number({ message: "Longitude down must be a number" })
-      .optional(),
-    length_site: z.coerce
-      .number({ message: "Length site must be a number" })
-      .optional(),
-    width_site: z.coerce
-      .number({ message: "Width site must be a number" })
-      .optional(),
-    temp: z.coerce
-      .number({ message: "Temperature must be a number" })
-      .optional(),
-    conductivity: z.coerce
-      .number({ message: "Conductivity must be a number" })
-      .min(50, { message: "Conductivity must be at least 50" })
-      .max(1500, { message: "Conductivity must be at most 1500" })
-      .optional(),
-    pH_value: z.coerce
-      .number({ message: "pH value must be a number" })
-      .min(0, { message: "pH value must be at least 0" })
-      .max(14, { message: "pH value must be at most 14" })
-      .optional(),
-    ox_cont: z.coerce
-      .number({ message: "Oxygen content must be a number" })
-      .min(0, { message: "Oxygen content must be at least 0" })
-      .max(20, { message: "Oxygen content must be at most 20" })
-      .optional(),
-    ox_sat: z.coerce
-      .number({ message: "Oxygen saturation must be a number" })
-      .min(20, { message: "Oxygen saturation must be at least 20" })
-      .max(130, { message: "Oxygen saturation must be at most 130" })
-      .optional(),
-    mean_water_depth: z.coerce
-      .number({ message: "Mean water depth must be a number" })
-      .optional(),
-    discharge: z.coerce
-      .number({ message: "Discharge must be a number" })
-      .optional(),
+    fishing_district: z.coerce.string({message: "Fishing district must be a text value"}).optional(),
+    preclassification_stressor: z.coerce.string({message: "Preclassification stressor must be a text value"}).optional(),
+    landmark_up: z.union([z.coerce.string({message: "Landmark up must be a text value"}), z.coerce.number()]).refine(v => String(v).length <= 50, { message: "Landmark up must be at most 50 characters long" }).optional(),
+    lat_up: z.coerce.number({message: "Latitude up must be a number"}).min(46, { message: "Latitude up must be between 46 and 49.1" }).max(49.1, { message: "Latitude up must be between 46 and 49.1" }),
+    long_up: z.coerce.number({message: "Longitude up must be a number"}).min(9.5, { message: "Longitude up must be between 9.5 and 17.4" }).max(17.4, { message: "Longitude up must be between 9.5 and 17.4" }),
+    landmark_down: z.union([z.coerce.string({message: "Landmark down must be a text value"}), z.coerce.number()]).refine(v => String(v).length <= 50, { message: "Landmark down must be at most 50 characters long" }).optional(),
+    lat_down: z.coerce.number({message: "Latitude down must be a number"}).optional(),
+    long_down: z.coerce.number({message: "Longitude down must be a number"}).optional(),
+    length_site: z.coerce.number({message: "Length site must be a number"}).optional(),
+    width_site: z.coerce.number({message: "Width site must be a number"}).optional(),
+    temp: z.coerce.number({message: "Temperature must be a number"}).optional(),
+    conductivity: z.coerce.number({message: "Conductivity must be a number"}).min(50, { message: "Conductivity must be at least 50" }).max(1500, { message: "Conductivity must be at most 1500" }).optional(),
+    pH_value: z.coerce.number({message: "pH value must be a number"}).min(0, { message: "pH value must be at least 0" }).max(14, { message: "pH value must be at most 14" }).optional(),
+    ox_cont: z.coerce.number({message: "Oxygen content must be a number"}).min(0, { message: "Oxygen content must be at least 0" }).max(20, { message: "Oxygen content must be at most 20" }).optional(),
+    ox_sat: z.coerce.number({message: "Oxygen saturation must be a number"}).min(20, { message: "Oxygen saturation must be at least 20" }).max(130, { message: "Oxygen saturation must be at most 130" }).optional(),
+    mean_water_depth: z.coerce.number({message: "Mean water depth must be a number"}).optional(),
+    discharge: z.coerce.number({message: "Discharge must be a number"}).optional(),
     method: inList(lists, "method"),
     sampling_time: inList(lists, "sampling time"),
     assessment: inList(lists, "assessment"),
