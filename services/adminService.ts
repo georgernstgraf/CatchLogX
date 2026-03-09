@@ -28,7 +28,7 @@ export async function fetchAllData() {
       createdAt: true,
     },
     where: {
-      state: { not: "REJECTED" },
+      state: { notIn: ["SAVED_IN_DB", "REJECTED"] },
     },
   });
 
