@@ -84,10 +84,10 @@ function buildSchema(lists: Record<string, Set<string>>) {
     date: z.coerce.date({ message: "Invalid date format" }),
     fishing_district: z.coerce.string({message: "Fishing district must be a text value"}).optional(),
     preclassification_stressor: z.coerce.string({message: "Preclassification stressor must be a text value"}).optional(),
-    landmark_up: z.union([z.coerce.string({message: "Landmark up must be a text value"}), z.coerce.number()]).refine(v => String(v).length <= 50, { message: "Landmark up must be at most 50 characters long" }).optional(),
-    lat_up: z.coerce.number({message: "Latitude up must be a number"}).min(46, { message: "Latitude up must be between 46 and 49.1" }).max(49.1, { message: "Latitude up must be between 46 and 49.1" }),
-    long_up: z.coerce.number({message: "Longitude up must be a number"}).min(9.5, { message: "Longitude up must be between 9.5 and 17.4" }).max(17.4, { message: "Longitude up must be between 9.5 and 17.4" }),
-    landmark_down: z.union([z.coerce.string({message: "Landmark down must be a text value"}), z.coerce.number()]).refine(v => String(v).length <= 50, { message: "Landmark down must be at most 50 characters long" }).optional(),
+    landmark_up: z.union([z.coerce.string({message: "Landmark up must be a text value"}), z.coerce.number()]).refine(v => String(v).length <= 100, { message: "Landmark up must be at most 100 characters long" }).optional(),
+    lat_up: z.coerce.number({message: "Latitude up must be a number"}),
+    long_up: z.coerce.number({message: "Longitude up must be a number"}),
+    landmark_down: z.union([z.coerce.string({message: "Landmark down must be a text value"}), z.coerce.number()]).refine(v => String(v).length <= 100, { message: "Landmark down must be at most 100 characters long" }).optional(),
     lat_down: z.coerce.number({message: "Latitude down must be a number"}).optional(),
     long_down: z.coerce.number({message: "Longitude down must be a number"}).optional(),
     length_site: z.coerce.number({message: "Length site must be a number"}).optional(),
@@ -162,6 +162,24 @@ function buildSchema(lists: Record<string, Set<string>>) {
     remark_import: z.coerce
       .string({ message: "Remark import must be a text value" })
       .optional(),
+  }).superRefine((data, ctx) => {
+    if (normalize(data.country) === "austria") {
+      if (data.lat_up < 46 || data.lat_up > 49.1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["lat_up"],
+          message: "Latitude up must be between 46 and 49.1 when in Austria",
+        });
+      }
+
+      if (data.long_up < 9.5 || data.long_up > 17.4) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["long_up"],
+          message: "Longitude up must be between 9.5 and 17.4 when in Austria",
+        });
+      }
+    }
   });
 }
 
