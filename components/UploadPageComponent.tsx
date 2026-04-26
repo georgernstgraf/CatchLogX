@@ -3,7 +3,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import Sidebar from "./Sidebar";
 import DarkModeToggle from "./DarkModeToggle";
-import { downloadDummyFile, DummyFileRecord, fetchDummyFiles } from "@/lib/dummy-files";
+import {
+  downloadDummyFile,
+  DummyFileRecord,
+  fetchDummyFiles,
+} from "@/lib/dummy-files";
 
 const UploadPageComponent = () => {
   const [isDragOver, setIsDragOver] = useState(false);
