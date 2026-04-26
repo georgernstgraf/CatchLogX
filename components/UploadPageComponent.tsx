@@ -4,6 +4,8 @@ import React, { useState, useRef } from "react";
 import Sidebar from "./Sidebar";
 import DarkModeToggle from "./DarkModeToggle";
 
+const MY_UPLOADS_STORAGE_KEY = "clx-my-uploads";
+
 const UploadPageComponent = () => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -108,6 +110,32 @@ const UploadPageComponent = () => {
         setErrorType("structural");
         setErrorMessage(data.details || data.error || "An unknown error occurred.");
         return;
+      }
+
+      const successfulUpload = {
+        id: data?.data?.uploadId || `local-${Date.now()}`,
+        link: selectedFile.name,
+        state: "UPLOADED",
+        note: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      try {
+        const existingRaw = localStorage.getItem(MY_UPLOADS_STORAGE_KEY);
+        const existingUploads = existingRaw ? JSON.parse(existingRaw) : [];
+        const mergedUploads = [
+          successfulUpload,
+          ...existingUploads.filter(
+            (upload: { id?: string }) => upload?.id !== successfulUpload.id,
+          ),
+        ];
+        localStorage.setItem(
+          MY_UPLOADS_STORAGE_KEY,
+          JSON.stringify(mergedUploads.slice(0, 100)),
+        );
+      } catch (storageError) {
+        console.warn("Could not write upload to local storage:", storageError);
       }
 
       setUploadStatus("success");
