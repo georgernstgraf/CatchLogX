@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Sidebar from "./Sidebar";
 import DarkModeToggle from "./DarkModeToggle";
 import {
@@ -21,7 +21,9 @@ type Upload = {
   link: string;
   uploaded_by: string;
   createdAt: string;
+  updatedAt: string;
   state: string;
+  note?: string | null;
 };
 
 type User = {
@@ -46,6 +48,8 @@ const AdminPageComponent = () => {
   const [deleteConfirmUserId, setDeleteConfirmUserId] = useState<string | null>(
     null,
   );
+  const [uploadStateFilter, setUploadStateFilter] = useState<string>("ALL");
+  const [uploadSearch, setUploadSearch] = useState("");
 
   // New user form state
   const [newUser, setNewUser] = useState({
@@ -64,8 +68,8 @@ const AdminPageComponent = () => {
     password: "",
   });
 
-  useEffect(() => {
-    const fetchUsersAndUploads = async () => {
+  const fetchUsersAndUploads = useCallback(async () => {
+    try {
       const response = await fetch("/api/admin/fetch-all/", {
         method: "GET",
         headers: {
@@ -77,9 +81,41 @@ const AdminPageComponent = () => {
         setUsers(data.users);
         setUploads(data.uploads);
       }
-    };
-    fetchUsersAndUploads();
+    } catch (error) {
+      console.error("Error fetching admin data:", error);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchUsersAndUploads();
+  }, [fetchUsersAndUploads]);
+
+  const uploadStates = useMemo(() => {
+    const states = new Set(uploads.map((upload) => upload.state));
+    return ["ALL", ...Array.from(states)];
+  }, [uploads]);
+
+  const pendingUploadsCount = useMemo(
+    () => uploads.filter((upload) => upload.state === "UPLOADED").length,
+    [uploads],
+  );
+
+  const filteredUploads = useMemo(() => {
+    const search = uploadSearch.trim().toLowerCase();
+
+    return uploads.filter((upload) => {
+      const stateMatch =
+        uploadStateFilter === "ALL" || upload.state === uploadStateFilter;
+
+      const searchMatch =
+        search.length === 0 ||
+        upload.id.toLowerCase().includes(search) ||
+        upload.link.toLowerCase().includes(search) ||
+        upload.uploaded_by.toLowerCase().includes(search);
+
+      return stateMatch && searchMatch;
+    });
+  }, [uploadSearch, uploadStateFilter, uploads]);
 
   const handleDownload = async (filename: string) => {
     try {
@@ -126,7 +162,11 @@ const AdminPageComponent = () => {
       });
 
       if (response.ok) {
-        setUploads(uploads.filter((upload) => upload.id !== uploadId));
+        setUploads(
+          uploads.map((upload) =>
+            upload.id === uploadId ? { ...upload, state: "ACCEPTED" } : upload,
+          ),
+        );
         alert("Upload wurde akzeptiert!");
       } else {
         const errorData = await response.json();
@@ -164,8 +204,13 @@ const AdminPageComponent = () => {
       const data = await response.json();
 
       if (response.ok) {
-        // Remove the denied upload from the list
-        setUploads(uploads.filter((upload) => upload.id !== selectedUploadId));
+        setUploads(
+          uploads.map((upload) =>
+            upload.id === selectedUploadId
+              ? { ...upload, state: "REJECTED", note: denyReason }
+              : upload,
+          ),
+        );
 
         // Reset modal state
         setShowDenyModal(false);
@@ -334,9 +379,9 @@ const AdminPageComponent = () => {
             >
               <FileSpreadsheet className="mr-2" size={20} />
               Upload-Verwaltung
-              {uploads.length > 0 && (
+              {pendingUploadsCount > 0 && (
                 <span className="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
-                  {uploads.length}
+                  {pendingUploadsCount}
                 </span>
               )}
             </button>
@@ -372,17 +417,46 @@ const AdminPageComponent = () => {
                   Upload-Verwaltung
                 </h2>
                 <p className="text-gray-600 dark:text-gray-400 mb-6">
-                  Überprüfen und bestätigen Sie hochgeladene Excel-Dateien.
+                  Alle Uploads im System mit Filter- und Suchfunktion.
                 </p>
 
-                {uploads.length === 0 ? (
+                <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <select
+                    value={uploadStateFilter}
+                    onChange={(event) => setUploadStateFilter(event.target.value)}
+                    className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
+                  >
+                    {uploadStates.map((state) => (
+                      <option key={state} value={state}>
+                        {state === "ALL" ? "Alle Status" : state}
+                      </option>
+                    ))}
+                  </select>
+
+                  <input
+                    type="text"
+                    value={uploadSearch}
+                    onChange={(event) => setUploadSearch(event.target.value)}
+                    placeholder="Suche nach Datei, User-ID oder Upload-ID"
+                    className="w-full sm:max-w-md px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
+                  />
+
+                  <button
+                    onClick={fetchUsersAndUploads}
+                    className="px-4 py-2 bg-[#357174] text-white rounded hover:bg-[#2a5a5d] transition-colors"
+                  >
+                    Aktualisieren
+                  </button>
+                </div>
+
+                {filteredUploads.length === 0 ? (
                   <div className="text-center py-12 text-gray-500 dark:text-gray-400">
                     <FileSpreadsheet className="mx-auto mb-4" size={48} />
-                    <p>Keine ausstehenden Uploads vorhanden.</p>
+                    <p>Keine Uploads für den aktuellen Filter gefunden.</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {uploads.map((upload) => (
+                    {filteredUploads.map((upload) => (
                       <div
                         key={upload.id}
                         className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow"
@@ -399,9 +473,19 @@ const AdminPageComponent = () => {
                                   {upload.link}
                                 </h3>
                                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                                  Hochgeladen von {upload.uploaded_by} am{" "}
-                                  {upload.createdAt}
+                                  Upload-ID: {upload.id}
                                 </p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                  Hochgeladen von {upload.uploaded_by} am {upload.createdAt}
+                                </p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                  Status: {upload.state}
+                                </p>
+                                {upload.note && (
+                                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                                    Hinweis: {upload.note}
+                                  </p>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -418,22 +502,26 @@ const AdminPageComponent = () => {
                               <Download size={18} className="mr-2" />
                               Download
                             </button>
-                            <button
-                              onClick={() => handleAccept(upload.id)}
-                              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center"
-                              title="Upload akzeptieren"
-                            >
-                              <Check size={18} className="mr-2" />
-                              Akzeptieren
-                            </button>
-                            <button
-                              onClick={() => handleDenyClick(upload.id)}
-                              className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors flex items-center"
-                              title="Upload ablehnen"
-                            >
-                              <X size={18} className="mr-2" />
-                              Ablehnen
-                            </button>
+                            {upload.state === "UPLOADED" && (
+                              <>
+                                <button
+                                  onClick={() => handleAccept(upload.id)}
+                                  className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center"
+                                  title="Upload akzeptieren"
+                                >
+                                  <Check size={18} className="mr-2" />
+                                  Akzeptieren
+                                </button>
+                                <button
+                                  onClick={() => handleDenyClick(upload.id)}
+                                  className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors flex items-center"
+                                  title="Upload ablehnen"
+                                >
+                                  <X size={18} className="mr-2" />
+                                  Ablehnen
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
