@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   db:
     image: postgres:16-alpine
@@ -20,6 +18,41 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  minio:
+    image: minio/minio:latest
+    container_name: clx-minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - clx_miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: clx-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      set -e;
+      mc alias set clx http://minio:9000 minioadmin minioadmin;
+      mc mb --ignore-existing clx/catchlogx-files;
+      printf '' | mc pipe clx/catchlogx-files/CatchLogX/uploads/.keep;
+      printf '' | mc pipe clx/catchlogx-files/CatchLogX/dummy_files/.keep;
+      "
+
   app:
     image: node:20-alpine
     container_name: clx-web
@@ -36,12 +69,24 @@ services:
       WATCHPACK_POLLING: "true"
       HOSTNAME: "0.0.0.0"
       PORT: "3001"
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_USE_SSL: "false"
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: catchlogx-files
+      MINIO_ROOT_PREFIX: CatchLogX
     ports:
       - "3001:3001"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     command: >
-      sh -c "npm ci --include=dev || install --include=dev
+      sh -c "npm ci --include=dev || npm install --include=dev
       && npx prisma generate
       && npx prisma db push
       && npx tsx scripts/create-user.ts
@@ -56,3 +101,4 @@ services:
 
 volumes:
   clx_pgdata:
+  clx_miniodata:
