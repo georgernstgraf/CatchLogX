@@ -2,11 +2,10 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import React, { useEffect, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import bokuLogo from "@/assets/img/Logo.png";
 import DarkModeToggle from "@/components/DarkModeToggle";
-
 
 type ToastType = "success" | "error" | "info";
 
@@ -42,10 +41,7 @@ function ToastContainer({ toasts }: { toasts: Toast[] }) {
   );
 }
 
-
 type PageState = "loading" | "invalid" | "form" | "submitting" | "done";
-
-
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
@@ -56,7 +52,13 @@ function Card({ children }: { children: React.ReactNode }) {
       <div className="bg-[#FCFBF9] dark:bg-gray-800 rounded-xl shadow-lg flex flex-col items-center p-10 w-[420px]">
         <div className="flex flex-row justify-center items-center gap-9 w-full mb-6">
           <div className="flex items-center h-full">
-            <Image src={bokuLogo} alt="Boku Logo" width={150} height={150} className="object-contain" />
+            <Image
+              src={bokuLogo}
+              alt="Boku Logo"
+              width={150}
+              height={150}
+              className="object-contain"
+            />
           </div>
           <span className="text-black dark:text-gray-100 text-[25px] font-medium leading-tight">
             Universität für
@@ -75,8 +77,7 @@ function Card({ children }: { children: React.ReactNode }) {
   );
 }
 
-
-export default function ResetPasswordPage() {
+function ResetPasswordPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -89,8 +90,6 @@ export default function ResetPasswordPage() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [toastCounter, setToastCounter] = useState(0);
 
-
-
   const addToast = (message: string, type: ToastType, duration = 4000) => {
     const id = toastCounter + 1;
     setToastCounter((c) => c + 1);
@@ -99,8 +98,6 @@ export default function ResetPasswordPage() {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, duration);
   };
-
-  
 
   useEffect(() => {
     const token = searchParams.get("token");
@@ -114,7 +111,9 @@ export default function ResetPasswordPage() {
 
     (async () => {
       try {
-        const res = await fetch(`/api/reset-password?token=${encodeURIComponent(token)}`);
+        const res = await fetch(
+          `/api/reset-password?token=${encodeURIComponent(token)}`,
+        );
         const data = await res.json();
 
         if (res.ok && data.valid) {
@@ -125,10 +124,14 @@ export default function ResetPasswordPage() {
         } else {
           const msg: string = data.message ?? "";
           if (msg.toLowerCase().includes("expired")) {
-            setInvalidReason("This reset link has expired. Please request a new one.");
+            setInvalidReason(
+              "This reset link has expired. Please request a new one.",
+            );
             addToast("Reset link has expired.", "error");
           } else {
-            setInvalidReason("This reset link is invalid or has already been used.");
+            setInvalidReason(
+              "This reset link is invalid or has already been used.",
+            );
             addToast("Invalid password reset link.", "error");
           }
           setPageState("invalid");
@@ -139,9 +142,8 @@ export default function ResetPasswordPage() {
         setPageState("invalid");
       }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -197,7 +199,9 @@ export default function ResetPasswordPage() {
         <Card>
           <div className="flex flex-col items-center gap-4 w-full py-4">
             <div className="w-10 h-10 border-4 border-[#357174] border-t-transparent rounded-full animate-spin" />
-            <p className="text-gray-500 dark:text-gray-400 text-base">Verifying link…</p>
+            <p className="text-gray-500 dark:text-gray-400 text-base">
+              Verifying link…
+            </p>
           </div>
         </Card>
       </>
@@ -235,8 +239,11 @@ export default function ResetPasswordPage() {
         <ToastContainer toasts={toasts} />
         <Card>
           <div className="w-full bg-[#e8f5f5] dark:bg-teal-900/30 border border-[#357174] text-[#357174] dark:text-teal-300 px-4 py-4 rounded-lg mb-6 text-base text-center font-medium">
-            Password successfully reset!<br />
-            <span className="text-gray-500 dark:text-gray-400 text-sm font-normal">Redirecting to login…</span>
+            Password successfully reset!
+            <br />
+            <span className="text-gray-500 dark:text-gray-400 text-sm font-normal">
+              Redirecting to login…
+            </span>
           </div>
           <Link
             href="/login"
@@ -288,5 +295,26 @@ export default function ResetPasswordPage() {
         </Link>
       </Card>
     </>
+  );
+}
+
+function ResetPasswordFallback() {
+  return (
+    <Card>
+      <div className="flex flex-col items-center gap-4 w-full py-4">
+        <div className="w-10 h-10 border-4 border-[#357174] border-t-transparent rounded-full animate-spin" />
+        <p className="text-gray-500 dark:text-gray-400 text-base">
+          Loading reset form…
+        </p>
+      </div>
+    </Card>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<ResetPasswordFallback />}>
+      <ResetPasswordPageContent />
+    </Suspense>
   );
 }

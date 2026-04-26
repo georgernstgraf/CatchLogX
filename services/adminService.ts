@@ -1,12 +1,10 @@
 import { prisma } from "@/lib/prisma";
-import { promises as fsPromises } from "fs";
-import fs from "fs";
-import path from "path";
 import bcrypt from "bcrypt";
 import * as XLSX from "xlsx";
 import { Uploads } from "@/app/generated/prisma";
 import nodemailer from "nodemailer";
 import SMTPTransport from "nodemailer/lib/smtp-transport";
+import { downloadUploadFile } from "@/lib/minio";
 
 export async function fetchAllData() {
   const users = await prisma.user.findMany({
@@ -40,10 +38,7 @@ export function getContentType(): string {
 }
 
 export async function downloadFile(filename: string) {
-  const filePath = path.join("uploads", filename);
-  console.log(filePath);
-  await fsPromises.access(filePath);
-  const fileBuffer = await fsPromises.readFile(filePath);
+  const { fileBuffer } = await downloadUploadFile(filename);
   return fileBuffer;
 }
 
@@ -174,16 +169,12 @@ async function sendRejectEmail(upload: Uploads) {
 }
 
 async function acceptUploadAndPushToDb(upload: Uploads) {
-  const absolutePath = path.join(
-    process.cwd(),
-    "uploads",
-    upload.link.replace(/^\.\//, ""),
-  );
+  const objectName = upload.link.replace(/^\.\//, "");
 
   let rows: Record<string, any>[];
 
   try {
-    const fileBuffer = fs.readFileSync(absolutePath);
+    const { fileBuffer } = await downloadUploadFile(objectName);
     const workbook = XLSX.read(fileBuffer, { type: "buffer" });
     const sheetName = workbook.Sheets["DATA"] ? "DATA" : workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
@@ -217,7 +208,7 @@ async function acceptUploadAndPushToDb(upload: Uploads) {
   }
 
   console.log(
-    `[acceptUploadAndPushToDb] Processing ${rows.length} rows from ${absolutePath}`,
+    `[acceptUploadAndPushToDb] Processing ${rows.length} rows from ${objectName}`,
   );
 
   function parseDate(value: any): Date | null {
