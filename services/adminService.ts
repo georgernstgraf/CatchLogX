@@ -22,10 +22,12 @@ export async function fetchAllData() {
       link: true,
       state: true,
       uploaded_by: true,
+      note: true,
       createdAt: true,
+      updatedAt: true,
     },
-    where: {
-      state: { notIn: ["SAVED_IN_DB", "REJECTED"] },
+    orderBy: {
+      createdAt: "desc",
     },
   });
 

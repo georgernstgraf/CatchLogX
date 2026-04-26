@@ -423,7 +423,9 @@ const AdminPageComponent = () => {
                 <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center">
                   <select
                     value={uploadStateFilter}
-                    onChange={(event) => setUploadStateFilter(event.target.value)}
+                    onChange={(event) =>
+                      setUploadStateFilter(event.target.value)
+                    }
                     className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
                   >
                     {uploadStates.map((state) => (
@@ -476,7 +478,8 @@ const AdminPageComponent = () => {
                                   Upload-ID: {upload.id}
                                 </p>
                                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                                  Hochgeladen von {upload.uploaded_by} am {upload.createdAt}
+                                  Hochgeladen von {upload.uploaded_by} am{" "}
+                                  {upload.createdAt}
                                 </p>
                                 <p className="text-sm text-gray-500 dark:text-gray-400">
                                   Status: {upload.state}
