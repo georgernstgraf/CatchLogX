@@ -59,11 +59,11 @@ function FirstLoginContent() {
     <div className="min-h-screen flex items-center justify-center bg-[#f5f4f2] dark:bg-gray-900 p-6">
       <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3">
-          Passwort ändern erforderlich
+          Password Change Required
         </h1>
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-          Hallo {user?.username}, bitte ändere dein temporäres Passwort, bevor
-          du CatchLogX nutzen kannst.
+          Hello {user?.username}, please change your temporary password before
+          you continue using CatchLogX.
         </p>
 
         {error && (
@@ -75,7 +75,7 @@ function FirstLoginContent() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Aktuelles Passwort
+              Current Password
             </label>
             <input
               type="password"
@@ -89,7 +89,7 @@ function FirstLoginContent() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Neues Passwort
+              New Password
             </label>
             <input
               type="password"
@@ -104,7 +104,7 @@ function FirstLoginContent() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Neues Passwort bestätigen
+              Confirm New Password
             </label>
             <input
               type="password"
@@ -122,7 +122,7 @@ function FirstLoginContent() {
             disabled={isLoading}
             className="w-full rounded-lg bg-[#357174] px-4 py-2.5 text-white font-medium hover:bg-[#2a5a5d] disabled:bg-gray-400"
           >
-            {isLoading ? "Speichern..." : "Passwort aktualisieren"}
+            {isLoading ? "Saving..." : "Update Password"}
           </button>
         </form>
       </div>

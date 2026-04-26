@@ -20,10 +20,9 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       console.log(
-        "ProtectedRoute: User ist nicht eingeloggt, Weiterleitung zu",
+        "ProtectedRoute: user is not authenticated, redirecting to",
         redirectTo,
       );
-      // Auch hier setTimeout für bessere Funktionalität
       setTimeout(() => {
         router.replace(redirectTo);
       }, 50);
@@ -66,7 +65,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-lg">Wird geladen...</div>
+        <div className="text-lg">Loading...</div>
       </div>
     );
   }

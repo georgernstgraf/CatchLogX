@@ -16,7 +16,7 @@ const MAX_DUMMY_FILE_SIZE_BYTES = 8 * 1024 * 1024;
 function formatDateTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return "Unbekannt";
+    return "Unknown";
   }
 
   return new Intl.DateTimeFormat("de-AT", {
@@ -57,7 +57,7 @@ const AdminDummyFilesManager = () => {
       setDummyFiles(files);
     } catch (error) {
       console.error("Could not load dummy files:", error);
-      setErrorMessage("Dummy-Dateien konnten nicht geladen werden.");
+      setErrorMessage("Dummy files could not be loaded.");
     } finally {
       setIsLoading(false);
     }
@@ -85,7 +85,7 @@ const AdminDummyFilesManager = () => {
 
     if (selectedFile.size > MAX_DUMMY_FILE_SIZE_BYTES) {
       setErrorMessage(
-        `Die Datei ist zu gross. Maximal erlaubt: ${formatSize(MAX_DUMMY_FILE_SIZE_BYTES)}.`,
+        `The file is too large. Maximum allowed: ${formatSize(MAX_DUMMY_FILE_SIZE_BYTES)}.`,
       );
       return;
     }
@@ -103,7 +103,7 @@ const AdminDummyFilesManager = () => {
       }
     } catch (error) {
       console.error("Could not upload dummy file:", error);
-      setErrorMessage("Dummy-Datei konnte nicht gelesen werden.");
+      setErrorMessage("Dummy file could not be uploaded.");
     } finally {
       setIsUploading(false);
     }
@@ -120,7 +120,7 @@ const AdminDummyFilesManager = () => {
       .then(() => loadFiles())
       .catch((error) => {
         console.error("Could not update dummy file visibility:", error);
-        setErrorMessage("Sichtbarkeit konnte nicht aktualisiert werden.");
+        setErrorMessage("Visibility could not be updated.");
       });
   };
 
@@ -130,7 +130,7 @@ const AdminDummyFilesManager = () => {
       .then(() => loadFiles())
       .catch((error) => {
         console.error("Could not delete dummy file:", error);
-        setErrorMessage("Dummy-Datei konnte nicht gelöscht werden.");
+        setErrorMessage("Dummy file could not be deleted.");
       });
   };
 
@@ -139,7 +139,7 @@ const AdminDummyFilesManager = () => {
       await downloadDummyFile(file);
     } catch (error) {
       console.error("Could not download dummy file:", error);
-      alert("Download fehlgeschlagen.");
+      alert("Download failed.");
     }
   };
 
@@ -148,15 +148,14 @@ const AdminDummyFilesManager = () => {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-6">
         <div>
           <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">
-            Dummy-Dateien
+            Dummy Files
           </h2>
           <p className="text-gray-600 dark:text-gray-400">
-            Sichtbare Dateien werden auf der Upload-Seite als Download
-            angezeigt.
+            Visible files are shown as downloads on the upload page.
           </p>
         </div>
         <div className="rounded-lg bg-[#e8f3f3] dark:bg-[#1f2f3e] border border-[#c7e0e0] dark:border-[#2d4257] px-4 py-2 text-sm text-[#235457] dark:text-[#b8d6d8]">
-          Sichtbar: <strong>{visibleCount}</strong> / {dummyFiles.length}
+          Visible: <strong>{visibleCount}</strong> / {dummyFiles.length}
         </div>
       </div>
 
@@ -173,7 +172,7 @@ const AdminDummyFilesManager = () => {
             onClick={() => fileInputRef.current?.click()}
             className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >
-            Datei auswählen
+            Select File
           </button>
           <button
             onClick={handleUploadDummyFile}
@@ -185,7 +184,7 @@ const AdminDummyFilesManager = () => {
             }`}
           >
             <Upload size={16} />
-            {isUploading ? "Wird hochgeladen..." : "Dummy-Datei hochladen"}
+            {isUploading ? "Uploading..." : "Upload Dummy File"}
           </button>
           {selectedFile && (
             <p className="text-sm text-gray-600 dark:text-gray-300 break-all">
@@ -202,11 +201,11 @@ const AdminDummyFilesManager = () => {
 
       {isLoading ? (
         <div className="text-center py-12 text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg">
-          Lade Dummy-Dateien...
+          Loading dummy files...
         </div>
       ) : dummyFiles.length === 0 ? (
         <div className="text-center py-12 text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg">
-          Keine Dummy-Dateien vorhanden.
+          No dummy files found.
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -214,16 +213,16 @@ const AdminDummyFilesManager = () => {
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Datei
+                  File
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Hochgeladen am
+                  Uploaded At
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Sichtbar
+                  Visible
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Aktionen
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -261,7 +260,7 @@ const AdminDummyFilesManager = () => {
                       <button
                         onClick={() => handleDownload(file)}
                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-                        title="Datei herunterladen"
+                        title="Download file"
                       >
                         <Download size={14} />
                         Download
@@ -269,10 +268,10 @@ const AdminDummyFilesManager = () => {
                       <button
                         onClick={() => handleDeleteDummyFile(file.id)}
                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 transition-colors"
-                        title="Datei löschen"
+                        title="Delete file"
                       >
                         <Trash2 size={14} />
-                        Löschen
+                        Delete
                       </button>
                     </div>
                   </td>

@@ -28,25 +28,25 @@ interface SavedQuery {
   updatedAt: string;
 }
 
-// Standardabfragen
+// Preset queries
 const presetQueries: PresetQuery[] = [
   {
     id: "custom",
-    label: "Eigene Abfrage",
-    description: "Schreiben Sie Ihre eigene SQL-Abfrage",
+    label: "Custom Query",
+    description: "Write your own SQL query",
     query: "SELECT * FROM fish_species;",
   },
   {
     id: "species_rivers",
-    label: "Fischarten nach Fluss/Befischungsstelle",
+    label: "Species by River/Sampling Site",
     description:
-      "Zeigt, welche Fischarten in welchen Flüssen/Befischungsstellen vorkommen",
+      "Shows which fish species occur in which rivers/sampling sites",
     query: `SELECT DISTINCT
-  fs."speciesName" AS "Fischart",
-  fs."germanName" AS "Deutscher Name",
-  rs."riverName" AS "Fluss",
-  rs."siteName" AS "Befischungsstelle",
-  rs."siteCode" AS "Standortcode"
+  fs."speciesName" AS "Fish Species",
+  fs."germanName" AS "German Name",
+  rs."riverName" AS "River",
+  rs."siteName" AS "Sampling Site",
+  rs."siteCode" AS "Site Code"
 FROM fish_catches fc
 JOIN fish_species fs ON fc."speciesId" = fs.id
 JOIN samplings s ON fc."samplingId" = s.id
@@ -55,86 +55,86 @@ ORDER BY rs."riverName", fs."speciesName";`,
   },
   {
     id: "species_by_site",
-    label: "Arten an Fluss/Befischungsstelle",
+    label: "Species at River/Sampling Site",
     description:
-      "Listet alle Arten auf, die an einem bestimmten Fluss oder einer Befischungsstelle vorkommen",
+      "Lists all species that occur at a specific river or sampling site",
     query: `SELECT DISTINCT
-  fs."speciesName" AS "Fischart",
-  fs."germanName" AS "Deutscher Name",
-  fs."latinName" AS "Lateinischer Name",
-  fs."family" AS "Familie",
-  COUNT(fc.id) AS "Anzahl Fänge"
+  fs."speciesName" AS "Fish Species",
+  fs."germanName" AS "German Name",
+  fs."latinName" AS "Latin Name",
+  fs."family" AS "Family",
+  COUNT(fc.id) AS "Catch Count"
 FROM fish_catches fc
 JOIN fish_species fs ON fc."speciesId" = fs.id
 JOIN samplings s ON fc."samplingId" = s.id
 JOIN river_sites rs ON s."siteId" = rs.id
 WHERE rs."riverName" ILIKE '%{{PARAMETER}}%' OR rs."siteName" ILIKE '%{{PARAMETER}}%'
 GROUP BY fs.id, fs."speciesName", fs."germanName", fs."latinName", fs."family"
-ORDER BY "Anzahl Fänge" DESC;`,
+ORDER BY "Catch Count" DESC;`,
     hasParameter: true,
-    parameterLabel: "Fluss- oder Stellenname",
-    parameterPlaceholder: "z.B. Donau, Mur, ...",
+    parameterLabel: "River or Site Name",
+    parameterPlaceholder: "e.g. Danube, Mur, ...",
   },
   {
     id: "samplings_by_river",
-    label: "Befischungen an einem Fluss",
+    label: "Sampling Events by River",
     description:
-      "Listet alle Befischungen an einem Fluss mit Koordinaten, Seehöhe und Datum",
+      "Lists all sampling events for a river with coordinates, elevation, and date",
     query: `SELECT
-  s.id AS "Befischungs-ID",
-  rs."riverName" AS "Fluss",
-  rs."siteName" AS "Befischungsstelle",
-  rs."siteCode" AS "Standortcode",
+  s.id AS "Sampling ID",
+  rs."riverName" AS "River",
+  rs."siteName" AS "Sampling Site",
+  rs."siteCode" AS "Site Code",
   rs.latitude AS "latitude",
   rs.longitude AS "longitude",
-  s."catchDate" AS "Datum",
-  s.year AS "Jahr",
-  s.method AS "Methode",
-  s."dataProvider" AS "Datenquelle",
-  s.project AS "Projekt"
+  s."catchDate" AS "Date",
+  s.year AS "Year",
+  s.method AS "Method",
+  s."dataProvider" AS "Data Source",
+  s.project AS "Project"
 FROM samplings s
 JOIN river_sites rs ON s."siteId" = rs.id
 WHERE rs."riverName" ILIKE '%{{PARAMETER}}%'
 ORDER BY s."catchDate" DESC NULLS LAST, s.year DESC;`,
     hasParameter: true,
-    parameterLabel: "Flussname",
-    parameterPlaceholder: "z.B. Donau, Mur, ...",
+    parameterLabel: "River Name",
+    parameterPlaceholder: "e.g. Danube, Mur, ...",
   },
   {
     id: "catches_by_sampling",
-    label: "Fänge einer Befischung",
+    label: "Catches for a Sampling Event",
     description:
-      "Zeigt alle gefangenen Arten mit Anzahl und Länge für eine bestimmte Befischung",
+      "Shows all caught species with count and length for a specific sampling event",
     query: `SELECT
-  fs."speciesName" AS "Fischart",
-  fs."germanName" AS "Deutscher Name",
-  COUNT(fc.id) AS "Anzahl",
-  ROUND(AVG(fc."lengthMm")::numeric, 1) AS "Ø Länge (mm)",
-  MIN(fc."lengthMm") AS "Min Länge (mm)",
-  MAX(fc."lengthMm") AS "Max Länge (mm)",
-  ROUND(AVG(fc."totalWeightGr")::numeric, 1) AS "Ø Gewicht (g)"
+  fs."speciesName" AS "Fish Species",
+  fs."germanName" AS "German Name",
+  COUNT(fc.id) AS "Count",
+  ROUND(AVG(fc."lengthMm")::numeric, 1) AS "Avg Length (mm)",
+  MIN(fc."lengthMm") AS "Min Length (mm)",
+  MAX(fc."lengthMm") AS "Max Length (mm)",
+  ROUND(AVG(fc."totalWeightGr")::numeric, 1) AS "Avg Weight (g)"
 FROM fish_catches fc
 JOIN fish_species fs ON fc."speciesId" = fs.id
 WHERE fc."samplingId" = {{PARAMETER}}
 GROUP BY fs.id, fs."speciesName", fs."germanName"
-ORDER BY "Anzahl" DESC;`,
+ORDER BY "Count" DESC;`,
     hasParameter: true,
-    parameterLabel: "Befischungs-ID",
-    parameterPlaceholder: "z.B. 1, 2, 3, ...",
+    parameterLabel: "Sampling ID",
+    parameterPlaceholder: "e.g. 1, 2, 3, ...",
   },
   {
     id: "all_samplings",
-    label: "Alle Befischungen (mit Koordinaten)",
-    description: "Übersicht aller Befischungen mit Standortinformationen",
+    label: "All Sampling Events (with Coordinates)",
+    description: "Overview of all sampling events with location information",
     query: `SELECT
-  s.id AS "Befischungs-ID",
-  rs."riverName" AS "Fluss",
-  rs."siteName" AS "Befischungsstelle",
+  s.id AS "Sampling ID",
+  rs."riverName" AS "River",
+  rs."siteName" AS "Sampling Site",
   rs.latitude AS "latitude",
   rs.longitude AS "longitude",
-  s."catchDate" AS "Datum",
-  s.year AS "Jahr",
-  COUNT(fc.id) AS "Anzahl Fänge"
+  s."catchDate" AS "Date",
+  s.year AS "Year",
+  COUNT(fc.id) AS "Catch Count"
 FROM samplings s
 JOIN river_sites rs ON s."siteId" = rs.id
 LEFT JOIN fish_catches fc ON fc."samplingId" = s.id
@@ -368,18 +368,18 @@ const SqlQueryUIDesign: React.FC = () => {
     setIsLoadingDetails(true);
 
     const detailQuery = `SELECT
-  fs."speciesName" AS "Fischart",
-  fs."germanName" AS "Deutscher Name",
-  COUNT(fc.id) AS "Anzahl",
+  fs."speciesName" AS "Fish Species",
+  fs."germanName" AS "German Name",
+  COUNT(fc.id) AS "Count",
   ROUND(AVG(fc."lengthMm")::numeric, 1) AS "Ø Länge (mm)",
-  MIN(fc."lengthMm") AS "Min Länge (mm)",
-  MAX(fc."lengthMm") AS "Max Länge (mm)",
-  ROUND(AVG(fc."totalWeightGr")::numeric, 1) AS "Ø Gewicht (g)"
+  MIN(fc."lengthMm") AS "Min Length (mm)",
+  MAX(fc."lengthMm") AS "Max Length (mm)",
+  ROUND(AVG(fc."totalWeightGr")::numeric, 1) AS "Ø Mass (g)"
 FROM fish_catches fc
 JOIN fish_species fs ON fc."speciesId" = fs.id
 WHERE fc."samplingId" = ${samplingId}
 GROUP BY fs.id, fs."speciesName", fs."germanName"
-ORDER BY "Anzahl" DESC;`;
+ORDER BY "Count" DESC;`;
 
     try {
       const response = await fetch("/api/query/", {

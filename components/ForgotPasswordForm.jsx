@@ -85,19 +85,13 @@ const ForgotPasswordForm = () => {
       const data = await response.json();
 
       if (response.ok) {
-        addToast(
-          "Reset-Link wurde gesendet. Bitte überprüfe dein E-Mail-Postfach.",
-          "success"
-        );
+        addToast("Reset link sent. Please check your inbox.", "success");
         startCooldown();
       } else {
-        addToast(
-          data.message ?? "Fehler beim Senden der Anfrage. Bitte erneut versuchen.",
-          "error"
-        );
+        addToast(data.message ?? "Request failed. Please try again.", "error");
       }
     } catch {
-      addToast("Netzwerkfehler. Bitte erneut versuchen.", "error");
+      addToast("Network error. Please try again.", "error");
     } finally {
       setIsLoading(false);
     }
@@ -124,20 +118,20 @@ const ForgotPasswordForm = () => {
               />
             </div>
             <span className="text-black dark:text-gray-100 text-[25px] font-medium leading-tight">
-              Universität für
+              University of Natural
               <br />
-              Bodenkultur Wien
+              Resources and Life Sciences
             </span>
           </div>
           <div className="text-black dark:text-gray-100 text-5xl font-bold mb-8 text-center w-full">
-            Passwort zurücksetzen
+            Reset Password
           </div>
           <form onSubmit={handleSubmit} className="w-full">
             <input
               type="text"
               id="username"
               name="username"
-              placeholder="Benutzername"
+              placeholder="Username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
@@ -149,11 +143,11 @@ const ForgotPasswordForm = () => {
               disabled={isDisabled}
               className="w-full bg-[#357174] text-white p-4 rounded-lg text-lg font-medium hover:bg-[#4da1a6] transition-colors duration-200 mb-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-              {isLoading ? "Wird gesendet…" : "Anfrage senden"}
+              {isLoading ? "Sending..." : "Send Request"}
             </button>
             {cooldown > 0 && (
               <p className="text-center text-sm text-gray-500 mt-1">
-                Erneut versuchen in{" "}
+                Try again in{" "}
                 <span className="font-semibold text-[#357174]">
                   {cooldown}s
                 </span>

@@ -53,7 +53,7 @@ function normalizeUploadEntry(value: unknown): UploadItem | null {
   const link =
     typeof candidate.link === "string" && candidate.link.trim().length > 0
       ? candidate.link
-      : "Unbekannte Datei";
+      : "Unknown file";
 
   const state =
     typeof candidate.state === "string" && candidate.state.trim().length > 0
@@ -112,7 +112,7 @@ function sortUploads(apiUploads: UploadItem[]): UploadItem[] {
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
   if (Number.isNaN(date.getTime())) {
-    return "Unbekannt";
+    return "Unknown";
   }
 
   return new Intl.DateTimeFormat("de-AT", {
@@ -130,40 +130,40 @@ function statusMeta(state: string): {
   switch (state) {
     case "UPLOADED":
       return {
-        label: "In Bearbeitung",
-        hint: "Upload wurde eingereicht und wartet auf Prüfung.",
+        label: "In Review",
+        hint: "Upload was submitted and is waiting for review.",
         badgeClass:
           "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
         icon: Clock3,
       };
     case "ACCEPTED":
       return {
-        label: "Bestätigt",
-        hint: "Upload wurde freigegeben und wird verarbeitet.",
+        label: "Approved",
+        hint: "Upload was approved and is being processed.",
         badgeClass:
           "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
         icon: CheckCircle2,
       };
     case "SAVED_IN_DB":
       return {
-        label: "Importiert",
-        hint: "Datensatz wurde erfolgreich in die Datenbank übernommen.",
+        label: "Imported",
+        hint: "Data was imported into the database successfully.",
         badgeClass:
           "bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300",
         icon: Database,
       };
     case "REJECTED":
       return {
-        label: "Abgelehnt",
-        hint: "Upload wurde abgelehnt. Details siehe Hinweis.",
+        label: "Rejected",
+        hint: "Upload was rejected. See details in note.",
         badgeClass:
           "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300",
         icon: XCircle,
       };
     case "DB_ERROR":
       return {
-        label: "Fehler",
-        hint: "Beim Import ist ein technischer Fehler aufgetreten.",
+        label: "Error",
+        hint: "A technical error occurred during import.",
         badgeClass:
           "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300",
         icon: AlertTriangle,
@@ -205,7 +205,7 @@ const MyUploadsPageComponent = () => {
         const payload = await response.json();
         apiUploads = parseUploadsFromApiPayload(payload);
       } else if (response.status !== 404 && response.status !== 405) {
-        let fallbackMessage = "Status konnte nicht geladen werden.";
+        let fallbackMessage = "Status could not be loaded.";
         try {
           const payload = await response.json();
           if (typeof payload?.error === "string") {
@@ -217,7 +217,7 @@ const MyUploadsPageComponent = () => {
         setErrorMessage(fallbackMessage);
       }
     } catch {
-      setErrorMessage("Netzwerkfehler beim Laden der Upload-Statusdaten.");
+      setErrorMessage("Network error while loading upload statuses.");
     }
 
     setUploads(sortUploads(apiUploads));
@@ -258,12 +258,12 @@ const MyUploadsPageComponent = () => {
   }, [activeFilter, uploads]);
 
   const filterButtons: { key: StatusFilter; label: string; count: number }[] = [
-    { key: "ALL", label: "Alle", count: counts.ALL },
-    { key: "UPLOADED", label: "In Bearbeitung", count: counts.UPLOADED },
-    { key: "ACCEPTED", label: "Bestätigt", count: counts.ACCEPTED },
-    { key: "REJECTED", label: "Abgelehnt", count: counts.REJECTED },
-    { key: "DB_ERROR", label: "Fehler", count: counts.DB_ERROR },
-    { key: "SAVED_IN_DB", label: "Importiert", count: counts.SAVED_IN_DB },
+    { key: "ALL", label: "All", count: counts.ALL },
+    { key: "UPLOADED", label: "In Review", count: counts.UPLOADED },
+    { key: "ACCEPTED", label: "Approved", count: counts.ACCEPTED },
+    { key: "REJECTED", label: "Rejected", count: counts.REJECTED },
+    { key: "DB_ERROR", label: "Error", count: counts.DB_ERROR },
+    { key: "SAVED_IN_DB", label: "Imported", count: counts.SAVED_IN_DB },
   ];
 
   return (
@@ -274,7 +274,7 @@ const MyUploadsPageComponent = () => {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                Meine Uploads
+                My Uploads
               </h1>
             </div>
             <div className="flex items-center gap-2">
@@ -283,15 +283,15 @@ const MyUploadsPageComponent = () => {
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#357174] hover:bg-[#2a5a5d] text-white transition-colors"
               >
                 <RefreshCw size={16} />
-                Aktualisieren
+                Refresh
               </button>
               <DarkModeToggle variant="page" />
             </div>
           </div>
 
           <div className="bg-[#e8f3f3] dark:bg-[#1f2f3e] border border-[#c7e0e0] dark:border-[#2d4257] rounded-lg px-4 py-3 mb-6 text-sm text-[#235457] dark:text-[#b8d6d8]">
-            <strong>Status-Logik:</strong> In Bearbeitung → Bestätigt →
-            Importiert oder Abgelehnt/Fehler.
+            <strong>Status Logic:</strong> In Review → Approved → Imported or
+            Rejected/Error.
           </div>
 
           {errorMessage && (
@@ -343,15 +343,15 @@ const MyUploadsPageComponent = () => {
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
             {isLoading ? (
               <div className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
-                Statusdaten werden geladen...
+                Loading upload statuses...
               </div>
             ) : filteredUploads.length === 0 ? (
               <div className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                 <FileInputIcon className="mx-auto mb-3" size={38} />
-                <p className="font-medium">Noch keine Uploads gefunden.</p>
+                <p className="font-medium">No uploads found yet.</p>
                 <p className="text-sm mt-1">
-                  Reiche zuerst eine Datei hoch, dann erscheint sie hier mit
-                  Status.
+                  Submit a file first. It will appear here with its current
+                  status.
                 </p>
               </div>
             ) : (
@@ -371,15 +371,11 @@ const MyUploadsPageComponent = () => {
                             {upload.link}
                           </p>
                           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 break-all">
-                            Upload-ID: {upload.id}
+                            Upload ID: {upload.id}
                           </p>
                           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-gray-600 dark:text-gray-400">
-                            <span>
-                              Erstellt: {formatDate(upload.createdAt)}
-                            </span>
-                            <span>
-                              Aktualisiert: {formatDate(upload.updatedAt)}
-                            </span>
+                            <span>Created: {formatDate(upload.createdAt)}</span>
+                            <span>Updated: {formatDate(upload.updatedAt)}</span>
                           </div>
                         </div>
                         <div className="flex flex-col items-start lg:items-end gap-2">
@@ -400,7 +396,7 @@ const MyUploadsPageComponent = () => {
                         upload.note && (
                           <div className="mt-3 rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3">
                             <p className="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-300 font-semibold">
-                              Hinweis
+                              Note
                             </p>
                             <p className="text-sm text-amber-800 dark:text-amber-200 mt-1 whitespace-pre-wrap">
                               {upload.note}
@@ -416,7 +412,7 @@ const MyUploadsPageComponent = () => {
 
           {lastUpdated && (
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-4">
-              Letztes Update: {formatDate(lastUpdated.toISOString())}
+              Last Update: {formatDate(lastUpdated.toISOString())}
             </p>
           )}
         </div>

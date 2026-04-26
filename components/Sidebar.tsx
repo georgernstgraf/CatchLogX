@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  CircleHelp,
   FileInputIcon,
   FilePlus2Icon,
   LucideIcon,
@@ -15,7 +16,6 @@ import { useAuth } from "./AuthProvider";
 import Image from "next/image";
 import Logo from "@/assets/img/Boku-wien_randlos.svg";
 
-
 const Sidebar = () => {
   const { user } = useAuth();
 
@@ -28,7 +28,7 @@ const Sidebar = () => {
 
   const links: LinkType[] = [
     {
-      title: "SQL Abfrage",
+      title: "SQL Query",
       path: "/",
       icon: SearchCode,
       protected: false,
@@ -40,9 +40,15 @@ const Sidebar = () => {
       protected: false,
     },
     {
-      title: "Meine Uploads",
+      title: "My Uploads",
       path: "/my-uploads",
       icon: FileInputIcon,
+      protected: false,
+    },
+    {
+      title: "About CatchLogX",
+      path: "/about",
+      icon: CircleHelp,
       protected: false,
     },
     {
@@ -59,7 +65,7 @@ const Sidebar = () => {
         <div className="flex mt-2 px-1 justify-center">
           <Image alt="Boku Logo" src={Logo} width={30} height={30} />
           <h1 className="font-semibold text-[#e5e5e5] ml-3">
-            Universität für Bodenkultur Wien
+            University of Natural Resources and Life Sciences, Vienna
           </h1>
         </div>
         <hr className="mt-3 w-[95%] text-[#e5e5e5] mx-auto" />
@@ -92,7 +98,7 @@ const Sidebar = () => {
                   href="/settings"
                   className="block px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 >
-                  Einstellungen
+                  Settings
                 </Link>
                 <div className="px-3 py-2">
                   <LogoutButton />

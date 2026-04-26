@@ -48,7 +48,7 @@ const UploadPageComponent = () => {
     };
   }, []);
 
-  // Überprüfung ob die Datei eine Excel-Datei ist
+  // Validate if file is an Excel document
   const isExcelFile = (file: File) => {
     const excelTypes = [
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
@@ -82,7 +82,7 @@ const UploadPageComponent = () => {
         setSelectedFile(file);
         setUploadStatus("idle");
       } else {
-        alert("Bitte wähle nur Excel-Dateien (.xlsx oder .xls) aus.");
+        alert("Please select only Excel files (.xlsx or .xls).");
       }
     }
   };
@@ -95,7 +95,7 @@ const UploadPageComponent = () => {
         setSelectedFile(file);
         setUploadStatus("idle");
       } else {
-        alert("Bitte wähle nur Excel-Dateien (.xlsx oder .xls) aus.");
+        alert("Please select only Excel files (.xlsx or .xls).");
       }
     }
   };
@@ -115,7 +115,7 @@ const UploadPageComponent = () => {
 
       const contentType = response.headers.get("content-type") || "";
 
-      //Excel Fehlerdatei herunterladen
+      // Download validation error workbook
       if (
         contentType.includes(
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -140,7 +140,7 @@ const UploadPageComponent = () => {
         return;
       }
 
-      // JSON Response für Erfolg oder strukturelle Fehler
+      // JSON response for success or structural errors
       const data = await response.json();
 
       if (!response.ok) {
@@ -182,7 +182,7 @@ const UploadPageComponent = () => {
       await downloadDummyFile(dummyFile);
     } catch (error) {
       console.error("Dummy template download failed:", error);
-      alert("Dummy-Datei konnte nicht heruntergeladen werden.");
+      alert("Dummy file could not be downloaded.");
     }
   };
 
@@ -196,11 +196,10 @@ const UploadPageComponent = () => {
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-              Excel-Datei hochladen
+              Upload Excel File
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
-              Lade deine Excel-Datei hoch zur Überprüfung durch den
-              Administrator
+              Upload your Excel file for administrator review.
             </p>
           </div>
           {/* Disclaimer Box */}
@@ -221,34 +220,30 @@ const UploadPageComponent = () => {
               </div>
               <div className="ml-3">
                 <h3 className="text-sm font-medium text-orange-800 dark:text-orange-300 mb-2">
-                  Wichtige Hinweise zur Dateistruktur
+                  Important File Structure Notes
                 </h3>
                 <div className="text-sm text-orange-700 dark:text-orange-400">
                   <p className="mb-2">
-                    Bitte stelle sicher, dass deine Excel-Datei die folgenden
-                    Kriterien erfüllt:
+                    Please ensure your Excel file meets the following criteria:
                   </p>
                   <ul className="list-disc list-inside space-y-1 ml-4">
                     <li>
-                      Die Struktur entspricht exakt der bereitgestellten Vorlage
-                      (Dummy-Excel)
+                      The structure matches the provided template exactly (dummy
+                      Excel file)
                     </li>
+                    <li>The first row contains the correct column headers</li>
                     <li>
-                      Die erste Zeile enthält die korrekten Spaltenüberschriften
+                      All required fields are filled (some optional fields may
+                      remain empty)
                     </li>
-                    <li>
-                      Alle Pflichtfelder sind ausgefüllt (manche Felder dürfen
-                      leer bleiben)
-                    </li>
-                    <li>Die Datenformate sind korrekt (Datum, Zahlen, Text)</li>
-                    <li>Keine zusätzlichen oder gelöschten Spalten</li>
-                    <li>Maximal 10.000 Zeilen pro Datei</li>
+                    <li>Data formats are correct (date, numbers, text)</li>
+                    <li>No additional or deleted columns</li>
+                    <li>Maximum of 10,000 rows per file</li>
                   </ul>
                   <p className="mt-3 text-xs bg-orange-100 dark:bg-orange-900/40 p-2 rounded">
-                    <strong>Wichtig:</strong> Nach dem Upload wird deine Datei
-                    vom Administrator manuell überprüft und freigegeben. Du
-                    erhältst eine Benachrichtigung über den Status deiner
-                    Übermittlung.
+                    <strong>Important:</strong> After upload, your file is
+                    reviewed manually by an administrator. You will receive a
+                    status update once the review is completed.
                   </p>
                 </div>
               </div>
@@ -292,36 +287,36 @@ const UploadPageComponent = () => {
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
                       {isDragOver
-                        ? "Datei hier ablegen..."
-                        : "Excel-Datei hier ablegen"}
+                        ? "Drop file here..."
+                        : "Drop Excel file here"}
                     </h3>
                     <p className="text-gray-500 dark:text-gray-400 mb-4">
-                      oder klicke hier, um eine Datei auszuwählen
+                      or click here to select a file
                     </p>
                     <p className="text-sm text-[#357174] mb-4 font-medium">
-                      📋 Verwende die bereitgestellten Dummy-Dateien als Vorlage
+                      📋 Use the provided dummy files as your template
                     </p>
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       className="bg-[#357174] hover:bg-[#2a5a5d] text-white px-6 py-2 rounded-lg font-medium transition-colors duration-200"
                     >
-                      Datei auswählen
+                      Select File
                     </button>
                     <p className="text-xs text-gray-400 mt-2">
-                      Unterstützte Formate: .xlsx, .xls (max. 50MB)
+                      Supported formats: .xlsx, .xls (max. 50MB)
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      💡 Tipp: Lade die Dummy-Excel-Vorlage herunter und nutze
-                      sie als Basis
+                      💡 Tip: Download the dummy Excel template and use it as
+                      your base
                     </p>
 
                     {visibleDummyFiles.length > 0 && (
                       <div className="mt-6 w-full max-w-xl rounded-lg border border-[#c7e0e0] dark:border-[#2d4257] bg-[#e8f3f3] dark:bg-[#1f2f3e] p-4 text-left">
                         <p className="text-sm font-semibold text-[#235457] dark:text-[#b8d6d8]">
-                          Aktuelle Dummy-Dateien herunterladen
+                          Download Current Dummy Files
                         </p>
                         <p className="text-xs mt-1 text-[#2d666a] dark:text-[#9fbec0]">
-                          Sichtbare Dateien werden vom Admin-Panel gesteuert.
+                          Visible files are controlled via the admin panel.
                         </p>
                         <div className="mt-3 space-y-2">
                           {visibleDummyFiles.map((dummyFile) => (
@@ -456,10 +451,10 @@ const UploadPageComponent = () => {
                       </svg>
                     )}
                     {uploadStatus === "uploading"
-                      ? "Wird hochgeladen..."
+                      ? "Uploading..."
                       : uploadStatus === "success"
-                        ? "Erfolgreich eingereicht"
-                        : "Datei zur Prüfung einreichen"}
+                        ? "Submitted Successfully"
+                        : "Submit File for Review"}
                   </button>
                 </div>
                 {/* Success Message */}
@@ -478,13 +473,12 @@ const UploadPageComponent = () => {
                         />
                       </svg>
                       <p className="text-green-700 font-medium">
-                        Deine Datei wurde erfolgreich eingereicht und wartet auf
-                        die Überprüfung durch den Administrator.
+                        Your file was submitted successfully and is waiting for
+                        administrator review.
                       </p>
                     </div>
                     <div className="mt-2 text-sm text-green-600">
-                      Du wirst benachrichtigt, sobald die Prüfung abgeschlossen
-                      ist.
+                      You will be notified once the review is complete.
                     </div>
                   </div>
                 )}

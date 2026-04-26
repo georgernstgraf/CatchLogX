@@ -37,7 +37,7 @@ const LoginForm = () => {
         }
       }
     } catch (error) {
-      console.error("Session check fehlgeschlagen:", error);
+      console.error("Session check failed:", error);
     } finally {
       setIsLoading(false);
     }
@@ -86,9 +86,9 @@ const LoginForm = () => {
             />
           </div>
           <span className="text-black dark:text-gray-100 text-[25px] font-medium leading-tight">
-            Universität für
+            University of
             <br />
-            Bodenkultur Wien
+            Natural Resources and Life Sciences Vienna
           </span>
         </div>
         <div className="text-black dark:text-gray-100 text-5xl font-bold mb-8 text-center w-full">
@@ -106,7 +106,7 @@ const LoginForm = () => {
             type="text"
             id="username"
             name="username"
-            placeholder="Benutzername"
+            placeholder="Username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             required
@@ -117,7 +117,7 @@ const LoginForm = () => {
             type="password"
             id="password"
             name="password"
-            placeholder="Passwort"
+            placeholder="Password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -129,14 +129,14 @@ const LoginForm = () => {
             disabled={isLoading}
             className="w-full bg-[#357174] text-white p-4 rounded-lg text-lg font-medium hover:bg-[#4da1a6] transition-colors duration-200 mb-4 disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
-            {isLoading ? "Wird angemeldet..." : "Anmelden"}
+            {isLoading ? "Signing in..." : "Sign in"}
           </button>
         </form>
         <Link
           href="/forgot-password"
           className="text-black dark:text-gray-300 text-base font-normal w-full text-center mb-4"
         >
-          Passwort vergessen?
+          Forgot password?
         </Link>
       </div>
     </div>

@@ -139,15 +139,11 @@ const AdminPageComponent = () => {
         document.body.removeChild(a);
       } else {
         const errorData = await response.json();
-        alert(
-          `Download fehlgeschlagen: ${
-            errorData.message || "Unbekannter Fehler"
-          }`,
-        );
+        alert(`Download failed: ${errorData.message || "Unknown error"}`);
       }
     } catch (error) {
       console.error("Error downloading file:", error);
-      alert("Netzwerkfehler beim Download. Bitte versuchen Sie es erneut.");
+      alert("Network error during download. Please try again.");
     }
   };
 
@@ -167,14 +163,14 @@ const AdminPageComponent = () => {
             upload.id === uploadId ? { ...upload, state: "ACCEPTED" } : upload,
           ),
         );
-        alert("Upload wurde akzeptiert!");
+        alert("Upload has been accepted.");
       } else {
         const errorData = await response.json();
-        alert(`Fehler: ${errorData.error || "Unbekannter Fehler"}`);
+        alert(`Error: ${errorData.error || "Unknown error"}`);
       }
     } catch (error) {
       console.error("Error accepting upload:", error);
-      alert("Netzwerkfehler. Bitte versuchen Sie es erneut.");
+      alert("Network error. Please try again.");
     }
   };
 
@@ -185,7 +181,7 @@ const AdminPageComponent = () => {
 
   const handleDenyConfirm = async () => {
     if (!denyReason.trim()) {
-      alert("Bitte geben Sie einen Grund für die Ablehnung an.");
+      alert("Please provide a reason for rejection.");
       return;
     }
 
@@ -217,15 +213,13 @@ const AdminPageComponent = () => {
         setDenyReason("");
         setSelectedUploadId(null);
 
-        alert("Upload wurde erfolgreich abgelehnt.");
+        alert("Upload has been rejected.");
       } else {
-        alert(`Fehler beim Ablehnen: ${data.error || "Unbekannter Fehler"}`);
+        alert(`Rejection failed: ${data.error || "Unknown error"}`);
       }
     } catch (error) {
       console.error("Error denying upload:", error);
-      alert(
-        "Netzwerkfehler beim Ablehnen des Uploads. Bitte versuchen Sie es erneut.",
-      );
+      alert("Network error while rejecting upload. Please try again.");
     }
   };
 
@@ -236,7 +230,7 @@ const AdminPageComponent = () => {
       !newUser.name ||
       !newUser.password
     ) {
-      alert("Bitte füllen Sie alle Felder aus.");
+      alert("Please fill in all fields.");
       return;
     }
 
@@ -256,13 +250,13 @@ const AdminPageComponent = () => {
         setUsers([...users, data.user]);
         setShowCreateUserModal(false);
         setNewUser({ email: "", username: "", name: "", password: "" });
-        alert("Benutzer wurde erfolgreich erstellt!");
+        alert("User created successfully.");
       } else {
-        alert(`Fehler: ${data.error || "Unbekannter Fehler"}`);
+        alert(`Error: ${data.error || "Unknown error"}`);
       }
     } catch (error) {
       console.error("Error creating user:", error);
-      alert("Netzwerkfehler. Bitte versuchen Sie es erneut.");
+      alert("Network error. Please try again.");
     }
   };
 
@@ -280,13 +274,13 @@ const AdminPageComponent = () => {
       if (response.ok) {
         setUsers(users.filter((user) => user.id !== userId));
         setDeleteConfirmUserId(null);
-        alert("Benutzer wurde gelöscht!");
+        alert("User deleted.");
       } else {
-        alert(`Fehler: ${data.error || "Unbekannter Fehler"}`);
+        alert(`Error: ${data.error || "Unknown error"}`);
       }
     } catch (error) {
       console.error("Error deleting user:", error);
-      alert("Netzwerkfehler. Bitte versuchen Sie es erneut.");
+      alert("Network error. Please try again.");
     }
   };
 
@@ -305,7 +299,7 @@ const AdminPageComponent = () => {
 
   const handleEditUser = async () => {
     if (!editUser.email || !editUser.username) {
-      alert("E-Mail und Benutzername sind erforderlich.");
+      alert("Email and username are required.");
       return;
     }
 
@@ -346,13 +340,13 @@ const AdminPageComponent = () => {
           role: "",
           password: "",
         });
-        alert("Benutzer wurde erfolgreich aktualisiert!");
+        alert("User updated successfully.");
       } else {
-        alert(`Fehler: ${data.error || "Unbekannter Fehler"}`);
+        alert(`Error: ${data.error || "Unknown error"}`);
       }
     } catch (error) {
       console.error("Error updating user:", error);
-      alert("Netzwerkfehler. Bitte versuchen Sie es erneut.");
+      alert("Network error. Please try again.");
     }
   };
 
@@ -378,7 +372,7 @@ const AdminPageComponent = () => {
               }`}
             >
               <FileSpreadsheet className="mr-2" size={20} />
-              Upload-Verwaltung
+              Upload Management
               {pendingUploadsCount > 0 && (
                 <span className="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
                   {pendingUploadsCount}
@@ -394,7 +388,7 @@ const AdminPageComponent = () => {
               }`}
             >
               <Users className="mr-2" size={20} />
-              Benutzerverwaltung
+              User Management
             </button>
             <button
               onClick={() => setActiveTab("dummy-files")}
@@ -405,7 +399,7 @@ const AdminPageComponent = () => {
               }`}
             >
               <Files className="mr-2" size={20} />
-              Dummy-Dateien
+              Dummy Files
             </button>
           </div>
 
@@ -414,10 +408,10 @@ const AdminPageComponent = () => {
             {activeTab === "uploads" && (
               <div>
                 <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-4">
-                  Upload-Verwaltung
+                  Upload Management
                 </h2>
                 <p className="text-gray-600 dark:text-gray-400 mb-6">
-                  Alle Uploads im System mit Filter- und Suchfunktion.
+                  All uploads in the system with filtering and search.
                 </p>
 
                 <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -430,7 +424,7 @@ const AdminPageComponent = () => {
                   >
                     {uploadStates.map((state) => (
                       <option key={state} value={state}>
-                        {state === "ALL" ? "Alle Status" : state}
+                        {state === "ALL" ? "All statuses" : state}
                       </option>
                     ))}
                   </select>
@@ -439,7 +433,7 @@ const AdminPageComponent = () => {
                     type="text"
                     value={uploadSearch}
                     onChange={(event) => setUploadSearch(event.target.value)}
-                    placeholder="Suche nach Datei, User-ID oder Upload-ID"
+                    placeholder="Search by file name, user ID, or upload ID"
                     className="w-full sm:max-w-md px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
                   />
 
@@ -447,14 +441,14 @@ const AdminPageComponent = () => {
                     onClick={fetchUsersAndUploads}
                     className="px-4 py-2 bg-[#357174] text-white rounded hover:bg-[#2a5a5d] transition-colors"
                   >
-                    Aktualisieren
+                    Refresh
                   </button>
                 </div>
 
                 {filteredUploads.length === 0 ? (
                   <div className="text-center py-12 text-gray-500 dark:text-gray-400">
                     <FileSpreadsheet className="mx-auto mb-4" size={48} />
-                    <p>Keine Uploads für den aktuellen Filter gefunden.</p>
+                    <p>No uploads found for the current filter.</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -478,7 +472,7 @@ const AdminPageComponent = () => {
                                   Upload-ID: {upload.id}
                                 </p>
                                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                                  Hochgeladen von {upload.uploaded_by} am{" "}
+                                  Uploaded by {upload.uploaded_by} on{" "}
                                   {upload.createdAt}
                                 </p>
                                 <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -486,7 +480,7 @@ const AdminPageComponent = () => {
                                 </p>
                                 {upload.note && (
                                   <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                                    Hinweis: {upload.note}
+                                    Note: {upload.note}
                                   </p>
                                 )}
                               </div>
@@ -500,7 +494,7 @@ const AdminPageComponent = () => {
                                 handleDownload(upload.link);
                               }}
                               className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors flex items-center"
-                              title="Datei herunterladen"
+                              title="Download file"
                             >
                               <Download size={18} className="mr-2" />
                               Download
@@ -510,18 +504,18 @@ const AdminPageComponent = () => {
                                 <button
                                   onClick={() => handleAccept(upload.id)}
                                   className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center"
-                                  title="Upload akzeptieren"
+                                  title="Accept upload"
                                 >
                                   <Check size={18} className="mr-2" />
-                                  Akzeptieren
+                                  Accept
                                 </button>
                                 <button
                                   onClick={() => handleDenyClick(upload.id)}
                                   className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors flex items-center"
-                                  title="Upload ablehnen"
+                                  title="Reject upload"
                                 >
                                   <X size={18} className="mr-2" />
-                                  Ablehnen
+                                  Reject
                                 </button>
                               </>
                             )}
@@ -540,10 +534,10 @@ const AdminPageComponent = () => {
                 <div className="flex justify-between items-center mb-6">
                   <div>
                     <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">
-                      Benutzerverwaltung
+                      User Management
                     </h2>
                     <p className="text-gray-600 dark:text-gray-400">
-                      Erstellen und verwalten Sie Benutzerkonten.
+                      Create and manage user accounts.
                     </p>
                   </div>
                   <button
@@ -551,7 +545,7 @@ const AdminPageComponent = () => {
                     className="px-4 py-2 bg-[#357174] text-white rounded hover:bg-[#2a5a5d] transition-colors flex items-center"
                   >
                     <UserPlus size={18} className="mr-2" />
-                    Neuer Benutzer
+                    New User
                   </button>
                 </div>
 
@@ -560,7 +554,7 @@ const AdminPageComponent = () => {
                     <thead className="bg-gray-50 dark:bg-gray-700">
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          Benutzername
+                          Username
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                           E-Mail
@@ -569,10 +563,10 @@ const AdminPageComponent = () => {
                           Name
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          Erstellt am
+                          Created At
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          Aktionen
+                          Actions
                         </th>
                       </tr>
                     </thead>
@@ -598,19 +592,19 @@ const AdminPageComponent = () => {
                             {deleteConfirmUserId === user.id ? (
                               <div className="flex items-center space-x-2">
                                 <span className="text-red-600 text-xs">
-                                  Wirklich löschen?
+                                  Confirm delete?
                                 </span>
                                 <button
                                   onClick={() => handleDeleteUser(user.id)}
                                   className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors text-xs"
                                 >
-                                  Ja
+                                  Yes
                                 </button>
                                 <button
                                   onClick={() => setDeleteConfirmUserId(null)}
                                   className="px-3 py-1 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition-colors text-xs"
                                 >
-                                  Nein
+                                  No
                                 </button>
                               </div>
                             ) : (
@@ -618,20 +612,20 @@ const AdminPageComponent = () => {
                                 <button
                                   onClick={() => handleEditUserClick(user)}
                                   className="text-blue-600 hover:text-blue-800 flex items-center"
-                                  title="Benutzer bearbeiten"
+                                  title="Edit user"
                                 >
                                   <Edit size={16} className="mr-1" />
-                                  Bearbeiten
+                                  Edit
                                 </button>
                                 <button
                                   onClick={() =>
                                     setDeleteConfirmUserId(user.id)
                                   }
                                   className="text-red-600 hover:text-red-800 flex items-center"
-                                  title="Benutzer löschen"
+                                  title="Delete user"
                                 >
                                   <Trash2 size={16} className="mr-1" />
-                                  Löschen
+                                  Delete
                                 </button>
                               </div>
                             )}
@@ -654,17 +648,17 @@ const AdminPageComponent = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
             <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-4">
-              Upload ablehnen
+              Reject Upload
             </h3>
             <p className="text-gray-600 dark:text-gray-400 mb-4">
-              Bitte geben Sie einen Grund für die Ablehnung an:
+              Please provide a reason for rejection:
             </p>
             <textarea
               value={denyReason}
               onChange={(e) => setDenyReason(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174] mb-4 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
               rows={4}
-              placeholder="Grund für die Ablehnung..."
+              placeholder="Reason for rejection..."
             />
             <div className="flex justify-end space-x-3">
               <button
@@ -675,13 +669,13 @@ const AdminPageComponent = () => {
                 }}
                 className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
-                Abbrechen
+                Cancel
               </button>
               <button
                 onClick={handleDenyConfirm}
                 className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
               >
-                Ablehnen
+                Reject
               </button>
             </div>
           </div>
@@ -692,7 +686,7 @@ const AdminPageComponent = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
             <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-4">
-              Neuen Benutzer erstellen
+              Create New User
             </h3>
             <div className="space-y-4">
               <div>
@@ -711,7 +705,7 @@ const AdminPageComponent = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Benutzername
+                  Username
                 </label>
                 <input
                   type="text"
@@ -739,7 +733,7 @@ const AdminPageComponent = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Passwort (temporär)
+                  Temporary Password
                 </label>
                 <input
                   type="password"
@@ -748,10 +742,10 @@ const AdminPageComponent = () => {
                     setNewUser({ ...newUser, password: e.target.value })
                   }
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174] bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
-                  placeholder="Temporäres Passwort"
+                  placeholder="Temporary password"
                 />
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Der Benutzer muss das Passwort beim ersten Login ändern.
+                  The user must change this password on first login.
                 </p>
               </div>
             </div>
@@ -768,13 +762,13 @@ const AdminPageComponent = () => {
                 }}
                 className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
-                Abbrechen
+                Cancel
               </button>
               <button
                 onClick={handleCreateUser}
                 className="px-4 py-2 bg-[#357174] text-white rounded hover:bg-[#2a5a5d] transition-colors"
               >
-                Erstellen
+                Create
               </button>
             </div>
           </div>
@@ -785,7 +779,7 @@ const AdminPageComponent = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
             <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-4">
-              Benutzer bearbeiten
+              Edit User
             </h3>
             <div className="space-y-4">
               <div>
@@ -804,7 +798,7 @@ const AdminPageComponent = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Benutzername
+                  Username
                 </label>
                 <input
                   type="text"
@@ -832,7 +826,7 @@ const AdminPageComponent = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Rolle
+                  Role
                 </label>
                 <select
                   value={editUser.role}
@@ -847,7 +841,7 @@ const AdminPageComponent = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Neues Passwort (optional)
+                  New Password (optional)
                 </label>
                 <input
                   type="password"
@@ -856,10 +850,10 @@ const AdminPageComponent = () => {
                     setEditUser({ ...editUser, password: e.target.value })
                   }
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174] bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
-                  placeholder="Neues Passwort (leer lassen für keine Änderung)"
+                  placeholder="New password (leave empty for no change)"
                 />
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Leer lassen, um das Passwort nicht zu ändern.
+                  Leave empty to keep the current password.
                 </p>
               </div>
             </div>
@@ -878,13 +872,13 @@ const AdminPageComponent = () => {
                 }}
                 className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
-                Abbrechen
+                Cancel
               </button>
               <button
                 onClick={handleEditUser}
                 className="px-4 py-2 bg-[#357174] text-white rounded hover:bg-[#2a5a5d] transition-colors"
               >
-                Speichern
+                Save
               </button>
             </div>
           </div>

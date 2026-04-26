@@ -78,19 +78,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      // Session auf dem Server löschen
+      // Delete server-side session
       await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "include",
       });
     } catch (error) {
-      console.error("Fehler beim Server-Logout:", error);
+      console.error("Server logout failed:", error);
     }
 
-    // User-State löschen
+    // Clear local user state
     setUser(null);
 
-    // Ein kleiner Timeout, damit der State-Update Zeit hat
+    // Small timeout so state updates flush before navigation
     setTimeout(() => {
       window.location.href = "/login";
     }, 200);
