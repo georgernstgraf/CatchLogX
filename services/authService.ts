@@ -37,6 +37,7 @@ export async function signIn(username: string, password: string) {
       username: user.username,
       name: user.name,
       role: user.role,
+      isFirstLogin: user.isFirstLogin,
     },
   };
 }
@@ -57,6 +58,7 @@ export async function getSession(sessionToken: string) {
           username: true,
           name: true,
           role: true,
+          isFirstLogin: true,
         },
       },
     },

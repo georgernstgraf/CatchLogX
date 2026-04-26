@@ -52,7 +52,11 @@ const LoginForm = () => {
       const result = await login(username, password);
 
       if (result.success) {
-        // Login successful, redirect to dashboard or home page
+        if (result.requiresPasswordChange) {
+          router.push("/first-login");
+          return;
+        }
+
         router.push("/");
       } else {
         // Login failed, show error message

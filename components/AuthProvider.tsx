@@ -6,6 +6,7 @@ interface User {
   username: string;
   name: string | null;
   role: string | null;
+  isFirstLogin: boolean;
 }
 
 interface AuthContextType {
@@ -14,8 +15,12 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (
     username: string,
-    password: string
-  ) => Promise<{ success: boolean; error?: string }>;
+    password: string,
+  ) => Promise<{
+    success: boolean;
+    error?: string;
+    requiresPasswordChange?: boolean;
+  }>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
 }
@@ -58,7 +63,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (response.ok && data.success) {
         setUser(data.user);
-        return { success: true };
+        return {
+          success: true,
+          requiresPasswordChange: data.requiresPasswordChange === true,
+        };
       } else {
         return { success: false, error: data.error || "Login failed" };
       }

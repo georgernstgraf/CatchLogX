@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
       {
         success: true,
         user: result.user,
+        requiresPasswordChange: result.user?.isFirstLogin === true,
       },
       { status: 200 },
     );

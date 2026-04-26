@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -12,21 +12,55 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,
   redirectTo = "/login",
 }) => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const isFirstLoginPage = pathname === "/first-login";
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       console.log(
         "ProtectedRoute: User ist nicht eingeloggt, Weiterleitung zu",
-        redirectTo
+        redirectTo,
       );
       // Auch hier setTimeout für bessere Funktionalität
       setTimeout(() => {
         router.replace(redirectTo);
       }, 50);
+      return;
     }
-  }, [isAuthenticated, isLoading, router, redirectTo]);
+
+    if (
+      !isLoading &&
+      isAuthenticated &&
+      user?.isFirstLogin &&
+      !isFirstLoginPage
+    ) {
+      setTimeout(() => {
+        router.replace("/first-login");
+      }, 50);
+      return;
+    }
+
+    if (
+      !isLoading &&
+      isAuthenticated &&
+      !user?.isFirstLogin &&
+      isFirstLoginPage
+    ) {
+      setTimeout(() => {
+        router.replace("/");
+      }, 50);
+    }
+  }, [
+    isAuthenticated,
+    isLoading,
+    isFirstLoginPage,
+    pathname,
+    redirectTo,
+    router,
+    user?.isFirstLogin,
+  ]);
 
   // Show loading state while checking authentication
   if (isLoading) {
@@ -39,6 +73,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   // Show nothing while redirecting
   if (!isAuthenticated) {
+    return null;
+  }
+
+  if (user?.isFirstLogin && !isFirstLoginPage) {
     return null;
   }
 

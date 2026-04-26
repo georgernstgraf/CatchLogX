@@ -253,6 +253,7 @@ export async function changePassword(
     },
     data: {
       hashedPassword: hashedPassword,
+      isFirstLogin: false,
     },
   });
 
