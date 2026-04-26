@@ -40,49 +40,6 @@ const STATE_ORDER: UploadState[] = [
   "DB_ERROR",
 ];
 
-const DUMMY_UPLOADS: UploadItem[] = [
-  {
-    id: "dummy-upload-001",
-    link: "Befischung_Donau_Maerz_2026.xlsx",
-    state: "UPLOADED",
-    note: null,
-    createdAt: "2026-04-24T08:15:00.000Z",
-    updatedAt: "2026-04-24T08:15:00.000Z",
-  },
-  {
-    id: "dummy-upload-002",
-    link: "Salza_Probestelle_April.xlsx",
-    state: "ACCEPTED",
-    note: null,
-    createdAt: "2026-04-22T10:40:00.000Z",
-    updatedAt: "2026-04-23T07:12:00.000Z",
-  },
-  {
-    id: "dummy-upload-003",
-    link: "Traun_Erhebung_Q1.xlsx",
-    state: "SAVED_IN_DB",
-    note: null,
-    createdAt: "2026-04-18T14:08:00.000Z",
-    updatedAt: "2026-04-19T06:33:00.000Z",
-  },
-  {
-    id: "dummy-upload-004",
-    link: "Ybbs_Testlauf_03.xlsx",
-    state: "REJECTED",
-    note: "Spaltenstruktur stimmt nicht mit der Vorlage ueberein.",
-    createdAt: "2026-04-16T09:25:00.000Z",
-    updatedAt: "2026-04-16T13:57:00.000Z",
-  },
-  {
-    id: "dummy-upload-005",
-    link: "Kamp_Import_Altbestand.xlsx",
-    state: "DB_ERROR",
-    note: "Importprozess wurde unterbrochen. Bitte Datei erneut einreichen.",
-    createdAt: "2026-04-12T11:02:00.000Z",
-    updatedAt: "2026-04-12T11:31:00.000Z",
-  },
-];
-
 function normalizeUploadEntry(value: unknown): UploadItem | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -106,12 +63,14 @@ function normalizeUploadEntry(value: unknown): UploadItem | null {
       : "UPLOADED";
 
   const createdAt =
-    typeof candidate.createdAt === "string" && candidate.createdAt.trim().length > 0
+    typeof candidate.createdAt === "string" &&
+    candidate.createdAt.trim().length > 0
       ? candidate.createdAt
       : new Date().toISOString();
 
   const updatedAt =
-    typeof candidate.updatedAt === "string" && candidate.updatedAt.trim().length > 0
+    typeof candidate.updatedAt === "string" &&
+    candidate.updatedAt.trim().length > 0
       ? candidate.updatedAt
       : createdAt;
 
@@ -164,7 +123,10 @@ function readLocalUploads(): UploadItem[] {
   }
 }
 
-function mergeUploads(apiUploads: UploadItem[], localUploads: UploadItem[]): UploadItem[] {
+function mergeUploads(
+  apiUploads: UploadItem[],
+  localUploads: UploadItem[],
+): UploadItem[] {
   const byId = new Map<string, UploadItem>();
 
   for (const localUpload of localUploads) {
@@ -232,7 +194,8 @@ function statusMeta(state: string): {
       return {
         label: "Abgelehnt",
         hint: "Upload wurde abgelehnt. Details siehe Hinweis.",
-        badgeClass: "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300",
+        badgeClass:
+          "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300",
         icon: XCircle,
       };
     case "DB_ERROR":
@@ -247,7 +210,8 @@ function statusMeta(state: string): {
       return {
         label: "Unbekannt",
         hint: "Status konnte nicht zugeordnet werden.",
-        badgeClass: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200",
+        badgeClass:
+          "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200",
         icon: AlertTriangle,
       };
   }
@@ -295,10 +259,7 @@ const MyUploadsPageComponent = () => {
       setErrorMessage("Netzwerkfehler beim Laden der Upload-Statusdaten.");
     }
 
-    const mergedUploads = mergeUploads(apiUploads, [
-      ...localUploads,
-      ...DUMMY_UPLOADS,
-    ]);
+    const mergedUploads = mergeUploads(apiUploads, localUploads);
     setUploads(mergedUploads);
     setLastUpdated(new Date());
     setIsLoading(false);
@@ -369,7 +330,8 @@ const MyUploadsPageComponent = () => {
           </div>
 
           <div className="bg-[#e8f3f3] dark:bg-[#1f2f3e] border border-[#c7e0e0] dark:border-[#2d4257] rounded-lg px-4 py-3 mb-6 text-sm text-[#235457] dark:text-[#b8d6d8]">
-            <strong>Status-Logik:</strong> In Bearbeitung → Bestätigt → Importiert oder Abgelehnt/Fehler.
+            <strong>Status-Logik:</strong> In Bearbeitung → Bestätigt →
+            Importiert oder Abgelehnt/Fehler.
           </div>
 
           {errorMessage && (
@@ -389,7 +351,9 @@ const MyUploadsPageComponent = () => {
                   className="rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 shadow-sm"
                 >
                   <div className="flex items-center justify-between">
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{meta.label}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {meta.label}
+                    </p>
                     <Icon className="h-4 w-4 text-gray-400" />
                   </div>
                   <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-100">
@@ -426,7 +390,8 @@ const MyUploadsPageComponent = () => {
                 <FileInputIcon className="mx-auto mb-3" size={38} />
                 <p className="font-medium">Noch keine Uploads gefunden.</p>
                 <p className="text-sm mt-1">
-                  Reiche zuerst eine Datei hoch, dann erscheint sie hier mit Status.
+                  Reiche zuerst eine Datei hoch, dann erscheint sie hier mit
+                  Status.
                 </p>
               </div>
             ) : (
@@ -449,8 +414,12 @@ const MyUploadsPageComponent = () => {
                             Upload-ID: {upload.id}
                           </p>
                           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-gray-600 dark:text-gray-400">
-                            <span>Erstellt: {formatDate(upload.createdAt)}</span>
-                            <span>Aktualisiert: {formatDate(upload.updatedAt)}</span>
+                            <span>
+                              Erstellt: {formatDate(upload.createdAt)}
+                            </span>
+                            <span>
+                              Aktualisiert: {formatDate(upload.updatedAt)}
+                            </span>
                           </div>
                         </div>
                         <div className="flex flex-col items-start lg:items-end gap-2">
@@ -466,16 +435,18 @@ const MyUploadsPageComponent = () => {
                         </div>
                       </div>
 
-                      {(upload.state === "REJECTED" || upload.state === "DB_ERROR") && upload.note && (
-                        <div className="mt-3 rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3">
-                          <p className="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-300 font-semibold">
-                            Hinweis
-                          </p>
-                          <p className="text-sm text-amber-800 dark:text-amber-200 mt-1 whitespace-pre-wrap">
-                            {upload.note}
-                          </p>
-                        </div>
-                      )}
+                      {(upload.state === "REJECTED" ||
+                        upload.state === "DB_ERROR") &&
+                        upload.note && (
+                          <div className="mt-3 rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3">
+                            <p className="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-300 font-semibold">
+                              Hinweis
+                            </p>
+                            <p className="text-sm text-amber-800 dark:text-amber-200 mt-1 whitespace-pre-wrap">
+                              {upload.note}
+                            </p>
+                          </div>
+                        )}
                     </div>
                   );
                 })}
