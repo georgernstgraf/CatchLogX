@@ -1,8 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import * as crypto from "crypto";
-import nodemailer from "nodemailer";
-import SMTPTransport from "nodemailer/lib/smtp-transport";
 import bcrypt from "bcrypt";
+import { createMailerTransporter } from "@/lib/mailer";
 
 type UserEmailType = {
   email: string;
@@ -95,15 +94,7 @@ export async function initiatePasswordReset(
     );
   }
 
-  const transporter = nodemailer.createTransport({
-    host: process.env.NODEMAILER_HOST,
-    port: process.env.NODEMAILER_PORT,
-    secure: process.env.NODEMAILER_SECURE,
-    auth: {
-      user: process.env.NODEMAILER_USER,
-      pass: process.env.NODEMAILER_PASSWORD,
-    },
-  } as SMTPTransport.Options);
+  const transporter = createMailerTransporter("forgot-password");
 
   const resetLink = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${resetToken}`;
 
@@ -201,13 +192,25 @@ export async function initiatePasswordReset(
 </html>
       `;
 
-  await transporter.sendMail({
-    from: `"CatchLogX" <${process.env.NODEMAILER_USER}>`,
-    to: email,
-    subject: "Password Reset Request",
-    html: emailHtml,
-    text: `Hello ${username},\n\nWe received a request to reset the password for your CatchLogX account. If you didn't make this request, you can safely ignore this email.\n\nTo reset your password, visit this link:\n${resetLink}\n\nThis link will expire in 24 hours for security reasons.\n\nBest regards,\nThe CatchLogX Team`,
-  });
+  try {
+    const mailResult = await transporter.sendMail({
+      from: `"CatchLogX" <${process.env.NODEMAILER_USER}>`,
+      to: email,
+      subject: "Password Reset Request",
+      html: emailHtml,
+      text: `Hello ${username},\n\nWe received a request to reset the password for your CatchLogX account. If you didn't make this request, you can safely ignore this email.\n\nTo reset your password, visit this link:\n${resetLink}\n\nThis link will expire in 24 hours for security reasons.\n\nBest regards,\nThe CatchLogX Team`,
+    });
+
+    console.info(
+      `[forgot-password] Reset email sent to ${email}. messageId=${mailResult.messageId}`,
+    );
+  } catch (error) {
+    console.error(
+      `[forgot-password] Failed to send reset email to ${email}:`,
+      error,
+    );
+    throw error;
+  }
 }
 
 export async function validateResetToken(token: string) {

@@ -137,3 +137,8 @@ export async function downloadUploadFile(filename: string) {
 
   return { objectKey, fileBuffer };
 }
+
+export async function downloadDummyFileByObjectKey(objectKey: string) {
+  const fileBuffer = await getObjectBuffer(objectKey);
+  return { objectKey, fileBuffer };
+}

@@ -438,7 +438,17 @@ export async function processUpload(fileBuffer: Buffer, userId: string) {
 
     return {
       success: true,
-      data: { processedRows: rows.length - 1, uploadId: upload.id },
+      data: {
+        processedRows: rows.length - 1,
+        upload: {
+          id: upload.id,
+          link: upload.link,
+          state: upload.state,
+          note: upload.note,
+          createdAt: upload.createdAt,
+          updatedAt: upload.updatedAt,
+        },
+      },
       summary: "Validation finished successfully",
     };
   } catch (error: any) {
