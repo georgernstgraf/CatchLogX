@@ -6,6 +6,7 @@ import DarkModeToggle from "./DarkModeToggle";
 import {
   Users,
   FileSpreadsheet,
+  Files,
   Download,
   Check,
   X,
@@ -13,6 +14,7 @@ import {
   UserPlus,
   Edit,
 } from "lucide-react";
+import AdminDummyFilesManager from "./AdminDummyFilesManager";
 
 type Upload = {
   id: string;
@@ -349,6 +351,17 @@ const AdminPageComponent = () => {
               <Users className="mr-2" size={20} />
               Benutzerverwaltung
             </button>
+            <button
+              onClick={() => setActiveTab("dummy-files")}
+              className={`flex items-center px-4 py-2 border-b-2 transition-colors ${
+                activeTab === "dummy-files"
+                  ? "border-[#357174] text-[#357174]"
+                  : "border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+              }`}
+            >
+              <Files className="mr-2" size={20} />
+              Dummy-Dateien
+            </button>
           </div>
 
           {/* Tab Content */}
@@ -539,6 +552,8 @@ const AdminPageComponent = () => {
                 </div>
               </div>
             )}
+
+            {activeTab === "dummy-files" && <AdminDummyFilesManager />}
           </div>
         </div>
       </div>
