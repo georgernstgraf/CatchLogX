@@ -3,13 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import Sidebar from "./Sidebar";
 import DarkModeToggle from "./DarkModeToggle";
-import {
-  downloadDummyFile,
-  DummyFileRecord,
-  fetchDummyFiles,
-} from "@/lib/dummy-files";
-
-const MY_UPLOADS_STORAGE_KEY = "clx-my-uploads";
+import { downloadDummyFile, DummyFileRecord, fetchDummyFiles } from "@/lib/dummy-files";
 
 const UploadPageComponent = () => {
   const [isDragOver, setIsDragOver] = useState(false);
@@ -152,32 +146,6 @@ const UploadPageComponent = () => {
           data.details || data.error || "An unknown error occurred.",
         );
         return;
-      }
-
-      const successfulUpload = {
-        id: data?.data?.upload?.id || `local-${Date.now()}`,
-        link: data?.data?.upload?.link || selectedFile.name,
-        state: data?.data?.upload?.state || "UPLOADED",
-        note: data?.data?.upload?.note ?? null,
-        createdAt: data?.data?.upload?.createdAt || new Date().toISOString(),
-        updatedAt: data?.data?.upload?.updatedAt || new Date().toISOString(),
-      };
-
-      try {
-        const existingRaw = localStorage.getItem(MY_UPLOADS_STORAGE_KEY);
-        const existingUploads = existingRaw ? JSON.parse(existingRaw) : [];
-        const mergedUploads = [
-          successfulUpload,
-          ...existingUploads.filter(
-            (upload: { id?: string }) => upload?.id !== successfulUpload.id,
-          ),
-        ];
-        localStorage.setItem(
-          MY_UPLOADS_STORAGE_KEY,
-          JSON.stringify(mergedUploads.slice(0, 100)),
-        );
-      } catch (storageError) {
-        console.warn("Could not write upload to local storage:", storageError);
       }
 
       setUploadStatus("success");
