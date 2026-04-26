@@ -2,9 +2,8 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcrypt";
 import * as XLSX from "xlsx";
 import { Uploads } from "@/app/generated/prisma";
-import nodemailer from "nodemailer";
-import SMTPTransport from "nodemailer/lib/smtp-transport";
 import { downloadUploadFile } from "@/lib/minio";
+import { createMailerTransporter } from "@/lib/mailer";
 
 export async function fetchAllData() {
   const users = await prisma.user.findMany({
@@ -43,15 +42,7 @@ export async function downloadFile(filename: string) {
 }
 
 async function sendRejectEmail(upload: Uploads) {
-  const transporter = nodemailer.createTransport({
-    host: process.env.NODEMAILER_HOST,
-    port: process.env.NODEMAILER_PORT,
-    secure: process.env.NODEMAILER_SECURE,
-    auth: {
-      user: process.env.NODEMAILER_USER,
-      pass: process.env.NODEMAILER_PASSWORD,
-    },
-  } as SMTPTransport.Options);
+  const transporter = createMailerTransporter("admin-reject-upload");
 
   const uploadWithUserInfo = await prisma.uploads.findFirst({
     where: {
@@ -64,7 +55,9 @@ async function sendRejectEmail(upload: Uploads) {
 
   const userEmail = uploadWithUserInfo?.user.email;
 
-  console.log(userEmail);
+  if (!userEmail) {
+    throw new Error(`No user email found for upload ${upload.id}`);
+  }
 
   const formattedDate = new Intl.DateTimeFormat("en-US", {
     dateStyle: "long",
@@ -160,12 +153,16 @@ async function sendRejectEmail(upload: Uploads) {
 </html>
   `;
 
-  await transporter.sendMail({
+  const mailResult = await transporter.sendMail({
     from: `"CatchLogX" <${process.env.NODEMAILER_USER}>`,
     to: userEmail,
     subject: "Your Upload Has Been Rejected",
     html: htmlBody,
   });
+
+  console.info(
+    `[admin] Rejection email sent for upload=${upload.id} to=${userEmail}. messageId=${mailResult.messageId}`,
+  );
 }
 
 async function acceptUploadAndPushToDb(upload: Uploads) {

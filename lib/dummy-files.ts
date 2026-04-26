@@ -1,57 +1,11 @@
-export const DUMMY_FILES_STORAGE_KEY = "clx-dummy-files";
-
 export type DummyFileRecord = {
   id: string;
   fileName: string;
-  mimeType: string;
+  filePath: string;
+  uploadedByUserId: string;
   createdAt: string;
   isVisible: boolean;
-  source: "seed" | "uploaded";
-  textContent?: string;
-  dataUrl?: string;
-  isDeleted?: boolean;
 };
-
-const DEFAULT_DUMMY_FILES: DummyFileRecord[] = [
-  {
-    id: "seed-dummy-001",
-    fileName: "import-template-basic.csv",
-    mimeType: "text/csv",
-    createdAt: "2026-04-21T08:20:00.000Z",
-    isVisible: true,
-    source: "seed",
-    textContent:
-      "country,river_name,year,data_provider\nAustria,Donau,2026,BOKU\nAustria,Traun,2026,BOKU\n",
-  },
-  {
-    id: "seed-dummy-002",
-    fileName: "import-template-advanced.csv",
-    mimeType: "text/csv",
-    createdAt: "2026-04-20T12:05:00.000Z",
-    isVisible: true,
-    source: "seed",
-    textContent:
-      "country,river_name,site_name,date,species,total_length,weight\nAustria,Salza,Friedhofsbruecke,2026-04-15,Brown trout,31.2,0.29\n",
-  },
-  {
-    id: "seed-dummy-003",
-    fileName: "import-template-hidden.csv",
-    mimeType: "text/csv",
-    createdAt: "2026-04-18T09:40:00.000Z",
-    isVisible: false,
-    source: "seed",
-    textContent:
-      "country,river_name,year,data_provider\nAustria,Ybbs,2025,BOKU\n",
-  },
-];
-
-function cloneDefaults(): DummyFileRecord[] {
-  return DEFAULT_DUMMY_FILES.map((file) => ({ ...file }));
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
 
 function normalizeDummyFile(value: unknown): DummyFileRecord | null {
   if (!value || typeof value !== "object") {
@@ -60,169 +14,143 @@ function normalizeDummyFile(value: unknown): DummyFileRecord | null {
 
   const candidate = value as Record<string, unknown>;
 
-  const id =
-    isNonEmptyString(candidate.id)
-      ? candidate.id
-      : `dummy-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-
-  const fileName =
-    isNonEmptyString(candidate.fileName) ? candidate.fileName : "dummy-file.csv";
-
-  const mimeType =
-    isNonEmptyString(candidate.mimeType)
-      ? candidate.mimeType
-      : "application/octet-stream";
-
-  const createdAt =
-    isNonEmptyString(candidate.createdAt)
-      ? candidate.createdAt
-      : new Date().toISOString();
-
-  const source = candidate.source === "uploaded" ? "uploaded" : "seed";
-
-  const isVisible = typeof candidate.isVisible === "boolean" ? candidate.isVisible : true;
-
-  const textContent =
-    typeof candidate.textContent === "string" ? candidate.textContent : undefined;
-
-  const dataUrl = typeof candidate.dataUrl === "string" ? candidate.dataUrl : undefined;
-
-  const isDeleted = typeof candidate.isDeleted === "boolean" ? candidate.isDeleted : false;
+  if (
+    typeof candidate.id !== "string" ||
+    typeof candidate.fileName !== "string" ||
+    typeof candidate.filePath !== "string" ||
+    typeof candidate.uploadedByUserId !== "string" ||
+    typeof candidate.createdAt !== "string" ||
+    typeof candidate.isVisible !== "boolean"
+  ) {
+    return null;
+  }
 
   return {
-    id,
-    fileName,
-    mimeType,
-    createdAt,
-    isVisible,
-    source,
-    textContent,
-    dataUrl,
-    isDeleted,
+    id: candidate.id,
+    fileName: candidate.fileName,
+    filePath: candidate.filePath,
+    uploadedByUserId: candidate.uploadedByUserId,
+    createdAt: candidate.createdAt,
+    isVisible: candidate.isVisible,
   };
 }
 
-function mergeDummyFiles(storedFiles: DummyFileRecord[]): DummyFileRecord[] {
-  const byId = new Map<string, DummyFileRecord>();
+export async function fetchDummyFiles(options?: {
+  includeHidden?: boolean;
+}): Promise<DummyFileRecord[]> {
+  const includeHidden = options?.includeHidden === true;
+  const response = await fetch(
+    `/api/upload/dummy-file?includeHidden=${includeHidden ? "true" : "false"}`,
+    {
+      method: "GET",
+      cache: "no-store",
+    },
+  );
 
-  for (const seedFile of cloneDefaults()) {
-    byId.set(seedFile.id, seedFile);
+  if (!response.ok) {
+    throw new Error("Dummy files could not be loaded.");
   }
 
-  for (const storedFile of storedFiles) {
-    byId.set(storedFile.id, {
-      ...byId.get(storedFile.id),
-      ...storedFile,
-    });
+  const payload = (await response.json()) as { dummyFiles?: unknown };
+  if (!Array.isArray(payload.dummyFiles)) {
+    return [];
   }
 
-  return Array.from(byId.values())
-    .filter((file) => !file.isDeleted)
-    .sort((a, b) => {
-      const aDate = new Date(a.createdAt).getTime();
-      const bDate = new Date(b.createdAt).getTime();
-      return bDate - aDate;
-    });
+  return payload.dummyFiles
+    .map((entry) => normalizeDummyFile(entry))
+    .filter((entry): entry is DummyFileRecord => entry !== null);
 }
 
-function persistDummyFiles(files: DummyFileRecord[]): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  localStorage.setItem(DUMMY_FILES_STORAGE_KEY, JSON.stringify(files));
-}
-
-export function loadDummyFilesFromStorage(): DummyFileRecord[] {
-  if (typeof window === "undefined") {
-    return cloneDefaults();
-  }
-
-  try {
-    const raw = localStorage.getItem(DUMMY_FILES_STORAGE_KEY);
-
-    if (!raw) {
-      const defaults = cloneDefaults();
-      persistDummyFiles(defaults);
-      return defaults;
-    }
-
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      const defaults = cloneDefaults();
-      persistDummyFiles(defaults);
-      return defaults;
-    }
-
-    const normalized = parsed
-      .map((item) => normalizeDummyFile(item))
-      .filter((item): item is DummyFileRecord => item !== null);
-
-    const merged = mergeDummyFiles(normalized);
-    persistDummyFiles(merged);
-    return merged;
-  } catch {
-    const defaults = cloneDefaults();
-    persistDummyFiles(defaults);
-    return defaults;
-  }
-}
-
-export function saveDummyFilesToStorage(files: DummyFileRecord[]): DummyFileRecord[] {
-  const normalized = files
-    .map((file) => normalizeDummyFile(file))
-    .filter((file): file is DummyFileRecord => file !== null);
-
-  const merged = mergeDummyFiles(normalized);
-  persistDummyFiles(merged);
-  return merged;
-}
-
-export function createDummyFileFromUpload(
+export async function uploadDummyFileToBackend(
   file: File,
-  dataUrl: string,
-): DummyFileRecord {
-  return {
-    id: `dummy-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-    fileName: file.name,
-    mimeType: file.type || "application/octet-stream",
-    createdAt: new Date().toISOString(),
-    isVisible: true,
-    source: "uploaded",
-    dataUrl,
-    isDeleted: false,
+): Promise<DummyFileRecord> {
+  const response = await fetch("/api/upload/dummy-file/new", {
+    method: "POST",
+    headers: {
+      "content-type":
+        file.type ||
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "x-file-name": file.name,
+    },
+    body: file,
+  });
+
+  const payload = (await response.json()) as {
+    dummyFile?: unknown;
+    error?: string;
   };
+
+  if (!response.ok || !payload.dummyFile) {
+    throw new Error(payload.error || "Dummy file upload failed.");
+  }
+
+  const normalized = normalizeDummyFile(payload.dummyFile);
+  if (!normalized) {
+    throw new Error("Invalid dummy file payload received from server.");
+  }
+
+  return normalized;
 }
 
-export function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-      } else {
-        reject(new Error("Datei konnte nicht gelesen werden."));
-      }
-    };
-
-    reader.onerror = () => reject(new Error("Datei konnte nicht gelesen werden."));
-    reader.readAsDataURL(file);
+export async function updateDummyFileVisibility(
+  id: string,
+  isVisible: boolean,
+): Promise<DummyFileRecord> {
+  const response = await fetch(`/api/upload/dummy-file/${id}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ isVisible }),
   });
+
+  const payload = (await response.json()) as {
+    dummyFile?: unknown;
+    error?: string;
+  };
+
+  if (!response.ok || !payload.dummyFile) {
+    throw new Error(payload.error || "Dummy file could not be updated.");
+  }
+
+  const normalized = normalizeDummyFile(payload.dummyFile);
+  if (!normalized) {
+    throw new Error("Invalid dummy file payload received from server.");
+  }
+
+  return normalized;
+}
+
+export async function deleteDummyFile(id: string): Promise<void> {
+  const response = await fetch(`/api/upload/dummy-file/${id}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    let message = "Dummy file could not be deleted.";
+    try {
+      const payload = (await response.json()) as { error?: string };
+      if (typeof payload.error === "string") {
+        message = payload.error;
+      }
+    } catch {
+      // Keep fallback message.
+    }
+    throw new Error(message);
+  }
 }
 
 export async function downloadDummyFile(file: DummyFileRecord): Promise<void> {
-  let blob: Blob;
+  const response = await fetch(`/api/upload/dummy-file/${file.id}/download`, {
+    method: "GET",
+    cache: "no-store",
+  });
 
-  if (file.dataUrl) {
-    const response = await fetch(file.dataUrl);
-    blob = await response.blob();
-  } else if (typeof file.textContent === "string") {
-    blob = new Blob([file.textContent], { type: file.mimeType });
-  } else {
-    blob = new Blob([""], { type: "application/octet-stream" });
+  if (!response.ok) {
+    throw new Error("Dummy file could not be downloaded.");
   }
 
+  const blob = await response.blob();
   const objectUrl = window.URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = objectUrl;

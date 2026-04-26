@@ -1,19 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth-middleware";
+import { requireAdminAuth } from "@/lib/admin-middleware";
 import { uploadDummyFile } from "@/lib/minio";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
-  const authResult = await requireAuth(req);
+  const authResult = await requireAdminAuth(req);
   if (authResult instanceof NextResponse) {
     return authResult;
   }
 
   try {
     const contentType = req.headers.get("content-type") ?? "";
+    const headerFilename = req.headers.get("x-file-name")?.trim();
+    const lowerFilename = (headerFilename ?? "").toLowerCase();
     const isExcel =
       contentType.includes(
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      ) || contentType.includes("application/octet-stream");
+      ) ||
+      contentType.includes("application/vnd.ms-excel") ||
+      contentType.includes("text/csv") ||
+      contentType.includes("text/plain") ||
+      contentType.includes("application/octet-stream") ||
+      lowerFilename.endsWith(".xlsx") ||
+      lowerFilename.endsWith(".xls") ||
+      lowerFilename.endsWith(".csv") ||
+      lowerFilename.endsWith(".txt");
 
     if (!isExcel) {
       return NextResponse.json(
@@ -34,20 +45,42 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const headerFilename = req.headers.get("x-file-name")?.trim();
     const filename =
-      headerFilename && headerFilename.toLowerCase().endsWith(".xlsx")
+      headerFilename &&
+      [".xlsx", ".xls", ".csv", ".txt"].some((ext) =>
+        headerFilename.toLowerCase().endsWith(ext),
+      )
         ? headerFilename
         : `dummy_file_${Date.now()}.xlsx`;
 
-    const stored = await uploadDummyFile(fileBuffer, filename);
+    const stored = await uploadDummyFile(
+      fileBuffer,
+      filename,
+      contentType || "application/octet-stream",
+    );
+
+    const dummyFile = await prisma.dummyFiles.create({
+      data: {
+        fileName: stored.filename,
+        filePath: stored.objectKey,
+        uploadedByUserId: authResult.user.id,
+        isVisible: true,
+        isDeleted: false,
+      },
+      select: {
+        id: true,
+        fileName: true,
+        filePath: true,
+        uploadedByUserId: true,
+        createdAt: true,
+        isVisible: true,
+      },
+    });
 
     return NextResponse.json(
       {
         message: "Dummy file uploaded successfully",
-        filename: stored.filename,
-        folder: stored.timestampFolder,
-        objectKey: stored.objectKey,
+        dummyFile,
       },
       { status: 201 },
     );

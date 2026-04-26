@@ -6,8 +6,7 @@ import DarkModeToggle from "./DarkModeToggle";
 import {
   downloadDummyFile,
   DummyFileRecord,
-  DUMMY_FILES_STORAGE_KEY,
-  loadDummyFilesFromStorage,
+  fetchDummyFiles,
 } from "@/lib/dummy-files";
 
 const MY_UPLOADS_STORAGE_KEY = "clx-my-uploads";
@@ -22,30 +21,32 @@ const UploadPageComponent = () => {
     "idle" | "uploading" | "success" | "error"
   >("idle");
   const [errorMessage, setErrorMessage] = useState<string>("");
-  const [errorType, setErrorType] = useState<"validation" | "structural" | null>(null);
+  const [errorType, setErrorType] = useState<
+    "validation" | "structural" | null
+  >(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const syncDummyFiles = () => {
-      const files = loadDummyFilesFromStorage().filter((file) => file.isVisible);
-      setVisibleDummyFiles(files);
+    const syncDummyFiles = async () => {
+      try {
+        const files = await fetchDummyFiles({ includeHidden: false });
+        setVisibleDummyFiles(files.filter((file) => file.isVisible));
+      } catch (error) {
+        console.error("Could not load dummy files:", error);
+        setVisibleDummyFiles([]);
+      }
     };
 
     syncDummyFiles();
 
-    const handleFocus = () => syncDummyFiles();
-    const handleStorage = (event: StorageEvent) => {
-      if (!event.key || event.key === DUMMY_FILES_STORAGE_KEY) {
-        syncDummyFiles();
-      }
+    const handleFocus = () => {
+      syncDummyFiles();
     };
 
     window.addEventListener("focus", handleFocus);
-    window.addEventListener("storage", handleStorage);
 
     return () => {
       window.removeEventListener("focus", handleFocus);
-      window.removeEventListener("storage", handleStorage);
     };
   }, []);
 
@@ -113,11 +114,15 @@ const UploadPageComponent = () => {
         method: "POST",
         body: selectedFile,
       });
-      
+
       const contentType = response.headers.get("content-type") || "";
 
       //Excel Fehlerdatei herunterladen
-      if (contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) {
+      if (
+        contentType.includes(
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+      ) {
         const blob = await response.blob();
 
         const url = window.URL.createObjectURL(blob);
@@ -131,27 +136,31 @@ const UploadPageComponent = () => {
 
         setUploadStatus("error");
         setErrorType("validation");
-        setErrorMessage("An error was found during validation. An Excel file with the highlighted errors has been downloaded.");
+        setErrorMessage(
+          "An error was found during validation. An Excel file with the highlighted errors has been downloaded.",
+        );
         return;
       }
-      
+
       // JSON Response für Erfolg oder strukturelle Fehler
       const data = await response.json();
 
       if (!response.ok) {
         setUploadStatus("error");
         setErrorType("structural");
-        setErrorMessage(data.details || data.error || "An unknown error occurred.");
+        setErrorMessage(
+          data.details || data.error || "An unknown error occurred.",
+        );
         return;
       }
 
       const successfulUpload = {
-        id: data?.data?.uploadId || `local-${Date.now()}`,
-        link: selectedFile.name,
-        state: "UPLOADED",
-        note: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        id: data?.data?.upload?.id || `local-${Date.now()}`,
+        link: data?.data?.upload?.link || selectedFile.name,
+        state: data?.data?.upload?.state || "UPLOADED",
+        note: data?.data?.upload?.note ?? null,
+        createdAt: data?.data?.upload?.createdAt || new Date().toISOString(),
+        updatedAt: data?.data?.upload?.updatedAt || new Date().toISOString(),
       };
 
       try {
@@ -352,7 +361,9 @@ const UploadPageComponent = () => {
                                 {dummyFile.fileName}
                               </p>
                               <button
-                                onClick={() => handleDownloadDummyTemplate(dummyFile)}
+                                onClick={() =>
+                                  handleDownloadDummyTemplate(dummyFile)
+                                }
                                 className="shrink-0 px-3 py-1.5 text-xs font-medium rounded bg-[#357174] hover:bg-[#2a5a5d] text-white transition-colors"
                               >
                                 Download
@@ -432,8 +443,8 @@ const UploadPageComponent = () => {
                       uploadStatus === "uploading"
                         ? "bg-gray-400 text-white cursor-not-allowed"
                         : uploadStatus === "success"
-                        ? "bg-green-600 text-white cursor-not-allowed"
-                        : "bg-[#357174] hover:bg-[#2a5a5d] text-white hover:shadow-lg"
+                          ? "bg-green-600 text-white cursor-not-allowed"
+                          : "bg-[#357174] hover:bg-[#2a5a5d] text-white hover:shadow-lg"
                     }`}
                   >
                     {uploadStatus === "uploading" && (
@@ -475,8 +486,8 @@ const UploadPageComponent = () => {
                     {uploadStatus === "uploading"
                       ? "Wird hochgeladen..."
                       : uploadStatus === "success"
-                      ? "Erfolgreich eingereicht"
-                      : "Datei zur Prüfung einreichen"}
+                        ? "Erfolgreich eingereicht"
+                        : "Datei zur Prüfung einreichen"}
                   </button>
                 </div>
                 {/* Success Message */}
@@ -509,19 +520,24 @@ const UploadPageComponent = () => {
                 {uploadStatus === "error" && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                     <div className="flex items-start">
-                      <svg className="w-5 h-5 text-red-400 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" 
-                          d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" 
-                          clipRule="evenodd" 
+                      <svg
+                        className="w-5 h-5 text-red-400 mr-2 mt-0.5"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                          clipRule="evenodd"
                         />
                       </svg>
                       <div>
                         <h3 className="text-sm font-medium text-red-800 mb-2">
-                          {errorType === "validation" ? "Validation Error" : "File Structure Error"}
+                          {errorType === "validation"
+                            ? "Validation Error"
+                            : "File Structure Error"}
                         </h3>
-                        <p className="text-sm text-red-700">
-                          {errorMessage}
-                        </p>
+                        <p className="text-sm text-red-700">{errorMessage}</p>
                         {errorType === "validation"}
                       </div>
                     </div>

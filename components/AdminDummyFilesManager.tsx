@@ -3,12 +3,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Download, Eye, EyeOff, Trash2, Upload } from "lucide-react";
 import {
-  createDummyFileFromUpload,
+  deleteDummyFile,
   downloadDummyFile,
   DummyFileRecord,
-  loadDummyFilesFromStorage,
-  readFileAsDataUrl,
-  saveDummyFilesToStorage,
+  fetchDummyFiles,
+  updateDummyFileVisibility,
+  uploadDummyFileToBackend,
 } from "@/lib/dummy-files";
 
 const MAX_DUMMY_FILE_SIZE_BYTES = 8 * 1024 * 1024;
@@ -44,22 +44,33 @@ const AdminDummyFilesManager = () => {
   const [dummyFiles, setDummyFiles] = useState<DummyFileRecord[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const loadFiles = async () => {
+    setIsLoading(true);
+    setErrorMessage("");
+
+    try {
+      const files = await fetchDummyFiles({ includeHidden: true });
+      setDummyFiles(files);
+    } catch (error) {
+      console.error("Could not load dummy files:", error);
+      setErrorMessage("Dummy-Dateien konnten nicht geladen werden.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    setDummyFiles(loadDummyFilesFromStorage());
+    loadFiles();
   }, []);
 
   const visibleCount = useMemo(
     () => dummyFiles.filter((file) => file.isVisible).length,
     [dummyFiles],
   );
-
-  const persistAndSet = (nextFiles: DummyFileRecord[]) => {
-    const saved = saveDummyFilesToStorage(nextFiles);
-    setDummyFiles(saved);
-  };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     setErrorMessage("");
@@ -83,9 +94,8 @@ const AdminDummyFilesManager = () => {
     setErrorMessage("");
 
     try {
-      const dataUrl = await readFileAsDataUrl(selectedFile);
-      const newDummyFile = createDummyFileFromUpload(selectedFile, dataUrl);
-      persistAndSet([newDummyFile, ...dummyFiles]);
+      await uploadDummyFileToBackend(selectedFile);
+      await loadFiles();
 
       setSelectedFile(null);
       if (fileInputRef.current) {
@@ -100,15 +110,28 @@ const AdminDummyFilesManager = () => {
   };
 
   const handleToggleVisibility = (id: string) => {
-    const nextFiles = dummyFiles.map((file) =>
-      file.id === id ? { ...file, isVisible: !file.isVisible } : file,
-    );
-    persistAndSet(nextFiles);
+    const selected = dummyFiles.find((file) => file.id === id);
+    if (!selected) {
+      return;
+    }
+
+    setErrorMessage("");
+    updateDummyFileVisibility(id, !selected.isVisible)
+      .then(() => loadFiles())
+      .catch((error) => {
+        console.error("Could not update dummy file visibility:", error);
+        setErrorMessage("Sichtbarkeit konnte nicht aktualisiert werden.");
+      });
   };
 
   const handleDeleteDummyFile = (id: string) => {
-    const nextFiles = dummyFiles.filter((file) => file.id !== id);
-    persistAndSet(nextFiles);
+    setErrorMessage("");
+    deleteDummyFile(id)
+      .then(() => loadFiles())
+      .catch((error) => {
+        console.error("Could not delete dummy file:", error);
+        setErrorMessage("Dummy-Datei konnte nicht gelöscht werden.");
+      });
   };
 
   const handleDownload = async (file: DummyFileRecord) => {
@@ -128,7 +151,8 @@ const AdminDummyFilesManager = () => {
             Dummy-Dateien
           </h2>
           <p className="text-gray-600 dark:text-gray-400">
-            Sichtbare Dateien werden auf der Upload-Seite als Download angezeigt.
+            Sichtbare Dateien werden auf der Upload-Seite als Download
+            angezeigt.
           </p>
         </div>
         <div className="rounded-lg bg-[#e8f3f3] dark:bg-[#1f2f3e] border border-[#c7e0e0] dark:border-[#2d4257] px-4 py-2 text-sm text-[#235457] dark:text-[#b8d6d8]">
@@ -170,11 +194,17 @@ const AdminDummyFilesManager = () => {
           )}
         </div>
         {errorMessage && (
-          <p className="text-sm text-red-600 dark:text-red-400 mt-3">{errorMessage}</p>
+          <p className="text-sm text-red-600 dark:text-red-400 mt-3">
+            {errorMessage}
+          </p>
         )}
       </div>
 
-      {dummyFiles.length === 0 ? (
+      {isLoading ? (
+        <div className="text-center py-12 text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg">
+          Lade Dummy-Dateien...
+        </div>
+      ) : dummyFiles.length === 0 ? (
         <div className="text-center py-12 text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg">
           Keine Dummy-Dateien vorhanden.
         </div>
@@ -199,7 +229,10 @@ const AdminDummyFilesManager = () => {
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {dummyFiles.map((file) => (
-                <tr key={file.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/60">
+                <tr
+                  key={file.id}
+                  className="hover:bg-gray-50 dark:hover:bg-gray-700/60"
+                >
                   <td className="px-4 py-4 text-sm text-gray-900 dark:text-gray-100 break-all">
                     {file.fileName}
                   </td>
@@ -215,7 +248,11 @@ const AdminDummyFilesManager = () => {
                           : "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200"
                       }`}
                     >
-                      {file.isVisible ? <Eye size={14} /> : <EyeOff size={14} />}
+                      {file.isVisible ? (
+                        <Eye size={14} />
+                      ) : (
+                        <EyeOff size={14} />
+                      )}
                       {file.isVisible ? "true" : "false"}
                     </button>
                   </td>
