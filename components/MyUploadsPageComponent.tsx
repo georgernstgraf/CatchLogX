@@ -30,8 +30,6 @@ type UploadItem = {
 };
 
 type StatusFilter = "ALL" | UploadState;
-
-const MY_UPLOADS_STORAGE_KEY = "clx-my-uploads";
 const STATE_ORDER: UploadState[] = [
   "UPLOADED",
   "ACCEPTED",
@@ -103,44 +101,8 @@ function parseUploadsFromApiPayload(payload: unknown): UploadItem[] {
     .filter((entry): entry is UploadItem => entry !== null);
 }
 
-function readLocalUploads(): UploadItem[] {
-  try {
-    const raw = localStorage.getItem(MY_UPLOADS_STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed
-      .map((entry) => normalizeUploadEntry(entry))
-      .filter((entry): entry is UploadItem => entry !== null);
-  } catch {
-    return [];
-  }
-}
-
-function mergeUploads(
-  apiUploads: UploadItem[],
-  localUploads: UploadItem[],
-): UploadItem[] {
-  const byId = new Map<string, UploadItem>();
-
-  for (const localUpload of localUploads) {
-    byId.set(localUpload.id, localUpload);
-  }
-
-  for (const apiUpload of apiUploads) {
-    byId.set(apiUpload.id, {
-      ...byId.get(apiUpload.id),
-      ...apiUpload,
-    });
-  }
-
-  return Array.from(byId.values()).sort((a, b) => {
+function sortUploads(apiUploads: UploadItem[]): UploadItem[] {
+  return [...apiUploads].sort((a, b) => {
     const aDate = new Date(a.createdAt).getTime();
     const bDate = new Date(b.createdAt).getTime();
     return bDate - aDate;
@@ -228,7 +190,6 @@ const MyUploadsPageComponent = () => {
     setIsLoading(true);
     setErrorMessage("");
 
-    const localUploads = readLocalUploads();
     let apiUploads: UploadItem[] = [];
 
     try {
@@ -259,8 +220,7 @@ const MyUploadsPageComponent = () => {
       setErrorMessage("Netzwerkfehler beim Laden der Upload-Statusdaten.");
     }
 
-    const mergedUploads = mergeUploads(apiUploads, localUploads);
-    setUploads(mergedUploads);
+    setUploads(sortUploads(apiUploads));
     setLastUpdated(new Date());
     setIsLoading(false);
   }, []);
