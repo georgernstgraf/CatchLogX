@@ -14,13 +14,19 @@ datasource db {
     url      = env("DATABASE_URL")
 }
 
+enum UserRoles {
+    SUPER_ADMIN
+    ADMIN
+    VIEWER
+}
+
 model User {
   id             String   @id @default(cuid())
   username       String   @unique
   hashedPassword String
   name           String?
-  email          String   @unique
-  role           String   @default("viewer")
+  email          String     @unique
+  role           UserRoles  @default(VIEWER)
   isFirstLogin   Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
