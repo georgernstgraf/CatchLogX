@@ -166,8 +166,8 @@ model FishCatch {
     totalWeightGr Float?
     pitDec        String?
     pitHex        String?
-    recapture     Boolean @default(false)
-    createdAt     DateTime @default(now())
+    recapture     Boolean     @default(false)
+    createdAt     DateTime    @default(now())
 
     @@map("fish_catches")
 }
