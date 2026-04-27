@@ -335,6 +335,12 @@ export async function processUpload(fileBuffer: Buffer, userId: string) {
 
     const errorMap = new Map<string, string>(); // row_column -> message
 
+    // PIT DEC Validierung sammeln (für datei-übergreifende Prüfung)
+    const pitDecMap = new Map<
+      string,
+      { speciesName: string; rowNum: number }
+    >();
+
     //Validierung der Datenzeilen
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
@@ -369,6 +375,52 @@ export async function processUpload(fileBuffer: Buffer, userId: string) {
             errorMap.set(`${i + 1}_${columnIndex}`, issue.message);
           }
         });
+      }
+
+      // PIT DEC Sammeln für datei-übergreifende Validierung
+      const pitDec = obj["pit_dec"] ? String(obj["pit_dec"]).trim() : null;
+      const speciesName = obj["species"] ? String(obj["species"]).trim() : null;
+
+      if (pitDec && speciesName) {
+        if (pitDecMap.has(pitDec)) {
+          const existing = pitDecMap.get(pitDec)!;
+          if (existing.speciesName !== speciesName) {
+            errorMap.set(
+              `${i + 1}_${headers.indexOf("pit_dec")}`,
+              `PIT DEC ${pitDec} kommt mit unterschiedlichen Arten vor (Zeile ${existing.rowNum}: ${existing.speciesName}). Muss gleiche Art haben.`,
+            );
+          }
+        } else {
+          pitDecMap.set(pitDec, { speciesName, rowNum: i + 1 });
+        }
+      }
+    }
+
+    // DB-Prüfung für existierende PIT DEC (nur wenn keine Fehler in der Datei)
+    if (errorMap.size === 0) {
+      for (const [pitDec, info] of pitDecMap.entries()) {
+        try {
+          const existingCatch = await prisma.fishCatch.findFirst({
+            where: { pitDec, recapture: false },
+            include: { species: true },
+          });
+
+          if (existingCatch) {
+            const existingSpeciesName = existingCatch.species.speciesName;
+            if (existingSpeciesName !== info.speciesName) {
+              errorMap.set(
+                `${info.rowNum}_${headers.indexOf("pit_dec")}`,
+                `PIT DEC ${pitDec} existiert bereits in der Datenbank mit anderer Art (${existingSpeciesName}). Muss als Recapture markiert werden.`,
+              );
+            }
+          }
+        } catch (dbError) {
+          console.error("DB Error checking PIT DEC:", dbError);
+          errorMap.set(
+            `${info.rowNum}_${headers.indexOf("pit_dec")}`,
+            `Fehler bei PIT DEC Prüfung gegen Datenbank.`,
+          );
+        }
       }
     }
 

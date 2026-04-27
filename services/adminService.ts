@@ -252,12 +252,45 @@ async function acceptUploadAndPushToDb(upload: Uploads) {
   let processedRows = 0;
   const samplingMap = new Map<string, number>();
 
+  // PIT DEC Tracking für recapture-Automatik
+  const pitDecRecapture = new Map<string, boolean>();
+
   // Detect whether this is a legacy file (has site_code column) or the new schema
   const hasLegacySiteCode = rows.length > 0 && "site_code" in rows[0];
 
   console.log(
     `[acceptUploadAndPushToDb] Schema detected: ${hasLegacySiteCode ? "legacy (site_code)" : "new (no site_code)"}`,
   );
+
+  // Vorab: PIT DEC in dieser Datei zählen und recapture bestimmen
+  const pitDecCounts = new Map<string, number>();
+
+  // 1. Alle PITs zählen (wie oft kommen sie in der Datei vor)
+  for (let i = 0; i < rows.length; i++) {
+    const pitDec = hasLegacySiteCode
+      ? rows[i]["PIT DEC"] ? String(rows[i]["PIT DEC"]).trim() : null
+      : rows[i]["pit_dec"] ? String(rows[i]["pit_dec"]).trim() : null;
+
+    if (pitDec) {
+      pitDecCounts.set(pitDec, (pitDecCounts.get(pitDec) || 0) + 1);
+    }
+  }
+
+  // 2. Für jeden PIT prüfen ob recapture = true (mehrfach in Datei ODER bereits in DB)
+  for (const [pitDec, count] of pitDecCounts.entries()) {
+    let isRecapture = count > 1; // Mehrfach in Datei = recapture
+
+    if (!isRecapture) {
+      // Prüfe ob bereits in DB (als nicht-recapture)
+      const existingCatch = await prisma.fishCatch.findFirst({
+        where: { pitDec, recapture: false },
+        select: { id: true },
+      });
+      isRecapture = !!existingCatch;
+    }
+
+    pitDecRecapture.set(pitDec, isRecapture);
+  }
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -511,6 +544,12 @@ async function acceptUploadAndPushToDb(upload: Uploads) {
       continue;
     }
 
+    // PIT DEC für recapture bestimmen
+    const pitDec = hasLegacySiteCode
+      ? row["PIT DEC"] ? String(row["PIT DEC"]).trim() : null
+      : row["pit_dec"] ? String(row["pit_dec"]).trim() : null;
+    const isRecapture = pitDec ? pitDecRecapture.get(pitDec) || false : false;
+
     try {
       await prisma.fishCatch.create({
         data: {
@@ -529,6 +568,11 @@ async function acceptUploadAndPushToDb(upload: Uploads) {
           totalWeightGr: toFloat(
             hasLegacySiteCode ? row["Total weight [gr]"] : row["weight"],
           ),
+          pitDec,
+          pitHex: hasLegacySiteCode
+            ? row["PIT HEX"] ? String(row["PIT HEX"]).trim() : null
+            : row["pit_hex"] ? String(row["pit_hex"]).trim() : null,
+          recapture: isRecapture,
         },
       });
       processedRows++;
