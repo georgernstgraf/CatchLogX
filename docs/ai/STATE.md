@@ -1,0 +1,35 @@
+# Project State
+
+Current status as of 2026-04-27.
+
+## Current Focus
+Active development on `dev` branch. Feature branches merged into `dev`; `master` is stale.
+
+## Completed (this cycle)
+- [x] Custom cookie-based session auth (sign-in, session, logout)
+- [x] Admin panel with user CRUD, upload approval/rejection, file downloads
+- [x] Excel upload with validation (schema, PIT tag, cross-file checks)
+- [x] SQL query interface with execution, save/load/delete, CSV export, preset queries
+- [x] Leaflet map component with marker support
+- [x] MinIO file storage (uploads + dummy files)
+- [x] PostgreSQL migration (from SQLite)
+- [x] Dark mode support
+- [x] Password reset flow (email via nodemailer)
+- [x] First-login password change
+- [x] Service layer pattern (all API routes delegate to services/)
+- [x] PIT tag fields (pitDec, pitHex, recapture) on FishCatch
+- [x] Language switched to English
+- [x] Docker Compose for full stack (PostgreSQL + MinIO + app)
+- [x] AGENTS.md + docs/ai/ knowledge files created
+
+## Pending
+- [ ] Database migrations are not current — `prisma db push` is used instead of `prisma migrate dev`
+- [ ] NextAuth v4 is configured but not integrated with the custom session system
+- [ ] No automated tests exist
+- [ ] Fish search component was removed (issue #60)
+
+## Blockers
+None.
+
+## Next Session Suggestion
+Create proper Prisma migrations to replace the `prisma db push` workflow, or implement automated tests.

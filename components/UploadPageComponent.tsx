@@ -1,23 +1,54 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Sidebar from "./Sidebar";
+import DarkModeToggle from "./DarkModeToggle";
+import {
+  downloadDummyFile,
+  DummyFileRecord,
+  fetchDummyFiles,
+} from "@/lib/dummy-files";
 
 const UploadPageComponent = () => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [visibleDummyFiles, setVisibleDummyFiles] = useState<DummyFileRecord[]>(
+    [],
+  );
   const [uploadStatus, setUploadStatus] = useState<
     "idle" | "uploading" | "success" | "error"
   >("idle");
-  const [validationErrors, setValidationErrors] = useState<Array<{
-    row: number;
-    column: string;
-    message: string;
-  }>>([]);
-  const [headerErrors, setHeaderErrors] = useState<string[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [errorType, setErrorType] = useState<
+    "validation" | "structural" | null
+  >(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Überprüfung ob die Datei eine Excel-Datei ist
+  useEffect(() => {
+    const syncDummyFiles = async () => {
+      try {
+        const files = await fetchDummyFiles({ includeHidden: false });
+        setVisibleDummyFiles(files.filter((file) => file.isVisible));
+      } catch (error) {
+        console.error("Could not load dummy files:", error);
+        setVisibleDummyFiles([]);
+      }
+    };
+
+    syncDummyFiles();
+
+    const handleFocus = () => {
+      syncDummyFiles();
+    };
+
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, []);
+
+  // Validate if file is an Excel document
   const isExcelFile = (file: File) => {
     const excelTypes = [
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
@@ -51,7 +82,7 @@ const UploadPageComponent = () => {
         setSelectedFile(file);
         setUploadStatus("idle");
       } else {
-        alert("Bitte wähle nur Excel-Dateien (.xlsx oder .xls) aus.");
+        alert("Please select only Excel files (.xlsx or .xls).");
       }
     }
   };
@@ -64,7 +95,7 @@ const UploadPageComponent = () => {
         setSelectedFile(file);
         setUploadStatus("idle");
       } else {
-        alert("Bitte wähle nur Excel-Dateien (.xlsx oder .xls) aus.");
+        alert("Please select only Excel files (.xlsx or .xls).");
       }
     }
   };
@@ -73,8 +104,8 @@ const UploadPageComponent = () => {
     if (!selectedFile) return;
 
     setUploadStatus("uploading");
-    setValidationErrors([]); // Reset validation errors
-    setHeaderErrors([]); // Reset header errors
+    setErrorMessage("");
+    setErrorType(null);
 
     try {
       const response = await fetch("/api/upload/new", {
@@ -82,27 +113,51 @@ const UploadPageComponent = () => {
         body: selectedFile,
       });
 
+      const contentType = response.headers.get("content-type") || "";
+
+      // Download validation error workbook
+      if (
+        contentType.includes(
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+      ) {
+        const blob = await response.blob();
+
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "validation_errors.xlsx";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+
+        setUploadStatus("error");
+        setErrorType("validation");
+        setErrorMessage(
+          "An error was found during validation. An Excel file with the highlighted errors has been downloaded.",
+        );
+        return;
+      }
+
+      // JSON response for success or structural errors
       const data = await response.json();
 
       if (!response.ok) {
         setUploadStatus("error");
-        
-        // Prüfen auf Spaltenfehler
-        if (data.error === "Fehlende Spalten" && data.details?.[0]?.errors) {
-          setHeaderErrors(data.details[0].errors);
-        }
-        // Prüfen auf Validierungsfehler
-        else if (data.validationErrors) {
-          setValidationErrors(data.validationErrors);
-        }
+        setErrorType("structural");
+        setErrorMessage(
+          data.details || data.error || "An unknown error occurred.",
+        );
         return;
       }
 
       setUploadStatus("success");
-      console.log("Upload erfolgreich:", data);
     } catch (error) {
       console.error("Upload error:", error);
       setUploadStatus("error");
+      setErrorType("structural");
+      setErrorMessage("Network error: File could not be uploaded.");
     }
   };
 
@@ -122,22 +177,33 @@ const UploadPageComponent = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
+  const handleDownloadDummyTemplate = async (dummyFile: DummyFileRecord) => {
+    try {
+      await downloadDummyFile(dummyFile);
+    } catch (error) {
+      console.error("Dummy template download failed:", error);
+      alert("Dummy file could not be downloaded.");
+    }
+  };
+
   return (
-    <div className="flex flex-row">
+    <div className="flex flex-row min-h-screen bg-gray-50 dark:bg-gray-900">
       <Sidebar />
-      <div className="min-h-screen bg-gray-50 p-6 flex flex-row justify-center mx-auto">
+      <div className="flex-1 min-h-screen bg-gray-50 dark:bg-gray-900 p-6 flex flex-row justify-center relative">
+        <div className="absolute top-6 right-6">
+          <DarkModeToggle variant="page" />
+        </div>
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Excel-Datei hochladen
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+              Upload Excel File
             </h1>
-            <p className="text-gray-600">
-              Lade deine Excel-Datei hoch zur Überprüfung durch den
-              Administrator
+            <p className="text-gray-600 dark:text-gray-400">
+              Upload your Excel file for administrator review.
             </p>
           </div>
           {/* Disclaimer Box */}
-          <div className="bg-orange-50 border border-orange-200 rounded-lg p-6 mb-8">
+          <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-6 mb-8">
             <div className="flex items-start">
               <div className="flex-shrink-0">
                 <svg
@@ -153,48 +219,44 @@ const UploadPageComponent = () => {
                 </svg>
               </div>
               <div className="ml-3">
-                <h3 className="text-sm font-medium text-orange-800 mb-2">
-                  Wichtige Hinweise zur Dateistruktur
+                <h3 className="text-sm font-medium text-orange-800 dark:text-orange-300 mb-2">
+                  Important File Structure Notes
                 </h3>
-                <div className="text-sm text-orange-700">
+                <div className="text-sm text-orange-700 dark:text-orange-400">
                   <p className="mb-2">
-                    Bitte stelle sicher, dass deine Excel-Datei die folgenden
-                    Kriterien erfüllt:
+                    Please ensure your Excel file meets the following criteria:
                   </p>
                   <ul className="list-disc list-inside space-y-1 ml-4">
                     <li>
-                      Die Struktur entspricht exakt der bereitgestellten Vorlage
-                      (Dummy-Excel)
+                      The structure matches the provided template exactly (dummy
+                      Excel file)
                     </li>
+                    <li>The first row contains the correct column headers</li>
                     <li>
-                      Die erste Zeile enthält die korrekten Spaltenüberschriften
+                      All required fields are filled (some optional fields may
+                      remain empty)
                     </li>
-                    <li>
-                      Alle Pflichtfelder sind ausgefüllt (manche Felder dürfen
-                      leer bleiben)
-                    </li>
-                    <li>Die Datenformate sind korrekt (Datum, Zahlen, Text)</li>
-                    <li>Keine zusätzlichen oder gelöschten Spalten</li>
-                    <li>Maximal 10.000 Zeilen pro Datei</li>
+                    <li>Data formats are correct (date, numbers, text)</li>
+                    <li>No additional or deleted columns</li>
+                    <li>Maximum of 10,000 rows per file</li>
                   </ul>
-                  <p className="mt-3 text-xs bg-orange-100 p-2 rounded">
-                    <strong>Wichtig:</strong> Nach dem Upload wird deine Datei
-                    vom Administrator manuell überprüft und freigegeben. Du
-                    erhältst eine Benachrichtigung über den Status deiner
-                    Übermittlung.
+                  <p className="mt-3 text-xs bg-orange-100 dark:bg-orange-900/40 p-2 rounded">
+                    <strong>Important:</strong> After upload, your file is
+                    reviewed manually by an administrator. You will receive a
+                    status update once the review is completed.
                   </p>
                 </div>
               </div>
             </div>
           </div>
           {/* Upload Area */}
-          <div className="bg-white rounded-lg shadow-lg p-8">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8">
             {!selectedFile ? (
               <div
                 className={`border-2 border-dashed rounded-lg p-12 text-center transition-all duration-300 ${
                   isDragOver
                     ? "border-[#357174] bg-[#357174]/5"
-                    : "border-gray-300 hover:border-[#357174] hover:bg-gray-50"
+                    : "border-gray-300 dark:border-gray-600 hover:border-[#357174] hover:bg-gray-50 dark:hover:bg-gray-700"
                 }`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
@@ -223,31 +285,61 @@ const UploadPageComponent = () => {
                     </svg>
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
                       {isDragOver
-                        ? "Datei hier ablegen..."
-                        : "Excel-Datei hier ablegen"}
+                        ? "Drop file here..."
+                        : "Drop Excel file here"}
                     </h3>
-                    <p className="text-gray-500 mb-4">
-                      oder klicke hier, um eine Datei auszuwählen
+                    <p className="text-gray-500 dark:text-gray-400 mb-4">
+                      or click here to select a file
                     </p>
-                    {/* WIP - Link zur Dummy Datei einfügen */}
                     <p className="text-sm text-[#357174] mb-4 font-medium">
-                      📋 Verwende die bereitgestellte Dummy-Excel als Vorlage
+                      📋 Use the provided dummy files as your template
                     </p>
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       className="bg-[#357174] hover:bg-[#2a5a5d] text-white px-6 py-2 rounded-lg font-medium transition-colors duration-200"
                     >
-                      Datei auswählen
+                      Select File
                     </button>
                     <p className="text-xs text-gray-400 mt-2">
-                      Unterstützte Formate: .xlsx, .xls (max. 50MB)
+                      Supported formats: .xlsx, .xls (max. 50MB)
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      💡 Tipp: Lade die Dummy-Excel-Vorlage herunter und nutze
-                      sie als Basis
+                      💡 Tip: Download the dummy Excel template and use it as
+                      your base
                     </p>
+
+                    {visibleDummyFiles.length > 0 && (
+                      <div className="mt-6 w-full max-w-xl rounded-lg border border-[#c7e0e0] dark:border-[#2d4257] bg-[#e8f3f3] dark:bg-[#1f2f3e] p-4 text-left">
+                        <p className="text-sm font-semibold text-[#235457] dark:text-[#b8d6d8]">
+                          Download Current Dummy Files
+                        </p>
+                        <p className="text-xs mt-1 text-[#2d666a] dark:text-[#9fbec0]">
+                          Visible files are controlled via the admin panel.
+                        </p>
+                        <div className="mt-3 space-y-2">
+                          {visibleDummyFiles.map((dummyFile) => (
+                            <div
+                              key={dummyFile.id}
+                              className="flex items-center justify-between gap-3 rounded-md bg-white/70 dark:bg-gray-900/40 px-3 py-2"
+                            >
+                              <p className="text-xs sm:text-sm text-gray-700 dark:text-gray-200 break-all">
+                                {dummyFile.fileName}
+                              </p>
+                              <button
+                                onClick={() =>
+                                  handleDownloadDummyTemplate(dummyFile)
+                                }
+                                className="shrink-0 px-3 py-1.5 text-xs font-medium rounded bg-[#357174] hover:bg-[#2a5a5d] text-white transition-colors"
+                              >
+                                Download
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <input
@@ -261,7 +353,7 @@ const UploadPageComponent = () => {
             ) : (
               <div className="space-y-6">
                 {/* Selected File Info */}
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
                       <svg
@@ -279,10 +371,10 @@ const UploadPageComponent = () => {
                       </svg>
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900">
+                      <p className="font-medium text-gray-900 dark:text-gray-100">
                         {selectedFile.name}
                       </p>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
                         {formatFileSize(selectedFile.size)}
                       </p>
                     </div>
@@ -318,8 +410,8 @@ const UploadPageComponent = () => {
                       uploadStatus === "uploading"
                         ? "bg-gray-400 text-white cursor-not-allowed"
                         : uploadStatus === "success"
-                        ? "bg-green-600 text-white cursor-not-allowed"
-                        : "bg-[#357174] hover:bg-[#2a5a5d] text-white hover:shadow-lg"
+                          ? "bg-green-600 text-white cursor-not-allowed"
+                          : "bg-[#357174] hover:bg-[#2a5a5d] text-white hover:shadow-lg"
                     }`}
                   >
                     {uploadStatus === "uploading" && (
@@ -359,10 +451,10 @@ const UploadPageComponent = () => {
                       </svg>
                     )}
                     {uploadStatus === "uploading"
-                      ? "Wird hochgeladen..."
+                      ? "Uploading..."
                       : uploadStatus === "success"
-                      ? "Erfolgreich eingereicht"
-                      : "Datei zur Prüfung einreichen"}
+                        ? "Submitted Successfully"
+                        : "Submit File for Review"}
                   </button>
                 </div>
                 {/* Success Message */}
@@ -381,66 +473,40 @@ const UploadPageComponent = () => {
                         />
                       </svg>
                       <p className="text-green-700 font-medium">
-                        Deine Datei wurde erfolgreich eingereicht und wartet auf
-                        die Überprüfung durch den Administrator.
+                        Your file was submitted successfully and is waiting for
+                        administrator review.
                       </p>
                     </div>
                     <div className="mt-2 text-sm text-green-600">
-                      Du wirst benachrichtigt, sobald die Prüfung abgeschlossen
-                      ist.
+                      You will be notified once the review is complete.
                     </div>
                   </div>
                 )}
                 {/* Error Message */}
                 {uploadStatus === "error" && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <div className="flex items-center mb-3">
-                      <svg className="w-5 h-5 text-red-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" 
-                          d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" 
-                          clipRule="evenodd" 
+                    <div className="flex items-start">
+                      <svg
+                        className="w-5 h-5 text-red-400 mr-2 mt-0.5"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                          clipRule="evenodd"
                         />
                       </svg>
-                      <p className="text-red-700 font-medium">
-                        Beim Upload wurden Fehler gefunden:
-                      </p>
+                      <div>
+                        <h3 className="text-sm font-medium text-red-800 mb-2">
+                          {errorType === "validation"
+                            ? "Validation Error"
+                            : "File Structure Error"}
+                        </h3>
+                        <p className="text-sm text-red-700">{errorMessage}</p>
+                        {errorType === "validation"}
+                      </div>
                     </div>
-                    
-                    {headerErrors.length > 0 ? (
-                      <div className="bg-white rounded p-3 border border-red-100">
-                        <h4 className="font-medium text-red-700 mb-2">Fehler in der Spaltenstruktur:</h4>
-                        <ul className="list-disc list-inside space-y-1 text-sm text-red-600">
-                          {headerErrors.map((error, index) => (
-                            <li key={index}>{error}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : validationErrors.length > 0 ? (
-                      <div className="max-h-60 overflow-y-auto bg-white rounded p-3 border border-red-100">
-                        <table className="min-w-full">
-                          <thead className="bg-red-50 sticky top-0">
-                            <tr>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-red-700">Zeile</th>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-red-700">Spalte</th>
-                              <th className="px-4 py-2 text-left text-xs font-medium text-red-700">Fehlermeldung</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-red-100">
-                            {validationErrors.map((error, index) => (
-                              <tr key={index} className="text-sm">
-                                <td className="px-4 py-2 text-gray-900">{error.row}</td>
-                                <td className="px-4 py-2 text-gray-900">{error.column}</td>
-                                <td className="px-4 py-2 text-gray-600">{error.message}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <p className="text-red-600 text-sm">
-                        Ein unerwarteter Fehler ist aufgetreten. Bitte überprüfe deine Datei und versuche es erneut.
-                      </p>
-                    )}
                   </div>
                 )}
               </div>

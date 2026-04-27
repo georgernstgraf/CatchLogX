@@ -5,7 +5,9 @@ interface User {
   id: string;
   username: string;
   name: string | null;
-  role: string | null;
+  role: "VIEWER" | "ADMIN" | "SUPER_ADMIN";
+  isActive: boolean;
+  isFirstLogin: boolean;
 }
 
 interface AuthContextType {
@@ -14,8 +16,12 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (
     username: string,
-    password: string
-  ) => Promise<{ success: boolean; error?: string }>;
+    password: string,
+  ) => Promise<{
+    success: boolean;
+    error?: string;
+    requiresPasswordChange?: boolean;
+  }>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
 }
@@ -58,7 +64,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (response.ok && data.success) {
         setUser(data.user);
-        return { success: true };
+        return {
+          success: true,
+          requiresPasswordChange: data.requiresPasswordChange === true,
+        };
       } else {
         return { success: false, error: data.error || "Login failed" };
       }
@@ -70,19 +79,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      // Session auf dem Server löschen
+      // Delete server-side session
       await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "include",
       });
     } catch (error) {
-      console.error("Fehler beim Server-Logout:", error);
+      console.error("Server logout failed:", error);
     }
 
-    // User-State löschen
+    // Clear local user state
     setUser(null);
 
-    // Ein kleiner Timeout, damit der State-Update Zeit hat
+    // Small timeout so state updates flush before navigation
     setTimeout(() => {
       window.location.href = "/login";
     }, 200);

@@ -12,7 +12,7 @@ async function main() {
       username: username,
       hashedPassword: hashed,
       email: email,
-      role: "admin",
+      role: "SUPER_ADMIN",
       isFirstLogin: false,
     },
   });
@@ -22,7 +22,7 @@ async function main() {
       username: "user1",
       hashedPassword: await bcrypt.hash("user1", 10),
       email: "user1@testmail.com",
-      role: "viewer",
+      role: "VIEWER",
       isFirstLogin: false,
     },
   });

@@ -9,7 +9,7 @@ interface LogoutButtonProps {
 
 const LogoutButton: React.FC<LogoutButtonProps> = ({
   className = "w-full bg-[#357174] text-white p-3 rounded-lg cursor-pointer text-sm font-medium hover:bg-[#4da1a6] transition-colors duration-200",
-  children = "Abmelden",
+  children = "Sign out",
 }) => {
   const { logout } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
@@ -31,7 +31,7 @@ const LogoutButton: React.FC<LogoutButtonProps> = ({
       disabled={isLoggingOut}
       className={`${className} disabled:opacity-50 disabled:cursor-not-allowed`}
     >
-      {isLoggingOut ? "Wird abgemeldet..." : children}
+      {isLoggingOut ? "Signing out..." : children}
     </button>
   );
 };

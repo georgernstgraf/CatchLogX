@@ -44,3 +44,12 @@ next-env.d.ts
 /app/generated/prisma
 /prisma/prisma/test_db.sqlite
 samples/.~lock.data.xlsx#
+
+# commit-scripts
+/commit-scripts
+
+# Uploads
+/uploads
+
+# Samples
+/samples

@@ -1,7 +1,12 @@
 import UploadPageComponent from "@/components/UploadPageComponent";
+import ProtectedRoute from "@/components/ProtectedRoute";
 
 const UploadPage = () => {
-  return <UploadPageComponent />;
+  return (
+    <ProtectedRoute>
+      <UploadPageComponent />
+    </ProtectedRoute>
+  );
 };
 
 export default UploadPage;

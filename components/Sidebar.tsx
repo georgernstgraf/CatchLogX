@@ -1,10 +1,9 @@
 "use client";
 
 import {
+  CircleHelp,
   FileInputIcon,
   FilePlus2Icon,
-  Fish,
-  Globe,
   LucideIcon,
   SearchCode,
   ShieldEllipsis,
@@ -29,15 +28,9 @@ const Sidebar = () => {
 
   const links: LinkType[] = [
     {
-      title: "SQL Abfrage",
+      title: "SQL Query",
       path: "/",
       icon: SearchCode,
-      protected: false,
-    },
-    {
-      title: "Karte",
-      path: "/map",
-      icon: Globe,
       protected: false,
     },
     {
@@ -47,16 +40,16 @@ const Sidebar = () => {
       protected: false,
     },
     {
-      title: "Meine Uploads",
+      title: "My Uploads",
       path: "/my-uploads",
       icon: FileInputIcon,
       protected: false,
     },
     {
-      title: "Fischsuche",
-      path: "/search/fish",
+      title: "About CatchLogX",
+      path: "/about",
+      icon: CircleHelp,
       protected: false,
-      icon: Fish,
     },
     {
       title: "Admin",
@@ -67,19 +60,24 @@ const Sidebar = () => {
   ];
 
   return (
-    <div className="w-48 h-screen sticky top-0 border-r-[0.8px] border-r-gray-300 bg-[#1d293d] shadow-lg">
+    <div className="w-48 h-screen sticky top-0 border-r-[0.8px] border-r-gray-300 dark:border-r-gray-700 bg-[#1d293d] dark:bg-[#111827] shadow-lg">
       <div className="w-full h-full flex flex-col">
         <div className="flex mt-2 px-1 justify-center">
           <Image alt="Boku Logo" src={Logo} width={30} height={30} />
           <h1 className="font-semibold text-[#e5e5e5] ml-3">
-            Universität für Bodenkultur Wien
+            University of Natural Resources and Life Sciences, Vienna
           </h1>
         </div>
         <hr className="mt-3 w-[95%] text-[#e5e5e5] mx-auto" />
         <div className="flex-1">
           <div className="space-y-4 mt-4">
             {links
-              .filter((link) => !link.protected || user?.role === "admin")
+              .filter(
+                (link) =>
+                  !link.protected ||
+                  user?.role === "ADMIN" ||
+                  user?.role === "SUPER_ADMIN",
+              )
               .map((link) => (
                 <div
                   key={link.title}
@@ -92,8 +90,7 @@ const Sidebar = () => {
           </div>
         </div>
 
-        {/* User dropdown menu at the bottom */}
-        <div className="p-3 pb-6 border-t border-gray-300">
+        <div className="p-3 pb-6 border-t border-gray-300 dark:border-gray-700">
           {user && (
             <div className="relative group">
               <button className="w-full flex items-center text-sm text-[#e5e5e5] hover:text-[#357174] transition-colors duration-200 p-2 rounded">
@@ -101,13 +98,12 @@ const Sidebar = () => {
                 <span className="truncate">{user.name || user.username}</span>
               </button>
 
-              {/* Dropdown menu */}
-              <div className="absolute bottom-full left-0 w-full mb-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 bg-white border border-gray-300 rounded shadow-lg">
+              <div className="absolute bottom-full left-0 w-full mb-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded shadow-lg">
                 <Link
                   href="/settings"
-                  className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                  className="block px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 >
-                  Einstellungen
+                  Settings
                 </Link>
                 <div className="px-3 py-2">
                   <LogoutButton />
