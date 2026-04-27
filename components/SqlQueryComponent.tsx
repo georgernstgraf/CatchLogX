@@ -141,6 +141,32 @@ LEFT JOIN fish_catches fc ON fc."samplingId" = s.id
 GROUP BY s.id, rs."riverName", rs."siteName", rs.latitude, rs.longitude, s."catchDate", s.year
 ORDER BY s.year DESC, s."catchDate" DESC NULLS LAST;`,
   },
+  {
+    id: "fish_by_pit",
+    label: "Catches of a PIT number",
+    description: "All catches of a fish with a specific PIT-Tag-Number",
+    query: `SELECT
+  fc.id AS "Catch ID",
+  fc."pitDec" AS "PIT DEC",
+  fc."pitHex" AS "PIT HEX",
+  fc."recapture" AS "Recapture",
+  fs."speciesName" AS "Species",
+  fs."germanName" AS "German Name",
+  s."catchDate" AS "Date",
+  rs."riverName" AS "River",
+  rs."siteName" AS "Location",
+  fc."lengthMm" AS "Length (mm)",
+  fc."totalWeightGr" AS "Mass (g)"
+FROM fish_catches fc
+JOIN fish_species fs ON fc."speciesId" = fs.id
+JOIN samplings s ON fc."samplingId" = s.id
+JOIN river_sites rs ON s."siteId" = rs.id
+WHERE fc."pitDec" = '{{PARAMETER}}'
+ORDER BY s."catchDate" DESC;`,
+    hasParameter: true,
+    parameterLabel: "PIT DEC Number",
+    parameterPlaceholder: "z.B. 3D9F.123456789",
+  },
 ];
 
 // Dynamically import MapContainer to avoid SSR issues with Leaflet
@@ -151,7 +177,7 @@ const MapComponent = dynamic<{ locations: Location[] }>(
     loading: () => (
       <div className="h-[320px] w-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
         <span className="text-sm text-gray-500 dark:text-gray-400">
-          Karte wird geladen...
+          Map is loading ...
         </span>
       </div>
     ),
@@ -225,7 +251,7 @@ const SqlQueryUIDesign: React.FC = () => {
       (sq) => sq.name.toLowerCase() === trimmed.toLowerCase(),
     );
     if (duplicateName) {
-      showToast("Eine Abfrage mit diesem Namen existiert bereits.", "error");
+      showToast("A query with this name already exists.", "error");
       return;
     }
 
@@ -235,7 +261,7 @@ const SqlQueryUIDesign: React.FC = () => {
     );
     if (duplicateQuery) {
       showToast(
-        `Diese Abfrage ist bereits unter "${duplicateQuery.name}" gespeichert.`,
+        `This query is already saved under the name "${duplicateQuery.name}".`,
         "error",
       );
       return;
@@ -252,11 +278,11 @@ const SqlQueryUIDesign: React.FC = () => {
         await fetchSavedQueries();
         setSaveQueryName("");
         setShowSaveDialog(false);
-        showToast("Abfrage gespeichert.", "success");
+        showToast("Query saved successfully.", "success");
       }
     } catch (err) {
       console.error("Fehler beim Speichern:", err);
-      showToast("Fehler beim Speichern der Abfrage.", "error");
+      showToast("Error while saving the query.", "error");
     } finally {
       setIsSaving(false);
     }
@@ -548,7 +574,7 @@ ORDER BY "Count" DESC;`;
         <section className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm mb-6">
           <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Standardabfragen
+              Frequently Used Queries
             </h2>
           </div>
           <div className="px-6 py-4">
@@ -595,7 +621,7 @@ ORDER BY "Count" DESC;`;
             <>
               <div className="px-6 py-3 flex items-center justify-between border-t border-gray-200 dark:border-gray-700">
                 <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Gespeicherte Abfragen ({savedQueries.length})
+                  Saved Queries ({savedQueries.length})
                 </h2>
               </div>
               <div className="px-6 py-3 pt-0 max-h-48 overflow-y-auto">
@@ -637,7 +663,7 @@ ORDER BY "Count" DESC;`;
                                 }}
                                 className="text-xs px-2 py-1 rounded bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500"
                               >
-                                Abbrechen
+                                Abort
                               </button>
                             </div>
                           ) : (
@@ -658,7 +684,7 @@ ORDER BY "Count" DESC;`;
                                   e.stopPropagation();
                                   setPreviewQuery(sq);
                                 }}
-                                title="Vorschau"
+                                title="Preview"
                                 className="p-1 rounded text-gray-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-900/30"
                               >
                                 <svg
@@ -681,7 +707,7 @@ ORDER BY "Count" DESC;`;
                                   setEditingQueryId(sq.id);
                                   setEditingName(sq.name);
                                 }}
-                                title="Umbenennen"
+                                title="Rename"
                                 className="p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                               >
                                 <svg
@@ -698,7 +724,7 @@ ORDER BY "Count" DESC;`;
                                   e.stopPropagation();
                                   handleDeleteSavedQuery(sq.id);
                                 }}
-                                title="Löschen"
+                                title="Delete"
                                 className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
                               >
                                 <svg
@@ -744,7 +770,7 @@ ORDER BY "Count" DESC;`;
                 >
                   <path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z" />
                 </svg>
-                Speichern
+                Save
               </button>
               <button
                 onClick={handleSqlQuery}
@@ -753,7 +779,7 @@ ORDER BY "Count" DESC;`;
                 }
                 className="inline-flex items-center gap-2 rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
-                {isLoading ? "Wird ausgeführt..." : "Ausführen"}
+                {isLoading ? "Being executed ..." : "Execute"}
               </button>
             </div>
           </div>
@@ -768,7 +794,7 @@ ORDER BY "Count" DESC;`;
             />
             {currentPreset?.hasParameter && parameter && (
               <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                <span className="font-medium">Ausgeführte Query:</span>
+                <span className="font-medium">Executed Query:</span>
                 <pre className="mt-1 p-2 bg-gray-100 dark:bg-gray-900 rounded text-xs overflow-auto text-gray-800 dark:text-gray-200">
                   {getExecutableQuery()}
                 </pre>
@@ -811,7 +837,7 @@ ORDER BY "Count" DESC;`;
                   onClick={() => setPreviewQuery(null)}
                   className="px-4 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
-                  Schließen
+                  Close
                 </button>
                 <button
                   onClick={() => {
@@ -820,7 +846,7 @@ ORDER BY "Count" DESC;`;
                   }}
                   className="px-4 py-2 text-sm rounded-md bg-teal-600 text-white hover:bg-teal-700 font-medium"
                 >
-                  In Editor laden
+                  Load to Editor
                 </button>
               </div>
             </div>
@@ -906,29 +932,29 @@ ORDER BY "Count" DESC;`;
                   </svg>
                 </div>
                 <h3 className="text-base font-semibold text-gray-800 dark:text-gray-100">
-                  Query ersetzen?
+                  Replace Query?
                 </h3>
               </div>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                Die aktuelle Eingabe im Editor wird durch die gespeicherte
-                Abfrage <strong>&ldquo;{confirmLoad.name}&rdquo;</strong>{" "}
-                ersetzt.
+                The current query in the editor will be replaced by the
+                following query:{" "}
+                <strong>&ldquo;{confirmLoad.name}&rdquo;</strong>{" "}
               </p>
               <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
-                Diese Aktion kann nicht rückgängig gemacht werden.
+                This step cannot be revoked.
               </p>
               <div className="flex justify-end gap-2">
                 <button
                   onClick={() => setConfirmLoad(null)}
                   className="px-4 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
-                  Abbrechen
+                  Abort
                 </button>
                 <button
                   onClick={confirmLoadQuery}
                   className="px-4 py-2 text-sm rounded-md bg-teal-600 text-white hover:bg-teal-700 font-medium"
                 >
-                  Ersetzen
+                  Replace
                 </button>
               </div>
             </div>
@@ -940,7 +966,7 @@ ORDER BY "Count" DESC;`;
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
               <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">
-                Query speichern
+                Save Query
               </h3>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Name
@@ -976,7 +1002,7 @@ ORDER BY "Count" DESC;`;
                   disabled={!saveQueryName.trim() || isSaving}
                   className="px-4 py-2 text-sm rounded-md bg-teal-600 text-white hover:bg-teal-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
                 >
-                  {isSaving ? "Wird gespeichert..." : "Speichern"}
+                  {isSaving ? "Saving ..." : "Save"}
                 </button>
               </div>
             </div>
@@ -986,7 +1012,7 @@ ORDER BY "Count" DESC;`;
         <section className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm mb-6">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Ergebnisse
+              Results
             </h2>
             {results.length > 0 && (
               <button
@@ -1005,7 +1031,7 @@ ORDER BY "Count" DESC;`;
                     clipRule="evenodd"
                   />
                 </svg>
-                CSV herunterladen
+                Download CSV
               </button>
             )}
           </div>
@@ -1013,7 +1039,7 @@ ORDER BY "Count" DESC;`;
             {error && (
               <div className="mb-4 rounded-lg bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 p-4">
                 <p className="text-sm font-medium text-red-800 dark:text-red-300">
-                  Fehler
+                  Error
                 </p>
                 <p className="text-sm text-red-700 dark:text-red-400 mt-1">
                   {error}
@@ -1023,7 +1049,7 @@ ORDER BY "Count" DESC;`;
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <div className="text-sm text-gray-500 dark:text-gray-400">
-                  Wird geladen...
+                  Loading ...
                 </div>
               </div>
             ) : results.length > 0 ? (
@@ -1031,14 +1057,14 @@ ORDER BY "Count" DESC;`;
                 <ResultsTable
                   rows={results}
                   onRowClick={handleSamplingClick}
-                  clickableColumn="Befischungs-ID"
+                  clickableColumn="Fishing-ID"
                   selectedId={selectedSamplingId}
                 />
                 <div className="mt-3 text-xs text-gray-500 dark:text-gray-400">
                   {results.length} Zeilen
-                  {results.some((r) => "Befischungs-ID" in r) && (
+                  {results.some((r) => "Fishing-ID" in r) && (
                     <span className="ml-2 text-teal-600 dark:text-teal-400">
-                      (Klicken Sie auf eine Zeile, um Details zu sehen)
+                      (Click on a row to see the details.)
                     </span>
                   )}
                 </div>
@@ -1047,11 +1073,11 @@ ORDER BY "Count" DESC;`;
                 {selectedSamplingId !== null && (
                   <div className="mt-6 p-4 bg-teal-50 dark:bg-teal-900/30 border border-teal-200 dark:border-teal-800 rounded-lg">
                     <h3 className="text-sm font-medium text-teal-800 dark:text-teal-300 mb-3">
-                      Fänge der Befischung #{selectedSamplingId}
+                      Catches of fishing #{selectedSamplingId}
                     </h3>
                     {isLoadingDetails ? (
                       <div className="text-sm text-gray-500 dark:text-gray-400">
-                        Wird geladen...
+                        Loading ...
                       </div>
                     ) : samplingDetails.length > 0 ? (
                       <div className="overflow-auto">
@@ -1059,7 +1085,7 @@ ORDER BY "Count" DESC;`;
                       </div>
                     ) : (
                       <div className="text-sm text-gray-500 dark:text-gray-400">
-                        Keine Fänge für diese Befischung gefunden.
+                        No catches for this specific fishing found.
                       </div>
                     )}
                   </div>
@@ -1067,7 +1093,7 @@ ORDER BY "Count" DESC;`;
               </div>
             ) : (
               <div className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">
-                Keine Ergebnisse. Führen Sie eine Query aus.
+                No results. Please execute a query.
               </div>
             )}
           </div>
@@ -1077,7 +1103,7 @@ ORDER BY "Count" DESC;`;
           <section className="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm">
             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
               <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Standorte
+                Locations
               </h2>
             </div>
             <div className="px-6 py-6">
@@ -1099,7 +1125,7 @@ ORDER BY "Count" DESC;`;
                 </ul>
               ) : (
                 <div className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">
-                  Keine Standorte mit Koordinaten gefunden
+                  No locations with coordinates found in the results.
                 </div>
               )}
             </div>
