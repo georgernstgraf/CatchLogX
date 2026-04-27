@@ -50,7 +50,11 @@ export async function GET(
       );
     }
 
-    if (!dummyFile.isVisible && session.user.role !== "admin") {
+    if (
+      !dummyFile.isVisible &&
+      session.user.role !== "ADMIN" &&
+      session.user.role !== "SUPER_ADMIN"
+    ) {
       return NextResponse.json(
         { error: "Dummy file not found." },
         { status: 404 },

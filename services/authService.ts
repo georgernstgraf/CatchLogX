@@ -16,6 +16,10 @@ export async function signIn(username: string, password: string) {
     return { success: false, status: 401, error: "Invalid credentials" };
   }
 
+  if (!user.isActive) {
+    return { success: false, status: 403, error: "Account is inactive" };
+  }
+
   const sessionToken = randomBytes(32).toString("hex");
   const expires = new Date();
   expires.setDate(expires.getDate() + 30);
@@ -37,6 +41,7 @@ export async function signIn(username: string, password: string) {
       username: user.username,
       name: user.name,
       role: user.role,
+      isActive: user.isActive,
       isFirstLogin: user.isFirstLogin,
     },
   };
@@ -58,6 +63,7 @@ export async function getSession(sessionToken: string) {
           username: true,
           name: true,
           role: true,
+          isActive: true,
           isFirstLogin: true,
         },
       },
@@ -65,6 +71,13 @@ export async function getSession(sessionToken: string) {
   });
 
   if (!session) {
+    return { valid: false, expired: false, session: null };
+  }
+
+  if (!session.user.isActive) {
+    await prisma.session.delete({
+      where: { sessionToken },
+    });
     return { valid: false, expired: false, session: null };
   }
 

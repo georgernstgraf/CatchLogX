@@ -15,6 +15,7 @@ import {
   Edit,
 } from "lucide-react";
 import AdminDummyFilesManager from "./AdminDummyFilesManager";
+import { useAuth } from "./AuthProvider";
 
 type Upload = {
   id: string;
@@ -31,11 +32,15 @@ type User = {
   username: string;
   email: string;
   name: string;
-  role: string;
+  role: "VIEWER" | "ADMIN" | "SUPER_ADMIN";
+  isActive: boolean;
   createdAt: string;
 };
 
 const AdminPageComponent = () => {
+  const { user: currentUser } = useAuth();
+  const isCurrentUserSuperAdmin = currentUser?.role === "SUPER_ADMIN";
+
   const [activeTab, setActiveTab] = useState("uploads");
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -64,7 +69,8 @@ const AdminPageComponent = () => {
     email: "",
     username: "",
     name: "",
-    role: "",
+    role: "VIEWER" as "VIEWER" | "ADMIN" | "SUPER_ADMIN",
+    isActive: true,
     password: "",
   });
 
@@ -291,6 +297,7 @@ const AdminPageComponent = () => {
       username: user.username,
       name: user.name || "",
       role: user.role,
+      isActive: user.isActive,
       password: "",
     });
     setEditingUserId(user.id);
@@ -309,6 +316,7 @@ const AdminPageComponent = () => {
         username: editUser.username,
         name: editUser.name,
         role: editUser.role,
+        isActive: editUser.isActive,
       };
 
       // Only include password if it was changed
@@ -337,7 +345,8 @@ const AdminPageComponent = () => {
           email: "",
           username: "",
           name: "",
-          role: "",
+          role: "VIEWER",
+          isActive: true,
           password: "",
         });
         alert("User updated successfully.");
@@ -563,6 +572,12 @@ const AdminPageComponent = () => {
                           Name
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Role
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                           Created At
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -584,6 +599,20 @@ const AdminPageComponent = () => {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                             {user.name}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                            {user.role}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                                user.isActive
+                                  ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
+                                  : "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+                              }`}
+                            >
+                              {user.isActive ? "Active" : "Inactive"}
+                            </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                             {user.createdAt}
@@ -831,12 +860,39 @@ const AdminPageComponent = () => {
                 <select
                   value={editUser.role}
                   onChange={(e) =>
-                    setEditUser({ ...editUser, role: e.target.value })
+                    setEditUser({
+                      ...editUser,
+                      role: e.target.value as
+                        | "VIEWER"
+                        | "ADMIN"
+                        | "SUPER_ADMIN",
+                    })
                   }
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174] bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
                 >
-                  <option value="viewer">Viewer</option>
-                  <option value="admin">Admin</option>
+                  <option value="VIEWER">Viewer</option>
+                  <option value="ADMIN">Admin</option>
+                  {isCurrentUserSuperAdmin && (
+                    <option value="SUPER_ADMIN">Super Admin</option>
+                  )}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Account Status
+                </label>
+                <select
+                  value={editUser.isActive ? "ACTIVE" : "INACTIVE"}
+                  onChange={(e) =>
+                    setEditUser({
+                      ...editUser,
+                      isActive: e.target.value === "ACTIVE",
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174] bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
+                >
+                  <option value="ACTIVE">Active</option>
+                  <option value="INACTIVE">Inactive</option>
                 </select>
               </div>
               <div>
@@ -866,7 +922,8 @@ const AdminPageComponent = () => {
                     email: "",
                     username: "",
                     name: "",
-                    role: "",
+                    role: "VIEWER",
+                    isActive: true,
                     password: "",
                   });
                 }}

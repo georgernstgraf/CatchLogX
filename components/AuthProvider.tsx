@@ -5,7 +5,8 @@ interface User {
   id: string;
   username: string;
   name: string | null;
-  role: string | null;
+  role: "VIEWER" | "ADMIN" | "SUPER_ADMIN";
+  isActive: boolean;
   isFirstLogin: boolean;
 }
 

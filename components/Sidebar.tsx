@@ -72,7 +72,12 @@ const Sidebar = () => {
         <div className="flex-1">
           <div className="space-y-4 mt-4">
             {links
-              .filter((link) => !link.protected || user?.role === "admin")
+              .filter(
+                (link) =>
+                  !link.protected ||
+                  user?.role === "ADMIN" ||
+                  user?.role === "SUPER_ADMIN",
+              )
               .map((link) => (
                 <div
                   key={link.title}

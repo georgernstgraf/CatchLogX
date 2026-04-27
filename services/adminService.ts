@@ -1,9 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcrypt";
 import * as XLSX from "xlsx";
-import { Uploads } from "@/app/generated/prisma";
+import { Uploads, UserRoles } from "@/app/generated/prisma";
 import { downloadUploadFile } from "@/lib/minio";
 import { createMailerTransporter } from "@/lib/mailer";
+
+const adminRoles = new Set<UserRoles>(["ADMIN", "SUPER_ADMIN"]);
 
 export async function fetchAllData() {
   const users = await prisma.user.findMany({
@@ -13,6 +15,7 @@ export async function fetchAllData() {
       email: true,
       name: true,
       role: true,
+      isActive: true,
       createdAt: true,
     },
   });
@@ -268,8 +271,12 @@ async function acceptUploadAndPushToDb(upload: Uploads) {
   // 1. Alle PITs zählen (wie oft kommen sie in der Datei vor)
   for (let i = 0; i < rows.length; i++) {
     const pitDec = hasLegacySiteCode
-      ? rows[i]["PIT DEC"] ? String(rows[i]["PIT DEC"]).trim() : null
-      : rows[i]["pit_dec"] ? String(rows[i]["pit_dec"]).trim() : null;
+      ? rows[i]["PIT DEC"]
+        ? String(rows[i]["PIT DEC"]).trim()
+        : null
+      : rows[i]["pit_dec"]
+        ? String(rows[i]["pit_dec"]).trim()
+        : null;
 
     if (pitDec) {
       pitDecCounts.set(pitDec, (pitDecCounts.get(pitDec) || 0) + 1);
@@ -546,8 +553,12 @@ async function acceptUploadAndPushToDb(upload: Uploads) {
 
     // PIT DEC für recapture bestimmen
     const pitDec = hasLegacySiteCode
-      ? row["PIT DEC"] ? String(row["PIT DEC"]).trim() : null
-      : row["pit_dec"] ? String(row["pit_dec"]).trim() : null;
+      ? row["PIT DEC"]
+        ? String(row["PIT DEC"]).trim()
+        : null
+      : row["pit_dec"]
+        ? String(row["pit_dec"]).trim()
+        : null;
     const isRecapture = pitDec ? pitDecRecapture.get(pitDec) || false : false;
 
     try {
@@ -570,8 +581,12 @@ async function acceptUploadAndPushToDb(upload: Uploads) {
           ),
           pitDec,
           pitHex: hasLegacySiteCode
-            ? row["PIT HEX"] ? String(row["PIT HEX"]).trim() : null
-            : row["pit_hex"] ? String(row["pit_hex"]).trim() : null,
+            ? row["PIT HEX"]
+              ? String(row["PIT HEX"]).trim()
+              : null
+            : row["pit_hex"]
+              ? String(row["pit_hex"]).trim()
+              : null,
           recapture: isRecapture,
         },
       });
@@ -657,28 +672,64 @@ export async function updateUser(
     username?: string;
     email?: string;
     name?: string;
-    role?: string;
+    role?: UserRoles;
+    isActive?: boolean;
     password?: string;
   },
-  sessionData: { user: { id: string; username: string } },
+  sessionData: {
+    user: { id: string; username: string; role: UserRoles; isActive: boolean };
+  },
 ) {
+  if (!sessionData.user.isActive) {
+    return { forbidden: true, reason: "Inactive users cannot manage accounts" };
+  }
+
   const existingUser = await prisma.user.findUnique({
     where: { id },
-    select: { id: true, username: true, role: true },
+    select: { id: true, username: true, role: true, isActive: true },
   });
 
   if (!existingUser) {
     return { notFound: true };
   }
 
-  if (
-    existingUser.role === "admin" &&
-    existingUser.id !== sessionData.user.id
-  ) {
-    return { forbidden: true };
+  const actorRole = sessionData.user.role;
+  const actorId = sessionData.user.id;
+  const isSuperAdmin = actorRole === "SUPER_ADMIN";
+  const isSelfEdit = existingUser.id === actorId;
+
+  if (!isSuperAdmin) {
+    if (!adminRoles.has(actorRole)) {
+      return { forbidden: true, reason: "Admin access required" };
+    }
+
+    // ADMIN may only manage VIEWER users, plus own account details.
+    if (!isSelfEdit && existingUser.role !== "VIEWER") {
+      return {
+        forbidden: true,
+        reason: "Admins can only edit viewer accounts",
+      };
+    }
+
+    if (body.role && body.role !== existingUser.role) {
+      return {
+        forbidden: true,
+        reason: "Only super admins can change user roles",
+      };
+    }
+
+    if (
+      typeof body.isActive === "boolean" &&
+      body.isActive !== existingUser.isActive
+    ) {
+      return {
+        forbidden: true,
+        reason: "Only super admins can change activation state",
+      };
+    }
   }
 
-  const { username, email, name, role, password } = body;
+  const { username, email, name, role, isActive, password } = body;
 
   if (username || email) {
     const conflictUser = await prisma.user.findFirst({
@@ -704,8 +755,33 @@ export async function updateUser(
   if (username) updateData.username = username;
   if (email) updateData.email = email;
   if (name !== undefined) updateData.name = name;
+
+  // Prevent removing/deactivating the final active SUPER_ADMIN.
+  if (existingUser.role === "SUPER_ADMIN") {
+    const activeSuperAdminCount = await prisma.user.count({
+      where: { role: "SUPER_ADMIN", isActive: true },
+    });
+
+    const roleWouldChangeAwayFromSuperAdmin = role && role !== "SUPER_ADMIN";
+    const activeWouldBeDisabled = isActive === false;
+
+    if (
+      existingUser.isActive &&
+      activeSuperAdminCount <= 1 &&
+      (roleWouldChangeAwayFromSuperAdmin || activeWouldBeDisabled)
+    ) {
+      return {
+        forbidden: true,
+        reason: "Cannot demote or deactivate the last active super admin",
+      };
+    }
+  }
+
   if (role && role !== existingUser.role) {
     updateData.role = role;
+  }
+  if (typeof isActive === "boolean") {
+    updateData.isActive = isActive;
   }
   if (password) {
     updateData.hashedPassword = await bcrypt.hash(password, 10);
@@ -721,6 +797,7 @@ export async function updateUser(
       email: true,
       name: true,
       role: true,
+      isActive: true,
       createdAt: true,
     },
   });
@@ -762,7 +839,8 @@ export async function createUser(
       email,
       name,
       hashedPassword,
-      role: "viewer",
+      role: "VIEWER",
+      isActive: true,
       isFirstLogin: true,
     },
     select: {
@@ -771,6 +849,7 @@ export async function createUser(
       email: true,
       name: true,
       role: true,
+      isActive: true,
       createdAt: true,
     },
   });
@@ -780,25 +859,59 @@ export async function createUser(
   return { newUser };
 }
 
-export async function deleteUser(id: string, adminUsername: string) {
+export async function deleteUser(
+  id: string,
+  sessionData: {
+    user: { id: string; username: string; role: UserRoles; isActive: boolean };
+  },
+) {
+  if (!sessionData.user.isActive) {
+    return { forbidden: true, reason: "Inactive users cannot delete accounts" };
+  }
+
   const user = await prisma.user.findUnique({
     where: { id },
-    select: { id: true, username: true, role: true },
+    select: { id: true, username: true, role: true, isActive: true },
   });
 
   if (!user) {
     return { notFound: true };
   }
 
-  if (user.role === "admin") {
-    return { forbidden: true };
+  const actorRole = sessionData.user.role;
+  const isSuperAdmin = actorRole === "SUPER_ADMIN";
+
+  // Existing no-delete restrictions are bypassed for inactive target accounts.
+  if (user.isActive) {
+    if (!isSuperAdmin && user.role !== "VIEWER") {
+      return {
+        forbidden: true,
+        reason: "Admins can only delete active viewer accounts",
+      };
+    }
+
+    if (user.role === "SUPER_ADMIN") {
+      const activeSuperAdminCount = await prisma.user.count({
+        where: { role: "SUPER_ADMIN", isActive: true },
+      });
+
+      if (activeSuperAdminCount <= 1) {
+        return {
+          forbidden: true,
+          reason: "Cannot delete the last active super admin",
+        };
+      }
+    }
   }
 
   await prisma.user.delete({
     where: { id },
   });
 
-  console.log(`[ADMIN] User deleted by ${adminUsername}:`, user.username);
+  console.log(
+    `[ADMIN] User deleted by ${sessionData.user.username}:`,
+    user.username,
+  );
 
   return { success: true };
 }

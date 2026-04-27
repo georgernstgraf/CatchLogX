@@ -24,7 +24,7 @@ export async function PATCH(
 
     if (result.forbidden) {
       return NextResponse.json(
-        { error: "Cannot edit other admin users" },
+        { error: result.reason || "Insufficient permissions" },
         { status: 403 },
       );
     }
@@ -65,7 +65,7 @@ export async function DELETE(
   try {
     const { id } = await context.params;
 
-    const result = await deleteUser(id, sessionData.user.username);
+    const result = await deleteUser(id, sessionData);
 
     if (result.notFound) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -73,7 +73,7 @@ export async function DELETE(
 
     if (result.forbidden) {
       return NextResponse.json(
-        { error: "Cannot delete admin users" },
+        { error: result.reason || "Insufficient permissions" },
         { status: 403 },
       );
     }

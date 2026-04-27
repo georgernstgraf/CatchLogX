@@ -27,6 +27,7 @@ model User {
   name           String?
   email          String     @unique
   role           UserRoles  @default(VIEWER)
+  isActive       Boolean    @default(true)
   isFirstLogin   Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

@@ -1,11 +1,13 @@
 import { NextRequest } from "next/server";
 import { prisma } from "./prisma";
+import { UserRoles } from "@/app/generated/prisma";
 
 export interface SessionUser {
   id: string;
   username: string;
   name: string | null;
-  role: string | null;
+  role: UserRoles;
+  isActive: boolean;
 }
 
 export interface SessionData {
@@ -20,7 +22,7 @@ export interface SessionData {
  * @returns Promise<SessionData | null> - The session data if valid, null otherwise
  */
 export async function getSessionUser(
-  request: NextRequest
+  request: NextRequest,
 ): Promise<SessionData | null> {
   try {
     // Get session token from cookie
@@ -40,12 +42,20 @@ export async function getSessionUser(
             username: true,
             name: true,
             role: true,
+            isActive: true,
           },
         },
       },
     });
 
     if (!session) {
+      return null;
+    }
+
+    if (!session.user.isActive) {
+      await prisma.session.delete({
+        where: { sessionToken },
+      });
       return null;
     }
 
