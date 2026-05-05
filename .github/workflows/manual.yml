@@ -1,0 +1,34 @@
+name: Deploy to Test Server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy catchlogx.test.a19.at
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.TEST_SERVER_SSH_KEY }}" > ~/.ssh/catchlogx_test_key
+          chmod 600 ~/.ssh/catchlogx_test_key
+
+          ssh-keyscan -p ${{ secrets.TEST_SERVER_PORT }} ${{ secrets.TEST_SERVER_HOST }} >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/catchlogx_test_key -p ${{ secrets.TEST_SERVER_PORT }} ${{ secrets.TEST_SERVER_USER }}@${{ secrets.TEST_SERVER_HOST }} << 'EOF'
+            set -e
+
+            cd ~/CatchLogX
+
+            git fetch origin master
+            git reset --hard origin/master
+
+            docker compose down
+            docker compose up -d --build
+
+            docker image prune -f
+          EOF
