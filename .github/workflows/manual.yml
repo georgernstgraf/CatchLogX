@@ -17,9 +17,9 @@ jobs:
           echo "${{ secrets.TEST_SERVER_SSH_KEY }}" > ~/.ssh/catchlogx_test_key
           chmod 600 ~/.ssh/catchlogx_test_key
 
-          ssh-keyscan -p ${{ secrets.TEST_SERVER_PORT }} ${{ secrets.TEST_SERVER_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -p ${{ secrets.TEST_SERVER_SSH_PORT }} ${{ secrets.TEST_SERVER_HOST }} >> ~/.ssh/known_hosts
 
-          ssh -i ~/.ssh/catchlogx_test_key -p ${{ secrets.TEST_SERVER_PORT }} ${{ secrets.TEST_SERVER_USER }}@${{ secrets.TEST_SERVER_HOST }} << 'EOF'
+          ssh -i ~/.ssh/catchlogx_test_key -p ${{ secrets.TEST_SERVER_SSH_PORT }} ${{ secrets.TEST_SERVER_USER }}@${{ secrets.TEST_SERVER_HOST }} << 'EOF'
             set -e
 
             cd ~/CatchLogX
