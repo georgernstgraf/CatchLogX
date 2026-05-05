@@ -91,9 +91,6 @@ services:
       && npx prisma db push
       && npx tsx scripts/create-user.ts
       && npx tsx scripts/insert-fish.ts
-      && npx tsx scripts/insert-river-sites.ts
-      && npx tsx scripts/insert-samplings.ts
-      && npx tsx scripts/insert-fish-catches.ts
       && npm run build
       && npx next start -p 3001
       "
