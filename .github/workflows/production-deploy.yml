@@ -1,0 +1,27 @@
+name: Deploy CatchLogX
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, catchlogx-server]
+
+    steps:
+      - name: Update repository
+        run: |
+          cd /opt/CatchLogX
+          git fetch origin main
+          git reset --hard origin/main
+
+      - name: Deploy with Docker Compose
+        run: |
+          cd /opt/CatchLogX
+          docker compose down
+          docker compose up -d --build
+
+      - name: Show running containers
+        run: |
+          docker ps
