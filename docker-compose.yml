@@ -89,7 +89,6 @@ services:
       sh -c "npm ci --include=dev || npm install --include=dev
       && npx prisma generate
       && npx prisma db push
-      && npx tsx scripts/create-user.ts
       && npx tsx scripts/insert-fish.ts
       && npm run build
       && npx next start -p 3001
