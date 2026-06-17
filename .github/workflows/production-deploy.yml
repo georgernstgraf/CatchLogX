@@ -13,8 +13,8 @@ jobs:
       - name: Update repository
         run: |
           cd /opt/CatchLogX
-          git fetch origin main
-          git reset --hard origin/main
+          git fetch origin master
+          git reset --hard origin/master
 
       - name: Deploy with Docker Compose
         run: |
