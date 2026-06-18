@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set("session-token", result.sessionToken!, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: false,
       sameSite: "lax",
       expires: result.expires,
       path: "/",
