@@ -14,7 +14,7 @@ import React from "react";
 import LogoutButton from "./LogoutButton";
 import { useAuth } from "./AuthProvider";
 import Image from "next/image";
-import Logo from "@/assets/img/Boku-wien_randlos.svg";
+import Logo from "@/assets/img/Logo.png";
 
 const Sidebar = () => {
   const { user } = useAuth();
@@ -62,9 +62,16 @@ const Sidebar = () => {
   return (
     <div className="w-48 h-screen sticky top-0 border-r-[0.8px] border-r-gray-300 dark:border-r-gray-700 bg-[#1d293d] dark:bg-[#111827] shadow-lg">
       <div className="w-full h-full flex flex-col">
-        <div className="flex mt-2 px-1 justify-center">
-          <Image alt="Boku Logo" src={Logo} width={30} height={30} />
-          <h1 className="font-semibold text-[#e5e5e5] ml-3">
+        <div className="mt-2 flex flex-col items-center px-2 text-center">
+          <Image
+            alt="Boku Logo"
+            src={Logo}
+            width={56}
+            height={56}
+            className="shrink-0 object-contain"
+            priority
+          />
+          <h1 className="mt-2 text-xs font-semibold leading-tight text-[#e5e5e5]">
             University of Natural Resources and Life Sciences, Vienna
           </h1>
         </div>
@@ -99,12 +106,6 @@ const Sidebar = () => {
               </button>
 
               <div className="absolute bottom-full left-0 w-full mb-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded shadow-lg">
-                <Link
-                  href="/settings"
-                  className="block px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                >
-                  Settings
-                </Link>
                 <div className="px-3 py-2">
                   <LogoutButton />
                 </div>
