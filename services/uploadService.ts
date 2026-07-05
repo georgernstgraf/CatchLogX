@@ -254,7 +254,11 @@ function buildSchema(lists: Record<string, Set<string>>) {
     });
 }
 
-export async function processUpload(fileBuffer: Buffer, userId: string) {
+export async function processUpload(
+  fileBuffer: Buffer,
+  filename: string,
+  userId: string,
+) {
   try {
     const workbook = XLSX.read(fileBuffer, {
       type: "buffer",
@@ -475,8 +479,6 @@ export async function processUpload(fileBuffer: Buffer, userId: string) {
       };
     }
 
-    // Datei in MinIO speichern
-    const filename = `upload_${Date.now()}_${userId}.xlsx`;
     await uploadUploadFile(fileBuffer, filename);
 
     // Upload-Eintrag in der Datenbank anlegen

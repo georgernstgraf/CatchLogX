@@ -9,9 +9,23 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const fileBuffer = Buffer.from(await req.arrayBuffer());
+    const formData = await req.formData();
+    const file = formData.get("file") as File | null;
 
-    const result = await processUpload(fileBuffer, authResult.user.id);
+    if (!file) {
+      return NextResponse.json(
+        { error: "Keine Datei erhalten" },
+        { status: 400 },
+      );
+    }
+
+    const fileBuffer = Buffer.from(await file.arrayBuffer());
+
+    const result = await processUpload(
+      fileBuffer,
+      file.name,
+      authResult.user.id,
+    );
 
     if (!result.success) {
       if (

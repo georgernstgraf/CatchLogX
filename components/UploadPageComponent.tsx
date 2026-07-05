@@ -108,9 +108,12 @@ const UploadPageComponent = () => {
     setErrorType(null);
 
     try {
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+
       const response = await fetch("/api/upload/new", {
         method: "POST",
-        body: selectedFile,
+        body: formData,
       });
 
       const contentType = response.headers.get("content-type") || "";
