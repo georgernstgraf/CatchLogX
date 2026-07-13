@@ -87,6 +87,24 @@ Uploaded files are stored in **MinIO** (S3-compatible), managed via `lib/minio.t
 
 When committing, consult the `issue-workflow` skill. Every commit must reference a GitHub issue number (e.g. `#42`). Do not create commits without an existing issue.
 
+## Skills
+
+Skills live in `.opencode/skills/` and are **committed to the repo** — every clone discovers them without extra setup.
+
+- `engineering/` — vendored snapshot of [mattpocock/skills](https://github.com/mattpocock/skills) (`skills/engineering/`). 18 skills (code-review, implement, tdd, diagnosing-bugs, …). Not auto-updated.
+- `issue-workflow/` — project-owned; backs the commit rule below.
+- `knowledge-persistence/` — project-owned; maintains the `docs/ai/*` knowledge files.
+
+**Update engineering skills** (run when you want upstream changes; review the diff before committing):
+```
+bash scripts/update-engineering-skills.sh
+git diff .opencode/skills/engineering
+```
+
+Notes:
+- The `searxng` skill is intentionally **not** in the repo — it is coupled to a private SearXNG instance and an MCP server registered in the user's global opencode config.
+- `domain-modeling` and `grill-with-docs` exist both in the engineering set and (for some contributors) in global skills; the vendored (in-repo) versions are canonical for this project.
+
 ## Knowledge Bootstrap
 Before starting any task, read the following files in order:
 1. `docs/ai/HANDOFF.md` ← **read first, act on it**
