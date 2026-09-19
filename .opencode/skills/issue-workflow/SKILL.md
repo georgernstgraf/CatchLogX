@@ -51,6 +51,13 @@ This repository follows **trunk-based development**:
   - Rationale: trunk-based workflows depend on always building from the
     current state — otherwise avoidable conflicts and re-discovery of other
     people's commits pile up.
+- **Hook activation check (warn only):** At session start (after the pull),
+  run `git config core.hooksPath`. If it is not `.githooks`, **warn the
+  user** that the pre-push lint gate is inactive and share the one-time
+  activation command:
+  `git config core.hooksPath .githooks`
+  Do NOT run the activation for them — warn and let the user run it (see
+  `npm run check:hooks` for the same check outside a session).
 
 ## Required Inputs
 

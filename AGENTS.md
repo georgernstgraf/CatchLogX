@@ -28,6 +28,9 @@ No test runner or typecheck script is configured. TypeScript errors surface duri
 - **Pre-push hook (lint gate):** Pushes to `dev` are aborted when `npm run lint` fails.
   - Hook lives at `.githooks/pre-push`; activate once per clone with:
     `git config core.hooksPath .githooks`
+  - Check activation with `npm run check:hooks` (warns only — never fails).
+  - Agents: warn about an inactive hook at session start (see the
+    `issue-workflow` skill) — warn only, let the user activate it.
 
 ## Prisma
 

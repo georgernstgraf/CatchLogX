@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "check:hooks": "node scripts/check-hooks.mjs",
     "create-user": "tsx scripts/create-user.ts"
   },
   "dependencies": {
