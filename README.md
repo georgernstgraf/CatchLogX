@@ -1,6 +1,6 @@
 # CatchLogX 🐟
 
-**CatchLogX** ist eine moderne Web-Anwendung für die Verwaltung und Analyse von Befischungsdaten, entwickelt als Diplomprojekt an der HTL Spengergasse für die Universität für Bodenkultur Wien, Abteilung für Hydrobiologie.
+**CatchLogX** ist eine moderne Web-Anwendung für die Verwaltung und Analyse von Befischungsdaten, entwickelt als Diplomprojekt an der HTL Spengergasse für die Universität für Bodenkultur Wien (BOKU), Abteilung für Hydrobiologie.
 
 ## 📋 Projektbeschreibung
 
