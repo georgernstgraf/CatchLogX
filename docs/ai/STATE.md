@@ -3,7 +3,9 @@
 Current status as of 2026-09-19.
 
 ## Current Focus
-New diploma group taking over (2026-09). **Trunk-based development on `dev`** — no feature branches; `git pull --ff-only origin dev` at session start. `master` is production (protected: PR + 1 approval), merges come from `dev` only. Pre-push lint gate protects `dev` (`.githooks/pre-push`, activate via `git config core.hooksPath .githooks`).
+New diploma group taking over (2026-09). **Trunk-based development on `dev`** — no feature branches; `git pull --ff-only origin dev` at session start. `master` is production (protected: PR + 1 approval, enforced for admins), merges come from `dev` only. Pre-push lint gate protects `dev` (`.githooks/pre-push`, activate via `git config core.hooksPath .githooks`).
+
+Kickoff meeting 2026-09-19 (see `docs/meetings/2026-09-19-kickoff.md`, protocol + assignments in #113). Roles: Dominik (backend lead), Rodion (database), Armin + Alex (frontend), Jakob (testing). Domain contact: Lena (BOKU Hydrobiologie), technical: Martin Seebacher (`@Fishknut`). Weekly Zoom on Saturdays. Every open issue carries an assignee.
 
 ## Completed (this cycle)
 - [x] Custom cookie-based session auth (sign-in, session, logout)
