@@ -157,3 +157,4 @@ Bei Problemen oder Verbesserungsvorschlägen erstellen Sie bitte ein Issue im Gi
 - [Prisma Documentation](https://www.prisma.io/docs)
 - [Next.js Documentation](https://nextjs.org/docs)
 - [HTL Spengergasse](https://spengergasse.at)
+
