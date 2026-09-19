@@ -82,6 +82,8 @@ Uploaded files are stored in **MinIO** (S3-compatible), managed via `lib/minio.t
 | Email sender (nodemailer) | `lib/mailer.ts` |
 | Admin panel page | `app/admin/page.tsx` |
 | User creation (dev seed) | `scripts/create-user.ts` |
+| Supervision log (hours) | `docs/Betreuung.md` |
+| Meeting minutes | `docs/meetings/` (one file per meeting: `YYYY-MM-DD-topic.md`, German) |
 
 ## Git / Issues
 
