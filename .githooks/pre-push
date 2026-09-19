@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Pre-push hook: protects the dev branch (trunk) from faulty code (#111).
+# One-time activation per clone:  git config core.hooksPath .githooks
+set -uo pipefail
+
+fail() {
+  echo "" >&2
+  echo "❌ pre-push: push ABORTED — $1" >&2
+  echo "   Fix the issues, then push again." >&2
+  exit 1
+}
+
+# Gate only pushes that target a protected ref (dev / master).
+# pre-push receives lines: "<local_ref> <local_oid> <remote_ref> <remote_oid>"
+gate=0
+while read -r _local_ref _local_oid remote_ref _remote_oid; do
+  case "$remote_ref" in
+    refs/heads/dev) gate=1 ;;
+  esac
+done
+
+[ "$gate" -eq 1 ] || exit 0   # push does not touch the trunk — nothing to check
+
+# Worktree must be clean enough for a meaningful check
+if [ -n "$(git status --porcelain -uno)" ]; then
+  echo "⚠️  pre-push: uncommitted changes present — linting the last committed state" >&2
+fi
+
+if ! command -v npm >/dev/null 2>&1; then
+  fail "npm is not available (install Node.js >= 20.9)"
+fi
+
+if [ ! -d node_modules ]; then
+  echo "📦 pre-push: node_modules missing — running npm ci ..." >&2
+  npm ci || fail "npm ci failed — cannot verify code quality before push"
+fi
+
+echo "🔍 pre-push: running lint gate (npm run lint) ..." >&2
+npm run lint >/dev/null 2>&1 || fail "npm run lint failed — faulty code must not reach dev (run 'npm run lint' locally to see the errors)"
+echo "✅ pre-push: lint passed" >&2
+exit 0

@@ -1,9 +1,9 @@
 # Project State
 
-Current status as of 2026-04-27.
+Current status as of 2026-09-19.
 
 ## Current Focus
-Active development on `dev` branch. Feature branches merged into `dev`; `master` is stale.
+New diploma group taking over (2026-09). **Trunk-based development on `dev`** — no feature branches; `git pull --ff-only origin dev` at session start. `master` is production (protected: PR + 1 approval), merges come from `dev` only. Pre-push lint gate protects `dev` (`.githooks/pre-push`, activate via `git config core.hooksPath .githooks`).
 
 ## Completed (this cycle)
 - [x] Custom cookie-based session auth (sign-in, session, logout)
@@ -25,8 +25,9 @@ Active development on `dev` branch. Feature branches merged into `dev`; `master`
 ## Pending
 - [ ] Database migrations are not current — `prisma db push` is used instead of `prisma migrate dev`
 - [ ] NextAuth v4 is configured but not integrated with the custom session system
-- [ ] No automated tests exist
+- [ ] No automated tests exist (see #104)
 - [ ] Fish search component was removed (issue #60)
+- [ ] 26 Dependabot alerts incl. 4 critical (see #109)
 
 ## Blockers
 None.

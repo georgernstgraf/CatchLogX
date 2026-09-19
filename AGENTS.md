@@ -11,13 +11,23 @@ PostgreSQL 16 and MinIO run via Docker Compose (`docker-compose.yml`).
 ```
 npm run dev           # start dev server (needs PostgreSQL + MinIO running)
 npm run build         # production build
-npm run lint          # ESLint via next lint
+npm run lint          # ESLint directly (eslint .) — Next 16 removed `next lint`
 npm run create-user   # create admin user (hardcoded admin/admin, dev only)
 npx prisma generate   # regenerate Prisma client (required after schema changes)
 npx prisma db push    # push schema to DB (dev — migrations are not kept current)
 ```
 
-No test runner or typecheck script is configured. TypeScript errors surface during `next build` or `next lint`.
+No test runner or typecheck script is configured. TypeScript errors surface during `next build`.
+
+## Git Workflow (Trunk-Based)
+
+- **Trunk = `dev` branch.** All work happens directly on `dev` — **no feature branches**.
+- `master` is production (protected: PR + 1 approval); it receives merges from `dev` only.
+- **Pull first:** At the start of every work session run `git pull --ff-only origin dev` before touching code.
+- Commit early and often; every commit must reference a GitHub issue (see Git / Issues below).
+- **Pre-push hook (lint gate):** Pushes to `dev` are aborted when `npm run lint` fails.
+  - Hook lives at `.githooks/pre-push`; activate once per clone with:
+    `git config core.hooksPath .githooks`
 
 ## Prisma
 
