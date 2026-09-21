@@ -27,7 +27,7 @@ Kickoff meeting 2026-09-19 (see `docs/meetings/2026-09-19-kickoff.md`, protocol 
 ## Pending
 - [ ] Database migrations are not current — `prisma db push` is used instead of `prisma migrate dev`
 - [ ] NextAuth v4 is configured but not integrated with the custom session system
-- [ ] No automated tests exist (see #104)
+- [x] Test runner introduced (Vitest + pre-push test gate, see #112)
 - [ ] Fish search component was removed (issue #60)
 - [ ] 26 Dependabot alerts incl. 4 critical (see #109)
 
