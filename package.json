@@ -47,5 +47,8 @@
     "tsx": "^4.20.4",
     "typescript": "^5.9.2",
     "vitest": "^5.0.1"
+  },
+  "overrides": {
+    "@types/node": "$@types/node"
   }
 }
