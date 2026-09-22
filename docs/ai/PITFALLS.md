@@ -13,3 +13,4 @@ Read this file carefully before making changes in affected areas.
 - `scripts/create-user.ts` hardcodes `admin`/`admin` credentials — dev-only script, NOT for production
 - Docker Compose `app` service runs `npx prisma db push` on every startup — schema changes are applied automatically in production
 - `no-explicit-any` ESLint rule is disabled — TypeScript `any` is allowed in this codebase
+- `overrides` in `package.json` pins `@types/node` to the root spec (`"$@types/node"`): vitest 5 requires peerOptional `@types/node ^22 || >=24`, which breaks `npm ci` with ERESOLVE on clean machines while a stale local `node_modules` masks it. After touching any `@types/*` range, always verify with a fresh `rm -rf node_modules && npm install`.
