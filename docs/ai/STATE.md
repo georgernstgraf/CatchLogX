@@ -1,9 +1,11 @@
 # Project State
 
-Current status as of 2026-04-27.
+Current status as of 2026-09-19.
 
 ## Current Focus
-Active development on `dev` branch. Feature branches merged into `dev`; `master` is stale.
+New diploma group taking over (2026-09). **Trunk-based development on `dev`** — no feature branches; `git pull --ff-only origin dev` at session start. `master` is production (protected: PR + 1 approval, enforced for admins), merges come from `dev` only. Pre-push lint+typecheck+test gate protects `dev` (`.githooks/pre-push`, auto-activated via `prepare` script on `npm ci`/`npm install`, fallback `git config core.hooksPath .githooks`). **CI (`.github/workflows/test.yml`) is source of truth** — lint+typecheck+test on push/PR to `dev`/`master`; the local hook is fast feedback only.
+
+Kickoff meeting 2026-09-19 (see `docs/meetings/2026-09-19-kickoff.md`, protocol + assignments in #113). Roles: Dominik (backend lead), Rodion (database), Armin + Alex (frontend), Jakob (testing). Domain contact: Lena (BOKU Hydrobiologie), technical: Martin Seebacher (`@Fishknut`). Weekly Zoom on Saturdays. Every open issue carries an assignee.
 
 ## Completed (this cycle)
 - [x] Custom cookie-based session auth (sign-in, session, logout)
@@ -25,8 +27,11 @@ Active development on `dev` branch. Feature branches merged into `dev`; `master`
 ## Pending
 - [ ] Database migrations are not current — `prisma db push` is used instead of `prisma migrate dev`
 - [ ] NextAuth v4 is configured but not integrated with the custom session system
-- [ ] No automated tests exist
+- [x] Test runner introduced (Vitest + pre-push test gate, see #112)
+- [x] CI test gate (`.github/workflows/test.yml`: lint+test on push/PR to `dev`/`master`, see #112)
+- [x] Typecheck gate added (`tsc --noEmit`, in both pre-push hook and CI; pre-push output no longer suppressed, see #112)
 - [ ] Fish search component was removed (issue #60)
+- [ ] 26 Dependabot alerts incl. 4 critical (see #109)
 
 ## Blockers
 None.

@@ -10,7 +10,8 @@ type SheetRow = CellValue[];
 type DataObject = Record<string, CellValue>;
 
 // vereinheitlichen von Strings zum Vergleich
-const normalize = (v: unknown): string =>
+// Exported for unit tests (see services/uploadService.test.ts, #112).
+export const normalize = (v: unknown): string =>
   String(v ?? "")
     .trim()
     .toLowerCase();
@@ -68,8 +69,8 @@ function inList(lists: Record<string, Set<string>>, listName: string) {
 }
 
 //Zod Schema
-
-function buildSchema(lists: Record<string, Set<string>>) {
+// Exported for unit tests (see services/uploadService.test.ts, #112).
+export function buildSchema(lists: Record<string, Set<string>>) {
   return z
     .object({
       country: inList(lists, "country"),

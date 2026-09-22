@@ -39,6 +39,18 @@ Each entry documents WHAT was decided and WHY.
 - **Considered**: Keeping German, or supporting both
 - **Tradeoff**: Legacy German strings may still exist in older components
 
+## 2026-09-22: Pin @types/node via npm overrides
+- **Choice**: Force `@types/node` to the root `^20` spec for all nested dependents via `"overrides": { "@types/node": "$@types/node" }` in `package.json` (issue #112)
+- **Reason**: `vitest@5.0.1` declares peerOptional `@types/node@"^22.0.0 || >=24.0.0"`, so `npm ci` on clean machines (CI) pulled `@types/node@26` and died with ERESOLVE before lint/tests ran; overrides keep a single v20 tree deterministically
+- **Considered**: Bumping `@types/node` to ^22/^24 (larger blast radius), downgrading vitest (wrong direction), `--legacy-peer-deps` in workflow/hook (masks instead of fixing)
+- **Tradeoff**: If a future dependency genuinely needs `@types/node ≥ 22` types, the override must be revisited
+
+## 2026-09-22: Add typecheck gate; stop suppressing pre-push gate output
+- **Choice**: Add `"typecheck": "tsc --noEmit"` to `package.json` and run it in both `.github/workflows/test.yml` and `.githooks/pre-push`, alongside lint and tests (issue #112). Also removed the `>/dev/null 2>&1` redirects in the pre-push hook so a gate failure prints its real output inline instead of pointing to a second manual run.
+- **Reason**: `AGENTS.md` previously noted "no typecheck script is configured" — TypeScript errors only surfaced at `next build`, so the lint+test gate could still let a broken build through. Suppressed hook output also meant every local failure required re-running the command by hand to see why.
+- **Considered**: Leaving typecheck to `next build` only (status quo) — rejected because it means the pre-push/CI gate isn't actually a complete correctness gate.
+- **Tradeoff**: `tsc --noEmit` adds a few seconds to both the pre-push hook and CI run.
+
 ## 2026-04-27: Enum-based State Management
 - **Choice**: Upload and password reset states use Prisma enums (`UploadStates`, `PasswordResetStates`) instead of raw strings
 - **Reason**: Type safety and self-documenting state transitions
