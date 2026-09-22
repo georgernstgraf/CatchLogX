@@ -102,6 +102,32 @@ npm run lint
 npm run create-user
 ```
 
+## 🤝 Mitarbeit (Trunk-Based)
+
+Gearbeitet wird direkt auf `dev` (`master` ist Produktion und bekommt nur PRs aus `dev`).
+Jeder Push auf `dev` läuft lokal durch Lint + Tests (Pre-push Hook) — bei Rot bricht der Push ab.
+Die GitHub-Action `Test` prüft dasselbe zusätzlich bei jedem Push/PR.
+
+**Erstes Mal klonen:**
+```bash
+git clone https://github.com/georgernstgraf/CatchLogX
+cd CatchLogX
+npm ci          # installiert + aktiviert den Pre-push Hook automatisch
+npm test        # Sanity-Check
+git checkout dev
+```
+
+**Repo schon vorhanden (Sitzungsbeginn):**
+```bash
+git pull --ff-only origin dev
+npm ci                          # Stand nachholen + Hook aktivieren, falls fehlend
+git config core.hooksPath       # Kontrolle: muss ".githooks" ausgeben
+```
+Falls die Kontrolle leer ist (einmalig): `git config core.hooksPath .githooks`
+Alternative Kontrolle: `npm run check:hooks`
+
+**Team-Regeln:** nie `git push --no-verify`, rote CI sofort fixen, Commits immer mit Issue-Nummer (z. B. `fix: ... (#42)`).
+
 ## 📊 Features im Detail
 
 ### Dashboard
