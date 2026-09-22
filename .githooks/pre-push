@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Pre-push hook: protects the dev branch (trunk) from faulty code (#111).
+# Pre-push hook: protects the dev branch (trunk) from faulty code (#111, #112).
 # One-time activation per clone:  git config core.hooksPath .githooks
 set -uo pipefail
 
 fail() {
   echo "" >&2
   echo "❌ pre-push: push ABORTED — $1" >&2
-  echo "   Fix the issues, then push again." >&2
+  echo "   Fix the issues above, then push again." >&2
   exit 1
 }
 
@@ -36,10 +36,14 @@ if [ ! -d node_modules ]; then
 fi
 
 echo "🔍 pre-push: running lint gate (npm run lint) ..." >&2
-npm run lint >/dev/null 2>&1 || fail "npm run lint failed — faulty code must not reach dev (run 'npm run lint' locally to see the errors)"
+npm run lint || fail "npm run lint failed — faulty code must not reach dev"
 echo "✅ pre-push: lint passed" >&2
 
+echo "🔎 pre-push: running typecheck gate (npm run typecheck) ..." >&2
+npm run typecheck || fail "npm run typecheck failed — type errors must not reach dev"
+echo "✅ pre-push: typecheck passed" >&2
+
 echo "🧪 pre-push: running test gate (npx vitest run) ..." >&2
-npx vitest run >/dev/null 2>&1 || fail "npx vitest run failed — broken tests must not reach dev (run 'npm test' locally to see the errors)"
+npx vitest run || fail "npx vitest run failed — broken tests must not reach dev"
 echo "✅ pre-push: tests passed" >&2
 exit 0
