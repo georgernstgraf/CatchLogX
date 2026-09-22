@@ -3,7 +3,7 @@
 Current status as of 2026-09-19.
 
 ## Current Focus
-New diploma group taking over (2026-09). **Trunk-based development on `dev`** — no feature branches; `git pull --ff-only origin dev` at session start. `master` is production (protected: PR + 1 approval, enforced for admins), merges come from `dev` only. Pre-push lint+test gate protects `dev` (`.githooks/pre-push`, auto-activated via `prepare` script on `npm ci`/`npm install`, fallback `git config core.hooksPath .githooks`). **CI (`.github/workflows/test.yml`) is source of truth** — lint+test on push/PR to `dev`/`master`; the local hook is fast feedback only.
+New diploma group taking over (2026-09). **Trunk-based development on `dev`** — no feature branches; `git pull --ff-only origin dev` at session start. `master` is production (protected: PR + 1 approval, enforced for admins), merges come from `dev` only. Pre-push lint+typecheck+test gate protects `dev` (`.githooks/pre-push`, auto-activated via `prepare` script on `npm ci`/`npm install`, fallback `git config core.hooksPath .githooks`). **CI (`.github/workflows/test.yml`) is source of truth** — lint+typecheck+test on push/PR to `dev`/`master`; the local hook is fast feedback only.
 
 Kickoff meeting 2026-09-19 (see `docs/meetings/2026-09-19-kickoff.md`, protocol + assignments in #113). Roles: Dominik (backend lead), Rodion (database), Armin + Alex (frontend), Jakob (testing). Domain contact: Lena (BOKU Hydrobiologie), technical: Martin Seebacher (`@Fishknut`). Weekly Zoom on Saturdays. Every open issue carries an assignee.
 
@@ -29,6 +29,7 @@ Kickoff meeting 2026-09-19 (see `docs/meetings/2026-09-19-kickoff.md`, protocol 
 - [ ] NextAuth v4 is configured but not integrated with the custom session system
 - [x] Test runner introduced (Vitest + pre-push test gate, see #112)
 - [x] CI test gate (`.github/workflows/test.yml`: lint+test on push/PR to `dev`/`master`, see #112)
+- [x] Typecheck gate added (`tsc --noEmit`, in both pre-push hook and CI; pre-push output no longer suppressed, see #112)
 - [ ] Fish search component was removed (issue #60)
 - [ ] 26 Dependabot alerts incl. 4 critical (see #109)
 

@@ -105,7 +105,7 @@ npm run create-user
 ## 🤝 Mitarbeit (Trunk-Based)
 
 Gearbeitet wird direkt auf `dev` (`master` ist Produktion und bekommt nur PRs aus `dev`).
-Jeder Push auf `dev` läuft lokal durch Lint + Tests (Pre-push Hook) — bei Rot bricht der Push ab.
+Jeder Push auf `dev` läuft lokal durch Lint + Typecheck + Tests (Pre-push Hook) — bei Rot bricht der Push ab.
 Die GitHub-Action `Test` prüft dasselbe zusätzlich bei jedem Push/PR.
 
 **Erstes Mal klonen:**
