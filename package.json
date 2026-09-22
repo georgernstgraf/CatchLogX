@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "prepare": "git config core.hooksPath .githooks || true",
     "check:hooks": "node scripts/check-hooks.mjs",

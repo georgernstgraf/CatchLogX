@@ -12,13 +12,12 @@ PostgreSQL 16 and MinIO run via Docker Compose (`docker-compose.yml`).
 npm run dev           # start dev server (needs PostgreSQL + MinIO running)
 npm run build         # production build
 npm run lint          # ESLint directly (eslint .) — Next 16 removed `next lint`
+npm run typecheck     # tsc --noEmit
 npm test              # Vitest, single run (vitest run) — pure service-logic tests, no DB/MinIO needed
 npm run create-user   # create admin user (hardcoded admin/admin, dev only)
 npx prisma generate   # regenerate Prisma client (required after schema changes)
 npx prisma db push    # push schema to DB (dev — migrations are not kept current)
 ```
-
-No typecheck script is configured. TypeScript errors surface during `next build`.
 
 ## Tests (Vitest, #112)
 
@@ -35,13 +34,13 @@ No typecheck script is configured. TypeScript errors surface during `next build`
 - `master` is production (protected: PR + 1 approval); it receives merges from `dev` only.
 - **Pull first:** At the start of every work session run `git pull --ff-only origin dev` before touching code.
 - Commit early and often; every commit must reference a GitHub issue (see Git / Issues below).
-- **Pre-push hook (lint + test gate):** Pushes to `dev` are aborted when `npm run lint` or `npm test` (`npx vitest run`) fails.
+- **Pre-push hook (lint + typecheck + test gate):** Pushes to `dev` are aborted when `npm run lint`, `npm run typecheck` (`tsc --noEmit`), or `npm test` (`npx vitest run`) fails. Output is shown directly (not suppressed) so a failure is visible without re-running the command.
   - Hook lives at `.githooks/pre-push`; activate once per clone with:
     `git config core.hooksPath .githooks`
   - Check activation with `npm run check:hooks` (warns only — never fails).
   - Agents: warn about an inactive hook at session start (see the
     `issue-workflow` skill) — warn only, let the user activate it.
-- **CI is source of truth:** `.github/workflows/test.yml` runs `npm run lint` + `npm test` on push/PR to `dev`/`master`.
+- **CI is source of truth:** `.github/workflows/test.yml` runs `npm run lint` + `npm run typecheck` + `npm test` on push/PR to `dev`/`master`.
   The local hook is fast feedback only — hooks are bypassable (`--no-verify`) and opt-in per clone.
 
 ## Prisma
