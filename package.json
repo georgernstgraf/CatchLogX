@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
+    "prepare": "git config core.hooksPath .githooks || true",
     "check:hooks": "node scripts/check-hooks.mjs",
     "create-user": "tsx scripts/create-user.ts"
   },

@@ -41,6 +41,8 @@ No typecheck script is configured. TypeScript errors surface during `next build`
   - Check activation with `npm run check:hooks` (warns only — never fails).
   - Agents: warn about an inactive hook at session start (see the
     `issue-workflow` skill) — warn only, let the user activate it.
+- **CI is source of truth:** `.github/workflows/test.yml` runs `npm run lint` + `npm test` on push/PR to `dev`/`master`.
+  The local hook is fast feedback only — hooks are bypassable (`--no-verify`) and opt-in per clone.
 
 ## Prisma
 
