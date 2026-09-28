@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { validateSQLQuery } from "@/services/queryService";
+import { describe, expect, it, vi } from "vitest";
 
-// Sample tests for the SQL guard used by the query UI (#112).
-// Pure logic: no database, no MinIO — safe for `npm test` and the pre-push hook.
+// Tests for the SQL guard used by the query UI (#112).
+// Prisma is mocked: no database — safe for `npm test` and the pre-push hook.
+vi.mock("@/lib/prisma", () => ({ prisma: { $queryRawUnsafe: vi.fn() } }));
+
+import { prisma } from "@/lib/prisma";
+import { executeQuery, validateSQLQuery } from "@/services/queryService";
+
 describe("validateSQLQuery", () => {
   it("accepts a plain SELECT query", () => {
     expect(validateSQLQuery("SELECT * FROM FishCatch").isValid).toBe(true);
@@ -54,5 +58,54 @@ describe("validateSQLQuery", () => {
     );
     expect(result.isValid).toBe(false);
     expect(result.error).toMatch(/Klammern/);
+  });
+
+  it("rejects non-string input", () => {
+    expect(validateSQLQuery(undefined as any).isValid).toBe(false);
+    expect(validateSQLQuery(42 as any).isValid).toBe(false);
+  });
+
+  it("ignores surrounding whitespace", () => {
+    expect(validateSQLQuery("  \n SELECT 1  ").isValid).toBe(true);
+  });
+
+  it("rejects queries that do not start with SELECT", () => {
+    const result = validateSQLQuery("WITH x AS (SELECT 1) SELECT * FROM x");
+    expect(result).toEqual({
+      isValid: false,
+      error: "Nur SELECT-Queries sind erlaubt",
+    });
+  });
+
+  // Documents current behaviour: the guard matches substrings, so harmless
+  // column names containing a blocked word are rejected as well.
+  it.each([
+    ["SELECT createdAt FROM FishCatch", "CREATE"],
+    ["SELECT updatedAt FROM FishCatch", "UPDATE"],
+    ["SELECT username FROM FishCatch", "USER"],
+  ])("currently rejects %s (substring match on %s)", (query, word) => {
+    const result = validateSQLQuery(query);
+    expect(result.isValid).toBe(false);
+    expect(result.error).toContain(word);
+  });
+});
+
+describe("executeQuery", () => {
+  it("serializes BigInt values and echoes the query", async () => {
+    vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([
+      { id: 1, count: BigInt(12345678901234) },
+    ]);
+
+    const result = await executeQuery("SELECT 1");
+
+    expect(prisma.$queryRawUnsafe).toHaveBeenCalledWith("SELECT 1");
+    expect(result.query).toBe("SELECT 1");
+    expect(result.timestamp).toBeInstanceOf(Date);
+    expect(result.result).toEqual([{ id: 1, count: "12345678901234" }]);
+  });
+
+  it("propagates DB errors", async () => {
+    vi.mocked(prisma.$queryRawUnsafe).mockRejectedValue(new Error("syntax"));
+    await expect(executeQuery("SELECT x")).rejects.toThrow("syntax");
   });
 });
