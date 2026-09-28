@@ -7,7 +7,8 @@ export type DummyFileRecord = {
   isVisible: boolean;
 };
 
-function normalizeDummyFile(value: unknown): DummyFileRecord | null {
+// Exported for unit tests (see lib/dummy-files.test.ts, #112).
+export function normalizeDummyFile(value: unknown): DummyFileRecord | null {
   if (!value || typeof value !== "object") {
     return null;
   }

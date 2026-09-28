@@ -19,7 +19,8 @@ const client = new Minio.Client({
 
 let ensureStructurePromise: Promise<void> | null = null;
 
-function sanitizeFilename(filename: string) {
+// Exported for unit tests (see lib/minio.test.ts, #112).
+export function sanitizeFilename(filename: string) {
   return filename.replace(/[\\/]/g, "_").trim();
 }
 
