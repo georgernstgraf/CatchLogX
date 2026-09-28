@@ -410,6 +410,18 @@ describe("deleteUser", () => {
     expect(await deleteUser("x", actor("ADMIN"))).toEqual({ notFound: true });
   });
 
+  it.each([target("VIEWER"), target("ADMIN", false)])(
+    "forbids viewers deleting anyone (%o) (#117)",
+    async (existing) => {
+      givenTarget(existing);
+      expect(await deleteUser("target", actor("VIEWER"))).toEqual({
+        forbidden: true,
+        reason: "Admin access required",
+      });
+      expect(prisma.user.delete).not.toHaveBeenCalled();
+    },
+  );
+
   it("forbids admins deleting active non-viewers", async () => {
     givenTarget(target("ADMIN"));
     expect(await deleteUser("target", actor("ADMIN"))).toEqual({

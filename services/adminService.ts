@@ -891,6 +891,11 @@ export async function deleteUser(
   const actorRole = sessionData.user.role;
   const isSuperAdmin = actorRole === "SUPER_ADMIN";
 
+  // Checked here too, not only by withAdminAuth, and before the inactive-target bypass (#117).
+  if (!isSuperAdmin && !adminRoles.has(actorRole)) {
+    return { forbidden: true, reason: "Admin access required" };
+  }
+
   // Existing no-delete restrictions are bypassed for inactive target accounts.
   if (user.isActive) {
     if (!isSuperAdmin && user.role !== "VIEWER") {
