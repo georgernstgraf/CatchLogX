@@ -46,30 +46,57 @@ export async function downloadFile(filename: string) {
   return fileBuffer;
 }
 
-async function sendRejectEmail(upload: Uploads) {
-  const transporter = createMailerTransporter("admin-reject-upload");
-
-  const uploadWithUserInfo = await prisma.uploads.findFirst({
-    where: {
-      id: upload.id,
-    },
-    include: {
-      user: true,
-    },
-  });
-
-  const userEmail = uploadWithUserInfo?.user.email;
-
-  if (!userEmail) {
-    throw new Error(`No user email found for upload ${upload.id}`);
+// Excel cell parsers used when pushing an accepted upload into the DB.
+// Exported for unit tests (see services/adminService.test.ts, #112).
+export function parseDate(value: any): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === "number") {
+    return new Date((value - 25569) * 86400 * 1000);
   }
+  if (typeof value === "string") {
+    const parts = value.split(".");
+    if (parts.length === 3) {
+      const [d, m, y] = parts.map(Number);
+      if (d && m && y) return new Date(y, m - 1, d);
+    }
+    const d = new Date(value);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return null;
+}
 
+export function toFloat(value: any): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = parseFloat(String(value));
+  return isNaN(n) ? null : n;
+}
+
+export function toInt(value: any): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = parseInt(String(value), 10);
+  return isNaN(n) ? null : n;
+}
+
+export function toBoolean(value: any): boolean | null {
+  if (value === null || value === undefined) return null;
+  const str = String(value).toLowerCase().trim();
+  if (str === "yes") return true;
+  if (str === "no") return false;
+  return null;
+}
+
+// Exported for unit tests (see services/adminService.test.ts, #112).
+export function buildRejectEmailHtml(
+  upload: Uploads,
+  user: { name: string | null; username: string },
+) {
   const formattedDate = new Intl.DateTimeFormat("en-US", {
     dateStyle: "long",
     timeStyle: "short",
   }).format(new Date(upload.createdAt));
 
-  const htmlBody = `
+  return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -95,7 +122,7 @@ async function sendRejectEmail(upload: Uploads) {
           <tr>
             <td style="padding:36px 40px;">
               <p style="margin:0 0 20px;color:#2d2d2d;font-size:15px;line-height:1.6;">
-                Hello <strong>${uploadWithUserInfo?.user.name ?? uploadWithUserInfo?.user.username}</strong>,
+                Hello <strong>${user.name ?? user.username}</strong>,
               </p>
               <p style="margin:0 0 28px;color:#555555;font-size:15px;line-height:1.6;">
                 We regret to inform you that your recent upload has been reviewed and <strong style="color:#e74c3c;">rejected</strong> by our administration team. Please find the details below.
@@ -157,6 +184,27 @@ async function sendRejectEmail(upload: Uploads) {
 </body>
 </html>
   `;
+}
+
+async function sendRejectEmail(upload: Uploads) {
+  const transporter = createMailerTransporter("admin-reject-upload");
+
+  const uploadWithUserInfo = await prisma.uploads.findFirst({
+    where: {
+      id: upload.id,
+    },
+    include: {
+      user: true,
+    },
+  });
+
+  const userEmail = uploadWithUserInfo?.user.email;
+
+  if (!userEmail) {
+    throw new Error(`No user email found for upload ${upload.id}`);
+  }
+
+  const htmlBody = buildRejectEmailHtml(upload, uploadWithUserInfo.user);
 
   const mailResult = await transporter.sendMail({
     from: `"CatchLogX" <${process.env.NODEMAILER_USER}>`,
@@ -212,44 +260,6 @@ async function acceptUploadAndPushToDb(upload: Uploads) {
   console.log(
     `[acceptUploadAndPushToDb] Processing ${rows.length} rows from ${objectName}`,
   );
-
-  function parseDate(value: any): Date | null {
-    if (!value) return null;
-    if (value instanceof Date) return value;
-    if (typeof value === "number") {
-      return new Date((value - 25569) * 86400 * 1000);
-    }
-    if (typeof value === "string") {
-      const parts = value.split(".");
-      if (parts.length === 3) {
-        const [d, m, y] = parts.map(Number);
-        if (d && m && y) return new Date(y, m - 1, d);
-      }
-      const d = new Date(value);
-      if (!isNaN(d.getTime())) return d;
-    }
-    return null;
-  }
-
-  function toFloat(value: any): number | null {
-    if (value === null || value === undefined || value === "") return null;
-    const n = parseFloat(String(value));
-    return isNaN(n) ? null : n;
-  }
-
-  function toInt(value: any): number | null {
-    if (value === null || value === undefined || value === "") return null;
-    const n = parseInt(String(value), 10);
-    return isNaN(n) ? null : n;
-  }
-
-  function toBoolean(value: any): boolean | null {
-    if (value === null || value === undefined) return null;
-    const str = String(value).toLowerCase().trim();
-    if (str === "yes") return true;
-    if (str === "no") return false;
-    return null;
-  }
 
   const errors: string[] = [];
   let processedRows = 0;
