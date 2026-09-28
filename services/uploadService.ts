@@ -9,6 +9,16 @@ type CellValue = string | number | boolean | Date | null | undefined;
 type SheetRow = CellValue[];
 type DataObject = Record<string, CellValue>;
 
+// Row where every cell is null, undefined or a blank string.
+// Exported for unit tests (see services/uploadService.test.ts, #112).
+export const isEmptyRow = (row: SheetRow): boolean =>
+  row.every(
+    (cell) =>
+      cell === null ||
+      cell === undefined ||
+      (typeof cell === "string" && cell.trim() === ""),
+  );
+
 // vereinheitlichen von Strings zum Vergleich
 // Exported for unit tests (see services/uploadService.test.ts, #112).
 export const normalize = (v: unknown): string =>
@@ -16,7 +26,8 @@ export const normalize = (v: unknown): string =>
     .trim()
     .toLowerCase();
 
-function readLists(workbook: XLSX.WorkBook) {
+// Exported for unit tests (see services/uploadService.test.ts, #112).
+export function readLists(workbook: XLSX.WorkBook) {
   const sheet = workbook.Sheets["List"];
 
   // No List sheet → return empty object; list validation will be skipped
@@ -347,15 +358,8 @@ export async function processUpload(fileBuffer: Buffer, userId: string) {
       const row = rows[i];
 
       // Prüfung ob die Zeile komplett leer ist (alle Werte sind null, undefined oder leere Strings)
-      const isEmptyRow = row.every(
-        (cell) =>
-          cell === null ||
-          cell === undefined ||
-          (typeof cell === "string" && cell.trim() === ""),
-      );
-
       // Wenn leere Zeile gefunden, stoppe die Validierung
-      if (isEmptyRow) {
+      if (isEmptyRow(row)) {
         break;
       }
 
@@ -437,13 +441,7 @@ export async function processUpload(fileBuffer: Buffer, userId: string) {
       // Füge Datenzeilen hinzu
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
-        const isEmptyRow = row.every(
-          (cell) =>
-            cell === null ||
-            cell === undefined ||
-            (typeof cell === "string" && cell.trim() === ""),
-        );
-        if (isEmptyRow) break;
+        if (isEmptyRow(row)) break;
 
         dataWorksheet.addRow(row);
       }
