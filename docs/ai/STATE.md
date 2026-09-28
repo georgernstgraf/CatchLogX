@@ -30,6 +30,7 @@ Kickoff meeting 2026-09-19 (see `docs/meetings/2026-09-19-kickoff.md`, protocol 
 - [x] Test runner introduced (Vitest + pre-push test gate, see #112)
 - [x] CI test gate (`.github/workflows/test.yml`: lint+test on push/PR to `dev`/`master`, see #112)
 - [x] Typecheck gate added (`tsc --noEmit`, in both pre-push hook and CI; pre-push output no longer suppressed, see #112)
+- [x] Unit tests for all services + `lib/` helpers + `middleware.ts` (I/O mocked via `vi.mock`, see #112). Not covered: API route handlers, React components, `downloadDummyFile` (needs DOM)
 - [ ] Fish search component was removed (issue #60)
 - [ ] 26 Dependabot alerts incl. 4 critical (see #109)
 
@@ -37,4 +38,4 @@ Kickoff meeting 2026-09-19 (see `docs/meetings/2026-09-19-kickoff.md`, protocol 
 None.
 
 ## Next Session Suggestion
-Create proper Prisma migrations to replace the `prisma db push` workflow, or implement automated tests.
+Create proper Prisma migrations to replace the `prisma db push` workflow. Testing follow-ups: route-handler tests, component tests (would need jsdom + Testing Library).

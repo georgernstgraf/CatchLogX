@@ -22,11 +22,14 @@ npx prisma db push    # push schema to DB (dev — migrations are not kept curre
 ## Tests (Vitest, #112)
 
 - Config: `vitest.config.ts` (mirrors the `@/*` alias from `tsconfig.json`), `environment: "node"`
-- Samples as templates for the group: `services/queryService.test.ts` (`validateSQLQuery`),
-  `services/uploadService.test.ts` (`normalize`, `buildSchema`), `services/passwordService.test.ts` (`createResetToken`)
-- Rule: test pure logic only — no DB, no MinIO, no SMTP. (`lib/prisma.ts` and `lib/minio.ts` are
-  safe to import; `lib/mailer.ts` throws only when `createMailerTransporter()` is called.)
-- To make helpers testable, export them from `services/` (e.g. `normalize`, `buildSchema` in `uploadService.ts`).
+- Test files live next to the source: `services/*.test.ts`, `lib/*.test.ts`, `middleware.test.ts`
+- Rule: no real DB, MinIO, or SMTP. Replace I/O modules with `vi.mock` (`@/lib/prisma`, `@/lib/minio`,
+  `@/lib/mailer`, `bcrypt`; `fetch` via `vi.stubGlobal`) so `npm test` stays fast and runs in the hook/CI.
+- Templates: `services/adminService.test.ts` (mocked prisma/minio/mailer, permission matrix, Excel built
+  in memory via `XLSX.utils`), `lib/session.test.ts` (fake timers + real `NextRequest`), `services/queryService.test.ts` (pure).
+- To make helpers testable, lift/export them from their module with `// Exported for unit tests (#112).`
+  (e.g. `normalize`, `buildSchema`, `parseDate`, `buildRejectEmailHtml`). No behaviour changes.
+- Not covered: API route handlers, React components (no jsdom), `lib/auth.ts` (NextAuth, unused).
 
 ## Git Workflow (Trunk-Based)
 

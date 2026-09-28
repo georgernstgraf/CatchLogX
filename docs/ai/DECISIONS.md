@@ -51,6 +51,12 @@ Each entry documents WHAT was decided and WHY.
 - **Considered**: Leaving typecheck to `next build` only (status quo) — rejected because it means the pre-push/CI gate isn't actually a complete correctness gate.
 - **Tradeoff**: `tsc --noEmit` adds a few seconds to both the pre-push hook and CI run.
 
+## 2026-09-28: Mock I/O modules in unit tests instead of pure-logic-only
+- **Choice**: Unit tests may replace `@/lib/prisma`, `@/lib/minio`, `@/lib/mailer`, `bcrypt`, `nodemailer`, `minio` and `fetch` with `vi.mock` / `vi.stubGlobal`. Inner helpers are lifted to module level and exported for tests (marked `// Exported for unit tests (#112).`), without behaviour changes (issue #112).
+- **Reason**: The "pure logic only" rule left the most important logic untested — role/permission checks in `adminService.updateUser`/`deleteUser`, session expiry, the Excel import into the DB. Mocks keep `npm test` fast and infrastructure-free, so it still runs in the pre-push hook and CI.
+- **Considered**: Pure logic only (status quo, leaves permissions untested); integration tests against a Docker PostgreSQL/MinIO (slow, needs services in CI and the hook).
+- **Tradeoff**: Mocks encode the current Prisma call shapes — renaming a query argument breaks tests even if behaviour is unchanged. Real DB constraints are not exercised.
+
 ## 2026-04-27: Enum-based State Management
 - **Choice**: Upload and password reset states use Prisma enums (`UploadStates`, `PasswordResetStates`) instead of raw strings
 - **Reason**: Type safety and self-documenting state transitions
