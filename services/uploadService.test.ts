@@ -72,7 +72,8 @@ async function readErrorNotes(fileBuffer: ArrayBuffer) {
   await wb.xlsx.load(fileBuffer);
   const notes: Record<string, string> = {};
   wb.getWorksheet("DATA")!.eachRow((row, rowNumber) => {
-    row.eachCell((cell, colNumber) => {
+    // includeEmpty: notes on empty cells (missing values) must be found too
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       if (cell.note) notes[`${rowNumber}:${headers[colNumber - 1]}`] = String(cell.note);
     });
   });
@@ -162,6 +163,20 @@ describe("buildSchema", () => {
 
   it("rejects a row with an empty required field", () => {
     expect(parse({ river_name: "" }).success).toBe(false);
+  });
+
+  // Empty Excel cells arrive as undefined, not "" (#118).
+  it.each(["river_name", "data_provider", "source", "site_name"])(
+    "rejects a missing %s instead of coercing it to 'undefined'",
+    (field) => {
+      expect(failingPaths({ [field]: undefined })).toEqual([field]);
+      expect(failingPaths({ [field]: null })).toEqual([field]);
+    },
+  );
+
+  it("keeps an empty project as '' instead of 'undefined'", () => {
+    const result = parse({ project: undefined });
+    expect(result.success && result.data.project).toBe("");
   });
 
   it("rejects a year outside 1990-2100", () => {
@@ -307,6 +322,19 @@ describe("processUpload", () => {
     expect(await readErrorNotes(result.fileBuffer as ArrayBuffer)).toEqual({
       "3:year": "Year must be between 1990 and 2100",
     });
+  });
+
+  it("flags empty required cells in the Excel file (#118)", async () => {
+    const result = await processUpload(
+      dataFile([validRow, { ...validRow, river_name: undefined }]),
+      "u1",
+    );
+
+    expect(result.success).toBe(false);
+    expect(await readErrorNotes(result.fileBuffer as ArrayBuffer)).toEqual({
+      "3:river_name": "River name is required",
+    });
+    expect(uploadUploadFile).not.toHaveBeenCalled();
   });
 
   it("flags a PIT tag used for two different species in one file", async () => {

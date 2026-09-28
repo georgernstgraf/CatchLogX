@@ -79,37 +79,52 @@ function inList(lists: Record<string, Set<string>>, listName: string) {
     });
 }
 
+// z.coerce.string() turns undefined/null into "undefined"/"null", and empty
+// Excel cells arrive as undefined — map nullish to "" first so min(1) applies (#118).
+const emptyIfNullish = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((v) => v ?? "", schema);
+
 //Zod Schema
 // Exported for unit tests (see services/uploadService.test.ts, #112).
 export function buildSchema(lists: Record<string, Set<string>>) {
   return z
     .object({
       country: inList(lists, "country"),
-      river_name: z.coerce
-        .string({ message: "River name must be a text value" })
-        .min(1, { message: "River name is required" }),
+      river_name: emptyIfNullish(
+        z.coerce
+          .string({ message: "River name must be a text value" })
+          .min(1, { message: "River name is required" }),
+      ),
       year: z.coerce
         .number({ message: "Year must be a number" })
         .int({ message: "Year must be a whole number" })
         .min(1990, { message: "Year must be between 1990 and 2100" })
         .max(2100, { message: "Year must be between 1990 and 2100" }),
-      data_provider: z.coerce
-        .string({ message: "Data provider must be a text value" })
-        .min(1, { message: "Data provider is required" }),
+      data_provider: emptyIfNullish(
+        z.coerce
+          .string({ message: "Data provider must be a text value" })
+          .min(1, { message: "Data provider is required" }),
+      ),
       approval_required: z.enum(["yes", "no"], {
         message: "Approval must be 'yes' or 'no'",
       }),
-      source: z.coerce
-        .string({ message: "Source must be a text value" })
-        .min(1, { message: "Source is required" }),
-      project: z.coerce
-        .string({ message: "Project name must be a text value" })
-        .max(150, {
-          message: "Project name must be less than 150 characters long",
-        }),
-      site_name: z.coerce
-        .string({ message: "Site name must be a text value" })
-        .min(1, { message: "Site name is required" }),
+      source: emptyIfNullish(
+        z.coerce
+          .string({ message: "Source must be a text value" })
+          .min(1, { message: "Source is required" }),
+      ),
+      project: emptyIfNullish(
+        z.coerce
+          .string({ message: "Project name must be a text value" })
+          .max(150, {
+            message: "Project name must be less than 150 characters long",
+          }),
+      ),
+      site_name: emptyIfNullish(
+        z.coerce
+          .string({ message: "Site name must be a text value" })
+          .min(1, { message: "Site name is required" }),
+      ),
       date: z.coerce.date({ message: "Invalid date format" }),
       fishing_district: z.coerce
         .string({ message: "Fishing district must be a text value" })
