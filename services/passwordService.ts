@@ -56,49 +56,13 @@ export function createResetToken(): string {
   return token;
 }
 
-export async function initiatePasswordReset(
-  username: string,
-  timestamp: string,
-  email: string,
-) {
-  const resetToken = createResetToken();
+// Exported for unit tests (see services/passwordService.test.ts, #112).
+export function buildResetLink(token: string): string {
+  return `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${token}`;
+}
 
-  try {
-    const existingResets = await prisma.passwordResets.findMany({
-      where: {
-        username: username,
-      },
-    });
-    if (existingResets.length > 0) {
-      await prisma.passwordResets.updateMany({
-        data: {
-          state: "EXPIRED",
-        },
-        where: {
-          username: username,
-        },
-      });
-    }
-    await prisma.passwordResets.create({
-      data: {
-        username: username,
-        timestamp: new Date(timestamp),
-        state: "REQUESTED",
-        token: resetToken,
-      },
-    });
-  } catch (e) {
-    console.error(
-      "Error while creating password reset entry in DB. Error: ",
-      e,
-    );
-  }
-
-  const transporter = createMailerTransporter("forgot-password");
-
-  const resetLink = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${resetToken}`;
-
-  const emailHtml = `
+export function buildResetEmailHtml(username: string, resetLink: string) {
+  return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -191,6 +155,51 @@ export async function initiatePasswordReset(
 </body>
 </html>
       `;
+}
+
+export async function initiatePasswordReset(
+  username: string,
+  timestamp: string,
+  email: string,
+) {
+  const resetToken = createResetToken();
+
+  try {
+    const existingResets = await prisma.passwordResets.findMany({
+      where: {
+        username: username,
+      },
+    });
+    if (existingResets.length > 0) {
+      await prisma.passwordResets.updateMany({
+        data: {
+          state: "EXPIRED",
+        },
+        where: {
+          username: username,
+        },
+      });
+    }
+    await prisma.passwordResets.create({
+      data: {
+        username: username,
+        timestamp: new Date(timestamp),
+        state: "REQUESTED",
+        token: resetToken,
+      },
+    });
+  } catch (e) {
+    console.error(
+      "Error while creating password reset entry in DB. Error: ",
+      e,
+    );
+  }
+
+  const transporter = createMailerTransporter("forgot-password");
+
+  const resetLink = buildResetLink(resetToken);
+
+  const emailHtml = buildResetEmailHtml(username, resetLink);
 
   try {
     const mailResult = await transporter.sendMail({
