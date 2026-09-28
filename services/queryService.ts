@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/prisma";
 
+// Whole-word, case-insensitive match, so e.g. "createdAt" does not trip "CREATE" (#116).
+const containsWord = (query: string, word: string) =>
+  new RegExp(`\\b${word}\\b`, "i").test(query);
+
 export function validateSQLQuery(query: string): {
   isValid: boolean;
   error?: string;
@@ -17,7 +21,7 @@ export function validateSQLQuery(query: string): {
   const dangerousTables = ["USER", "SESSION", "PASSWORDRESETS", "UPLOADS"];
 
   for (const table of dangerousTables) {
-    if (trimmedQuery.toUpperCase().includes(table.toUpperCase())) {
+    if (containsWord(trimmedQuery, table)) {
       return {
         isValid: false,
         error: `Gefährliche Operation erkannt: ${table} darf nicht abgefragt werden.`,
@@ -37,7 +41,7 @@ export function validateSQLQuery(query: string): {
   const upperQuery = trimmedQuery.toUpperCase();
 
   for (const keyword of dangerousKeywords) {
-    if (upperQuery.includes(keyword)) {
+    if (containsWord(trimmedQuery, keyword)) {
       return {
         isValid: false,
         error: `Gefährliche Operation erkannt: ${keyword}. Nur SELECT-Queries sind erlaubt.`,

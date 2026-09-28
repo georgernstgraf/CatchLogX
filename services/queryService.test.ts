@@ -77,13 +77,22 @@ describe("validateSQLQuery", () => {
     });
   });
 
-  // Documents current behaviour: the guard matches substrings, so harmless
-  // column names containing a blocked word are rejected as well.
+  // Blocked words are matched as whole words only (#116).
   it.each([
-    ["SELECT createdAt FROM FishCatch", "CREATE"],
-    ["SELECT updatedAt FROM FishCatch", "UPDATE"],
-    ["SELECT username FROM FishCatch", "USER"],
-  ])("currently rejects %s (substring match on %s)", (query, word) => {
+    'SELECT "createdAt" FROM "FishCatch"',
+    'SELECT "updatedAt" FROM "FishCatch"',
+    "SELECT username FROM FishCatch",
+    "SELECT usersCount, dropRate FROM FishCatch",
+  ])("accepts column names containing blocked words: %s", (query) => {
+    expect(validateSQLQuery(query)).toEqual({ isValid: true });
+  });
+
+  it.each([
+    ['SELECT * FROM "User"', "USER"],
+    ["SELECT * FROM public.Session", "SESSION"],
+    ["SELECT 1; DROP TABLE FishCatch", "DROP"],
+    ["SELECT 1;delete from FishCatch", "DELETE"],
+  ])("still rejects %s", (query, word) => {
     const result = validateSQLQuery(query);
     expect(result.isValid).toBe(false);
     expect(result.error).toContain(word);
