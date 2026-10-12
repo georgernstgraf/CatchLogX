@@ -630,9 +630,11 @@ async function acceptUploadAndPushToDb(upload: Uploads) {
   });
 }
 
+export type UploadAction = "accept" | "deny";
+
 export async function updateUpload(
   id: string,
-  action: string,
+  action: UploadAction,
   reason: string | undefined,
 ): Promise<{ upload: Uploads; emailError?: boolean } | null> {
   const upload = await prisma.uploads.findUnique({

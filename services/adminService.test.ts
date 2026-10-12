@@ -503,7 +503,7 @@ describe("updateUpload", () => {
         user: { email: "u1@x.at", name: "Uwe", username: "u1" },
       } as any);
 
-      const result = await updateUpload("up1", "reject", "Bad data");
+      const result = await updateUpload("up1", "deny", "Bad data");
 
       expect(result?.upload).toMatchObject({ state: "REJECTED", note: "Bad data" });
       expect(result?.emailError).toBeUndefined();
@@ -521,7 +521,7 @@ describe("updateUpload", () => {
         user: { email: null },
       } as any);
 
-      const result = await updateUpload("up1", "reject", "Bad data");
+      const result = await updateUpload("up1", "deny", "Bad data");
 
       expect(result).toMatchObject({
         upload: { state: "REJECTED" },
@@ -532,7 +532,7 @@ describe("updateUpload", () => {
 
     it("treats every action other than 'accept' as reject", async () => {
       vi.mocked(prisma.uploads.findFirst).mockResolvedValue(null);
-      const result = await updateUpload("up1", "whatever", undefined);
+      const result = await updateUpload("up1", "whatever" as any, undefined);
       expect(result?.upload.state).toBe("REJECTED");
     });
   });
