@@ -1,11 +1,17 @@
 # Project State
 
-Current status as of 2026-09-19.
+Current status as of 2026-10-15.
 
 ## Current Focus
 New diploma group taking over (2026-09). **Trunk-based development on `dev`** — no feature branches; `git pull --ff-only origin dev` at session start. `master` is production (protected: PR + 1 approval, enforced for admins), merges come from `dev` only. Pre-push lint+typecheck+test gate protects `dev` (`.githooks/pre-push`, auto-activated via `prepare` script on `npm ci`/`npm install`, fallback `git config core.hooksPath .githooks`). **CI (`.github/workflows/test.yml`) is source of truth** — lint+typecheck+test on push/PR to `dev`/`master`; the local hook is fast feedback only.
 
 Kickoff meeting 2026-09-19 (see `docs/meetings/2026-09-19-kickoff.md`, protocol + assignments in #113). Roles: Dominik (backend lead), Rodion (database), Armin + Alex (frontend), Jakob (testing). Domain contact: Lena (BOKU Hydrobiologie), technical: Martin Seebacher (`@Fishknut`). Weekly Zoom on Saturdays. Every open issue carries an assignee.
+
+## Production & Infrastructure (BOKU)
+- Production server: desktop-class machine on Martin Seebacher's desk (institute IT, OE-level) in the BOKUnet, productive since June 2026, informal email accreditation only (#115)
+- General (depersonalized) maintenance inquiry sent to `boku-it@boku.ac.at` (actual sent version in `docs/boku-it-auskunft-mail.md`); answer pending
+- On-site maintenance visit by Georg at Martin's planned — checklist in #122 (backup, documented SSH access instead of hidden tunnel, secret rotation, old runner removal)
+- VPS instance `catchlogx.graf.priv.at` created on Georg's VPS; students will deploy a copy there; second self-hosted Actions-Runner planned on the VPS (#123)
 
 ## Completed (this cycle)
 - [x] Custom cookie-based session auth (sign-in, session, logout)
@@ -33,9 +39,10 @@ Kickoff meeting 2026-09-19 (see `docs/meetings/2026-09-19-kickoff.md`, protocol 
 - [x] Unit tests for all services + `lib/` helpers + `middleware.ts` (I/O mocked via `vi.mock`, see #112). Not covered: API route handlers, React components, `downloadDummyFile` (needs DOM)
 - [ ] Fish search component was removed (issue #60)
 - [ ] 26 Dependabot alerts incl. 4 critical (see #109)
+- [ ] BOKU-IT answer to the maintenance inquiry pending (see #115)
 
 ## Blockers
 None.
 
 ## Next Session Suggestion
-Create proper Prisma migrations to replace the `prisma db push` workflow. Testing follow-ups: route-handler tests, component tests (would need jsdom + Testing Library).
+On-site visit prep (#122) and VPS runner setup (#123) are the active infrastructure threads; code-wise, create proper Prisma migrations to replace the `prisma db push` workflow and add route-handler/component tests (jsdom + Testing Library).

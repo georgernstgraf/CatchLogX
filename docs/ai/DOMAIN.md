@@ -10,6 +10,14 @@ Business rules and domain relationships not obvious from code.
 - **Uploads**: Tracks Excel file uploads through a state machine: UPLOADED → ACCEPTED/REJECTED/DB_ERROR → SAVED_IN_DB
 - **UserQueries**: Saved SQL queries per user, with optional names for the query list
 
+## Parties & Roles (infrastructure, non-obvious from code)
+- **Georg Graf**: teacher (room B1.16a is his staff room at the school, NOT a BOKU location), supervisor of the diploma project, and effectively the external maintenance vendor for the BOKU server
+- **Martin Seebacher** (`@Fishknut`): institute IT at the BOKU hydrobiology department — the OE-level IT responsible who operates the production server. He is NOT part of the central BOKU-IT
+- **BOKU-IT** (`boku-it@boku.ac.at`): central university IT — responsible for topology, formal accreditation, VPN/Funktionsaccount, network-wide rules. Address of the general maintenance inquiry (see #115, `docs/boku-it-auskunft-mail.md`)
+- **Production server**: desktop-class hardware ("Schuhschachtel") on Martin's desk in the BOKUnet, productive since June 2026, accredited only informally via email. Institute IT decided to self-host because the central BOKU-IT does not provide managed hosting (no LAMP/VM offering)
+- **VPS instance** `catchlogx.graf.priv.at`: Georg's own VPS, deploy target for the students' copy of the app; a second self-hosted GitHub-Actions-Runner is planned there (#123) — unproblematic governance-wise because it is Georg's own network
+- **Prior diploma team** ran a GitHub-Actions-Runner on a BOKU-internal server — technically a backdoor pattern (outbound persistent connection enabling remote code execution); this is why the inquiry mail asks whether self-hosted runners are permitted in the BOKUnet
+
 ## Rules
 - A RiverSite must have a unique siteCode
 - A Sampling belongs to exactly one RiverSite
