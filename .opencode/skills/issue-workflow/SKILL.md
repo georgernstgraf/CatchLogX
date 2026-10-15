@@ -15,7 +15,8 @@ metadata:
 This skill governs issue-centered work as a **continuous state**, not a
 user-invoked sequence. At any point in a session the agent knows which issue
 it is working under, commits and pushes completed units proactively, and
-closes the issue when the completion criteria are met. The natural-language
+closes the issue autonomously once the completion criteria are met, reporting
+the closure in its final message. The natural-language
 triggers ("issue start", "issue commit", "issue commit and push") are manual
 overrides, not activation conditions — the rules below apply even without
 being invoked.
