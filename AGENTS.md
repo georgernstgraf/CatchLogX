@@ -46,6 +46,7 @@ npm run create-user   # create admin user (hardcoded admin/admin, dev only)
 npm run prisma:generate  # regenerate Prisma client (required after schema changes; also runs via postinstall)
 npm run prisma:migrate -- --name <name>  # schema change (dev): create + apply a migration
 npm run prisma:deploy   # apply pending migrations (dev instance, production)
+npm run db:query-role   # create/refresh read-only role clx_query for the SQL query UI (see below; idempotent)
 ```
 
 ## Tests (Vitest, #112)
@@ -182,6 +183,7 @@ Uploaded files and template files are stored as **PostgreSQL blobs** (`FileBlob`
 | API auth middleware (server) | `lib/auth-middleware.ts` |
 | Admin auth middleware (server) | `lib/admin-middleware.ts` |
 | File blob helpers | `lib/fileBlobs.ts` |
+| Read-only query client | `lib/queryPrisma.ts` (`QUERY_DATABASE_URL`, role `clx_query`, #121) |
 | Email sender (nodemailer) | `lib/mailer.ts` |
 | Admin panel page | `app/admin/page.tsx` |
 | User creation (dev seed) | `scripts/create-user.ts` |

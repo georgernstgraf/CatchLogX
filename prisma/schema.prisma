@@ -34,6 +34,7 @@ model User {
   sessions       Session[]
   uploads        Uploads[]
   userQueries    UserQueries[]
+  queryLogs      QueryLog[]
 }
 
 model UserQueries {
@@ -43,6 +44,21 @@ model UserQueries {
     userId      String
     query       String
     name        String
+
+    // relations
+    user        User      @relation(fields: [userId], references: [id])
+}
+
+// Audit log of every query run through the SQL query UI (#121).
+model QueryLog {
+    id          String    @id @default(uuid())
+    createdAt   DateTime  @default(now())
+    userId      String
+    query       String
+    success     Boolean
+    error       String?
+    rowCount    Int?
+    durationMs  Int
 
     // relations
     user        User      @relation(fields: [userId], references: [id])

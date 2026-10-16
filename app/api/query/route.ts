@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateSQLQuery, executeQuery } from "@/services/queryService";
+import { getSessionUser } from "@/lib/session";
+import {
+  validateSQLQuery,
+  executeQuery,
+  isPermissionDenied,
+} from "@/services/queryService";
 
 export async function POST(req: NextRequest) {
+  const session = await getSessionUser(req);
+  if (!session) {
+    return NextResponse.json({ error: "Nicht authentifiziert" }, { status: 401 });
+  }
+
   let query: string = "";
 
   try {
@@ -20,7 +30,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const data = await executeQuery(query);
+    const data = await executeQuery(query, session.user.id);
 
     return NextResponse.json({
       message: "Query erfolgreich ausgeführt.",
@@ -28,6 +38,19 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("Database query error:", error);
+
+    if (isPermissionDenied(error)) {
+      const message =
+        "Keine Berechtigung für diese Tabelle/Operation – nur Lesezugriff auf Fangdaten.";
+      return NextResponse.json(
+        {
+          error: message,
+          details: message,
+          query: query,
+        },
+        { status: 403 },
+      );
+    }
 
     return NextResponse.json(
       {

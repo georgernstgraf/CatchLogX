@@ -78,6 +78,7 @@ components/             React components (all client-side)
   MyUploadsPageComponent.tsx User's upload list
 lib/                    Server-side utilities
   prisma.ts             Prisma singleton (imports from app/generated/prisma)
+  queryPrisma.ts        Second Prisma client as read-only role clx_query (query UI only, #121)
   session.ts            Custom session management (cookie → Session table → user)
   auth.ts               NextAuth config (credentials provider, JWT sessions — unused by UI)
   auth-middleware.ts    requireAuth() + withAuth() wrappers for API routes
@@ -91,13 +92,14 @@ services/               Business logic layer (API routes delegate here)
   passwordService.ts    Forgot-password, reset, change-initial-password
   adminService.ts       User CRUD, upload approval/rejection, file downloads
   templateFileService.ts  Template file list, upload, visibility, soft delete, download
-  queryService.ts       SQL query validation, execution, save/delete
+  queryService.ts       SQL query execution as clx_query + QueryLog audit
   uploadService.ts      Excel bulk upload: validate all files, all-or-nothing store, report (#88)
 prisma/
   schema.prisma         Data model + generator (output: app/generated/prisma)
   migrations/           Migration history — single baseline `*_init` (schema source of truth)
 scripts/                Dev utilities
   create-user.ts        User creation (admin/admin)
+  create-query-role.ts  Idempotent setup of read-only role clx_query (npm run db:query-role)
   insert-fish.ts        Seed fish species
   insert-river-sites.ts Seed river sites
   insert-samplings.ts   Seed samplings
@@ -114,6 +116,7 @@ docker-compose.prod.yml Production override (#143): disables the base `app` serv
 User ──< Session             (custom auth)
 User ──< Uploads             (excel upload tracking)
 User ──< UserQueries          (saved SQL queries)
+User ──< QueryLog             (audit log of executed SQL, #121)
 UploadStates: UPLOADED | ACCEPTED | REJECTED | DB_ERROR | SAVED_IN_DB
 PasswordResetStates: REQUESTED | EXPIRED | DONE
 

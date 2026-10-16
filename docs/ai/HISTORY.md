@@ -36,3 +36,7 @@ Each entry keeps its date, title, origin file, reason, and original text.
 
 ## 2026-10-29 (SUPERSEDED 2026-10-29, origin: DECISIONS.md, reason: Messung beim #171-Rollout): „`pg_stat_statements` ist nach einem Restart leer"
 Ursprünglicher Satz (Tradeoff-Eintrag zu #169 am 2026-10-29): *„pg_stat_statements liegt im Shared Memory und ist nach einem Restart leer — die Historie ist dann nur noch der zuletzt gezogene Report."* Beim Rollout von #171 gemessen: `pg_stat_statements.save` ist per Default `on`, die Zähler werden beim **sauberen** Shutdown geschrieben und beim Start geladen — `tracked_shapes = 198` und unveränderter `stats_reset` nach `systemctl restart postgresql@16-main`. Ersetzt durch den korrigierten Satz in `DECISIONS.md` und den neuen `PITFALLS.md`-Eintrag (nur `pg_stat_statements_reset()`/`pg_stat_reset()` oder ein Crash leeren das Fenster).
+
+## 2026-10-16: SQL guard keyword blocklist (from PITFALLS.md)
+- **Reason superseded**: #121 removed the heuristic; the read-only role `clx_query` is now the boundary.
+- **Original**: - `validateSQLQuery` (`services/queryService.ts`) is a keyword blocklist (whole-word match since #116), not a security boundary — it can't see through e.g. Postgres unicode-escaped identifiers. Real protection for the query UI would be a read-only DB role.
