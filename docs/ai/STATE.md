@@ -12,6 +12,7 @@ Kickoff meeting 2026-09-19 (see `docs/meetings/2026-09-19-kickoff.md`, protocol 
 - General (depersonalized) maintenance inquiry sent to `boku-it@boku.ac.at` (actual sent version in `docs/boku-it-auskunft-mail.md`); answer pending
 - On-site maintenance visit by Georg at Martin's planned — checklist in #122 (backup, documented SSH access instead of hidden tunnel, secret rotation, old runner removal)
 - VPS instance `catchlogx.graf.priv.at` created on Georg's VPS; students will deploy a copy there; second self-hosted Actions-Runner planned on the VPS (#123)
+- **Runner reality (2026-10-16):** `master` already deploys through a repo-level self-hosted runner — `production-deploy.yml` uses `runs-on: [self-hosted, linux, x64]`, which is answered by `catchlogx-server` (Linux, online, idle; automatic labels only, no custom label). It appears to be the leftover runner from the previous diploma team on the BOKU machine and last deployed on 2026-07-13, i.e. it is *live infrastructure*, not a leftover to be deleted: #122's "remove the old runner" item would break the production deploy and is blocked behind the BOKU-IT answer in #115. Intended shape once that answer is in — production runner on the BOKU machine, test runner on the VPS (#123) — requires distinct custom labels (`boku-prod` / `vps-dev`) because a personal user account has no runner groups (see PITFALLS.md).
 
 ## Completed (this cycle)
 - [x] Custom cookie-based session auth (sign-in, session, logout)

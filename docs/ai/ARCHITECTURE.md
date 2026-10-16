@@ -14,6 +14,15 @@ Infrastructure: PostgreSQL 16 + MinIO via Docker Compose.
 - **Production (BOKU)** — desktop-class machine on Martin Seebacher's desk (institute IT, OE-level) inside the BOKUnet, productive since June 2026, so far accredited only informally by email. Maintenance access is deliberately restricted to university-sanctioned paths — see `DECISIONS.md` ("No self-managed maintenance tunnels into the BOKUnet") and #115. No standing tunnel, VPN bridge, or reverse tunnel may be attached to this machine.
 - **Public instance `catchlogx.graf.priv.at`** — CNAME to `claw.graf.priv.at` (Georg's own VPS). nginx on 443 terminates TLS (Let's Encrypt, renewed by certbot) and reverse-proxies to `127.0.0.1:40873`; the backing Next.js server is not running yet, so the vhost currently answers `502`. The students deploy their copy here, and a second self-hosted GitHub Actions runner is planned on this machine (#123). The nginx vhost and the deploy tree live in the claw deployment tree (SVN), not in this repo.
 
+### Deploy paths (workflows)
+| Workflow | Trigger | Runs on | What it does |
+|---|---|---|---|
+| `test.yml` | push/PR to `dev`, `master` | GitHub-hosted | lint + typecheck + test (the correctness gate) |
+| `production-deploy.yml` | push to `master` | `[self-hosted, linux, x64]` | `cd /opt/CatchLogX`, `git reset --hard origin/master`, `docker compose down && up -d --build` |
+| `manual.yml` | push to `master` (despite the name) | GitHub-hosted | SSH deploy to `catchlogx.test.a19.at` using the `TEST_SERVER_*` secrets |
+
+The `master` deploy therefore **depends on a repo-level self-hosted runner** (`catchlogx-server`, Linux, online, last successful run 2026-07-13) that appears to be the leftover runner from the previous diploma team on the BOKU production machine — to be confirmed on site (#122). Removing it without a replacement breaks the production deploy; and because it runs on BOKU-owned hardware in the BOKUnet, it is the subject of the pending inquiry in #115. Note that `runs-on` decides job placement by label, not by branch — see `PITFALLS.md` before adding a second self-hosted runner.
+
 ## Directory Map
 ```
 app/                    Next.js App Router pages + API routes
