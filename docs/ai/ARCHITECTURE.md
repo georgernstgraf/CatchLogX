@@ -1,6 +1,6 @@
 # Architecture
 
-Living structural map of the system as of 2026-04-27.
+Living structural map of the system as of 2026-10-16.
 Overwritten when structural changes occur during a session.
 
 ## Overview
@@ -8,6 +8,11 @@ CatchLogX is a Next.js 16.0 web application for BOKU Wien's hydrobiology departm
 It manages fish catch data via Excel upload, SQL querying, and visualization.
 Stack: Next.js App Router, TypeScript, Prisma ORM + PostgreSQL, Tailwind CSS v4, NextAuth.js v4.
 Infrastructure: PostgreSQL 16 + MinIO via Docker Compose.
+
+## Deployment Topology
+- **Local development** — `docker compose up -d` (PostgreSQL 16 + MinIO + app container), app on port 3001.
+- **Production (BOKU)** — desktop-class machine on Martin Seebacher's desk (institute IT, OE-level) inside the BOKUnet, productive since June 2026, so far accredited only informally by email. Maintenance access is deliberately restricted to university-sanctioned paths — see `DECISIONS.md` ("No self-managed maintenance tunnels into the BOKUnet") and #115. No standing tunnel, VPN bridge, or reverse tunnel may be attached to this machine.
+- **Public instance `catchlogx.graf.priv.at`** — CNAME to `claw.graf.priv.at` (Georg's own VPS). nginx on 443 terminates TLS (Let's Encrypt, renewed by certbot) and reverse-proxies to `127.0.0.1:40873`; the backing Next.js server is not running yet, so the vhost currently answers `502`. The students deploy their copy here, and a second self-hosted GitHub Actions runner is planned on this machine (#123). The nginx vhost and the deploy tree live in the claw deployment tree (SVN), not in this repo.
 
 ## Directory Map
 ```
