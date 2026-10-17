@@ -48,7 +48,7 @@ model UserQueries {
     user        User      @relation(fields: [userId], references: [id])
 }
 
-model DummyFiles {
+model TemplateFiles {
     id                  String    @id @default(uuid())
     fileName            String
     filePath            String

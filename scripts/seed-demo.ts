@@ -2,11 +2,11 @@ import { execSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
-import { createDummyFile } from "@/services/dummyFileService";
+import { createTemplateFile } from "@/services/templateFileService";
 
 /**
  * Dev-only demo seed. Idempotent: every step upserts by its natural key, and
- * the template files are only created when no live dummy file of that name
+ * the template files are only created when no live template file of that name
  * exists. Never run against production data.
  *
  * Usage: npm run seed:demo
@@ -41,7 +41,7 @@ async function seedTemplateFiles() {
   }
 
   for (const template of TEMPLATE_FILES) {
-    const existing = await prisma.dummyFiles.findFirst({
+    const existing = await prisma.templateFiles.findFirst({
       where: { fileName: template.fileName, isDeleted: false },
     });
 
@@ -54,7 +54,7 @@ async function seedTemplateFiles() {
       path.join(process.cwd(), "samples", template.fileName),
     );
 
-    const created = await createDummyFile({
+    const created = await createTemplateFile({
       fileBuffer,
       filename: template.fileName,
       contentType: template.contentType,

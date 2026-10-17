@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminAuth } from "@/lib/admin-middleware";
 import { requireAuth } from "@/lib/auth-middleware";
-import { listDummyFiles } from "@/services/dummyFileService";
+import { listTemplateFiles } from "@/services/templateFileService";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -20,13 +20,13 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const dummyFiles = await listDummyFiles(includeHidden);
+    const templateFiles = await listTemplateFiles(includeHidden);
 
-    return NextResponse.json({ dummyFiles }, { status: 200 });
+    return NextResponse.json({ templateFiles }, { status: 200 });
   } catch (error) {
-    console.error("[dummy-file] Failed to fetch files:", error);
+    console.error("[template-file] Failed to fetch files:", error);
     return NextResponse.json(
-      { error: "Failed to fetch dummy files." },
+      { error: "Failed to fetch template files." },
       { status: 500 },
     );
   }

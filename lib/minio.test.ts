@@ -96,14 +96,14 @@ describe("upload / download", () => {
     );
   });
 
-  it("uploadDummyFile stores the buffer in a timestamp folder", async () => {
-    const { uploadDummyFile, dummyFilesPrefix } = await loadMinio();
+  it("uploadTemplateFile stores the buffer in a timestamp folder", async () => {
+    const { uploadTemplateFile, templateFilesPrefix } = await loadMinio();
 
-    const result = await uploadDummyFile(Buffer.from("x"), "dummy.xlsx");
+    const result = await uploadTemplateFile(Buffer.from("x"), "template.xlsx");
 
     expect(result.timestampFolder).toMatch(/^\d{14}$/);
     expect(result.objectKey).toBe(
-      `${dummyFilesPrefix}/${result.timestampFolder}/dummy.xlsx`,
+      `${templateFilesPrefix}/${result.timestampFolder}/template.xlsx`,
     );
   });
 
@@ -126,8 +126,8 @@ describe("upload / download", () => {
       },
     });
     client.getObject.mockResolvedValue(stream);
-    const { downloadDummyFileByObjectKey } = await loadMinio();
+    const { downloadTemplateFileByObjectKey } = await loadMinio();
 
-    await expect(downloadDummyFileByObjectKey("key")).rejects.toThrow("boom");
+    await expect(downloadTemplateFileByObjectKey("key")).rejects.toThrow("boom");
   });
 });

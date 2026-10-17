@@ -1,4 +1,4 @@
-export type DummyFileRecord = {
+export type TemplateFileRecord = {
   id: string;
   fileName: string;
   filePath: string;
@@ -7,8 +7,8 @@ export type DummyFileRecord = {
   isVisible: boolean;
 };
 
-// Exported for unit tests (see lib/dummy-files.test.ts, #112).
-export function normalizeDummyFile(value: unknown): DummyFileRecord | null {
+// Exported for unit tests (see lib/template-files.test.ts, #112).
+export function normalizeTemplateFile(value: unknown): TemplateFileRecord | null {
   if (!value || typeof value !== "object") {
     return null;
   }
@@ -36,12 +36,12 @@ export function normalizeDummyFile(value: unknown): DummyFileRecord | null {
   };
 }
 
-export async function fetchDummyFiles(options?: {
+export async function fetchTemplateFiles(options?: {
   includeHidden?: boolean;
-}): Promise<DummyFileRecord[]> {
+}): Promise<TemplateFileRecord[]> {
   const includeHidden = options?.includeHidden === true;
   const response = await fetch(
-    `/api/upload/dummy-file?includeHidden=${includeHidden ? "true" : "false"}`,
+    `/api/upload/template-file?includeHidden=${includeHidden ? "true" : "false"}`,
     {
       method: "GET",
       cache: "no-store",
@@ -49,23 +49,23 @@ export async function fetchDummyFiles(options?: {
   );
 
   if (!response.ok) {
-    throw new Error("Dummy files could not be loaded.");
+    throw new Error("Template files could not be loaded.");
   }
 
-  const payload = (await response.json()) as { dummyFiles?: unknown };
-  if (!Array.isArray(payload.dummyFiles)) {
+  const payload = (await response.json()) as { templateFiles?: unknown };
+  if (!Array.isArray(payload.templateFiles)) {
     return [];
   }
 
-  return payload.dummyFiles
-    .map((entry) => normalizeDummyFile(entry))
-    .filter((entry): entry is DummyFileRecord => entry !== null);
+  return payload.templateFiles
+    .map((entry) => normalizeTemplateFile(entry))
+    .filter((entry): entry is TemplateFileRecord => entry !== null);
 }
 
-export async function uploadDummyFileToBackend(
+export async function uploadTemplateFileToBackend(
   file: File,
-): Promise<DummyFileRecord> {
-  const response = await fetch("/api/upload/dummy-file/new", {
+): Promise<TemplateFileRecord> {
+  const response = await fetch("/api/upload/template-file/new", {
     method: "POST",
     headers: {
       "content-type":
@@ -77,27 +77,27 @@ export async function uploadDummyFileToBackend(
   });
 
   const payload = (await response.json()) as {
-    dummyFile?: unknown;
+    templateFile?: unknown;
     error?: string;
   };
 
-  if (!response.ok || !payload.dummyFile) {
-    throw new Error(payload.error || "Dummy file upload failed.");
+  if (!response.ok || !payload.templateFile) {
+    throw new Error(payload.error || "Template file upload failed.");
   }
 
-  const normalized = normalizeDummyFile(payload.dummyFile);
+  const normalized = normalizeTemplateFile(payload.templateFile);
   if (!normalized) {
-    throw new Error("Invalid dummy file payload received from server.");
+    throw new Error("Invalid template file payload received from server.");
   }
 
   return normalized;
 }
 
-export async function updateDummyFileVisibility(
+export async function updateTemplateFileVisibility(
   id: string,
   isVisible: boolean,
-): Promise<DummyFileRecord> {
-  const response = await fetch(`/api/upload/dummy-file/${id}`, {
+): Promise<TemplateFileRecord> {
+  const response = await fetch(`/api/upload/template-file/${id}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -106,29 +106,29 @@ export async function updateDummyFileVisibility(
   });
 
   const payload = (await response.json()) as {
-    dummyFile?: unknown;
+    templateFile?: unknown;
     error?: string;
   };
 
-  if (!response.ok || !payload.dummyFile) {
-    throw new Error(payload.error || "Dummy file could not be updated.");
+  if (!response.ok || !payload.templateFile) {
+    throw new Error(payload.error || "Template file could not be updated.");
   }
 
-  const normalized = normalizeDummyFile(payload.dummyFile);
+  const normalized = normalizeTemplateFile(payload.templateFile);
   if (!normalized) {
-    throw new Error("Invalid dummy file payload received from server.");
+    throw new Error("Invalid template file payload received from server.");
   }
 
   return normalized;
 }
 
-export async function deleteDummyFile(id: string): Promise<void> {
-  const response = await fetch(`/api/upload/dummy-file/${id}`, {
+export async function deleteTemplateFile(id: string): Promise<void> {
+  const response = await fetch(`/api/upload/template-file/${id}`, {
     method: "DELETE",
   });
 
   if (!response.ok) {
-    let message = "Dummy file could not be deleted.";
+    let message = "Template file could not be deleted.";
     try {
       const payload = (await response.json()) as { error?: string };
       if (typeof payload.error === "string") {
@@ -141,14 +141,14 @@ export async function deleteDummyFile(id: string): Promise<void> {
   }
 }
 
-export async function downloadDummyFile(file: DummyFileRecord): Promise<void> {
-  const response = await fetch(`/api/upload/dummy-file/${file.id}/download`, {
+export async function downloadTemplateFile(file: TemplateFileRecord): Promise<void> {
+  const response = await fetch(`/api/upload/template-file/${file.id}/download`, {
     method: "GET",
     cache: "no-store",
   });
 
   if (!response.ok) {
-    throw new Error("Dummy file could not be downloaded.");
+    throw new Error("Template file could not be downloaded.");
   }
 
   const blob = await response.blob();

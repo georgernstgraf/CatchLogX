@@ -7,7 +7,7 @@ export const minioBucketName = process.env.MINIO_BUCKET ?? "catchlogx-files";
 const minioRootPrefix = process.env.MINIO_ROOT_PREFIX ?? "CatchLogX";
 
 export const uploadsPrefix = `${minioRootPrefix}/uploads`;
-export const dummyFilesPrefix = `${minioRootPrefix}/dummy_files`;
+export const templateFilesPrefix = `${minioRootPrefix}/template_files`;
 
 const client = new Minio.Client({
   endPoint: process.env.MINIO_ENDPOINT ?? "localhost",
@@ -28,8 +28,8 @@ export function getUploadObjectKey(filename: string) {
   return `${uploadsPrefix}/${sanitizeFilename(filename)}`;
 }
 
-function getDummyFileObjectKey(timestampFolder: string, filename: string) {
-  return `${dummyFilesPrefix}/${timestampFolder}/${sanitizeFilename(filename)}`;
+function getTemplateFileObjectKey(timestampFolder: string, filename: string) {
+  return `${templateFilesPrefix}/${timestampFolder}/${sanitizeFilename(filename)}`;
 }
 
 export function formatTimestampFolder(date = new Date()) {
@@ -73,7 +73,7 @@ export async function ensureMinioStructure() {
       );
       await client.putObject(
         minioBucketName,
-        `${dummyFilesPrefix}/.keep`,
+        `${templateFilesPrefix}/.keep`,
         Buffer.alloc(0),
       );
     })();
@@ -103,7 +103,7 @@ export async function uploadUploadFile(
   return { objectKey, filename };
 }
 
-export async function uploadDummyFile(
+export async function uploadTemplateFile(
   fileBuffer: Buffer,
   filename: string,
   contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -111,7 +111,7 @@ export async function uploadDummyFile(
   await ensureMinioStructure();
 
   const timestampFolder = formatTimestampFolder();
-  const objectKey = getDummyFileObjectKey(timestampFolder, filename);
+  const objectKey = getTemplateFileObjectKey(timestampFolder, filename);
 
   await client.putObject(
     minioBucketName,
@@ -139,7 +139,7 @@ export async function downloadUploadFile(filename: string) {
   return { objectKey, fileBuffer };
 }
 
-export async function downloadDummyFileByObjectKey(objectKey: string) {
+export async function downloadTemplateFileByObjectKey(objectKey: string) {
   const fileBuffer = await getObjectBuffer(objectKey);
   return { objectKey, fileBuffer };
 }

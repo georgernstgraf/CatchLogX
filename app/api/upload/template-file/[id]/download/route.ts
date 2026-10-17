@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/session";
-import { getDummyFileForDownload } from "@/services/dummyFileService";
+import { getTemplateFileForDownload } from "@/services/templateFileService";
 
 function guessContentType(fileName: string): string {
   if (fileName.toLowerCase().endsWith(".xlsx")) {
@@ -34,29 +34,29 @@ export async function GET(
     const canSeeHidden =
       session.user.role === "ADMIN" || session.user.role === "SUPER_ADMIN";
 
-    const dummyFile = await getDummyFileForDownload(id, canSeeHidden);
+    const templateFile = await getTemplateFileForDownload(id, canSeeHidden);
 
     // Unknown, deleted and hidden files are indistinguishable for the client.
-    if (!dummyFile) {
+    if (!templateFile) {
       return NextResponse.json(
-        { error: "Dummy file not found." },
+        { error: "Template file not found." },
         { status: 404 },
       );
     }
 
-    const fileBytes = new Uint8Array(dummyFile.fileBuffer);
+    const fileBytes = new Uint8Array(templateFile.fileBuffer);
 
     return new NextResponse(fileBytes, {
       status: 200,
       headers: {
-        "Content-Type": guessContentType(dummyFile.fileName),
-        "Content-Disposition": `attachment; filename="${dummyFile.fileName}"`,
+        "Content-Type": guessContentType(templateFile.fileName),
+        "Content-Disposition": `attachment; filename="${templateFile.fileName}"`,
       },
     });
   } catch (error) {
-    console.error("[dummy-file] Failed to download file:", error);
+    console.error("[template-file] Failed to download file:", error);
     return NextResponse.json(
-      { error: "Failed to download dummy file." },
+      { error: "Failed to download template file." },
       { status: 500 },
     );
   }

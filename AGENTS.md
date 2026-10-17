@@ -76,7 +76,7 @@ NextAuth is configured in `lib/auth.ts` and `app/api/auth/[...nextauth]/route.ts
 
 API routes delegate to service modules in `services/`. Do NOT put business logic directly in route handlers:
 - `services/adminService.ts` — user CRUD, upload approval, file management
-- `services/dummyFileService.ts` — dummy file list, upload, visibility, soft delete, download
+- `services/templateFileService.ts` — template file list, upload, visibility, soft delete, download
 - `services/authService.ts` — sign-in, session validation
 - `services/passwordService.ts` — forgot-password, reset-password, change-initial-password
 - `services/queryService.ts` — SQL query validation and execution
@@ -84,7 +84,7 @@ API routes delegate to service modules in `services/`. Do NOT put business logic
 
 ## File Storage
 
-Uploaded files are stored in **MinIO** (S3-compatible), managed via `lib/minio.ts`. The bucket is `catchlogx-files` with `uploads/` and `dummy_files/` prefixes. MinIO must be running for upload/download to work.
+Uploaded files are stored in **MinIO** (S3-compatible), managed via `lib/minio.ts`. The bucket is `catchlogx-files` with `uploads/` and `template_files/` prefixes. MinIO must be running for upload/download to work.
 
 ## Conventions
 

@@ -18,7 +18,8 @@ Kickoff 2026-09-19 (siehe `docs/meetings/2026-09-19-kickoff.md`, Protokoll + Auf
 - Vor-Ort-Wartungstermin durch Georg bei Martin geplant — Checkliste in #122 (Backup, dokumentierter SSH-Zugang statt verstecktem Tunnel, Secret-Rotation, alter Runner entfernen)
 - VPS-Instanz `catchlogx.graf.priv.at` existiert (Georgs VPS); Studierende deployen dort eine Kopie; zweiter Self-hosted Actions-Runner geplant (#123)
 - **Dev-Instanz live seit 2026-10-17** (#126): komplett unter System-User `catchlogx`, rootless Docker (nur PostgreSQL 16, `127.0.0.1:5432`), MinIO als aus Source gebautes Binary (`minio.service`, `127.0.0.1:9000/9001`), App als Production-Build (`clx-app.service`, `127.0.0.1:40873`) hinter nginx/TLS auf `https://catchlogx.graf.priv.at`. Dev-User `admin`/`admin` (nur Instanz, nie Prod). Setup-Details: `ARCHITECTURE.md` (Deployment Topology), DECISIONS-Eintrag 2026-10-17.
-- **Demo-Datensatz geseedet** (#127): `npm run seed:demo` legt idempotent 2 Dev-User, 125 Fischarten, 10 Standorte, 10 Samplings, 50 Fänge sowie die Vorlagedateien (`import-template.xlsx`/`.csv`) als sichtbare Dummy-Files an. Auf der Dev-Instanz verifiziert (zweiter Lauf ohne Duplikate).
+- **Demo-Datensatz geseedet** (#127): `npm run seed:demo` legt idempotent 2 Dev-User, 125 Fischarten, 10 Standorte, 10 Samplings, 50 Fänge sowie die Vorlagedateien (`import-template.xlsx`/`.csv`) als sichtbare Template-Files an. Auf der Dev-Instanz verifiziert (zweiter Lauf ohne Duplikate).
+- **„Dummy" → „Template" umbenannt** (#128): Der Begriff „dummy file" war irreführend — die Datei ist eine direkt befüllbare Vorlage (früher „Eingabemaske"). Umbenannt in Code, Prisma-Modell (`ALTER TABLE "DummyFiles" RENAME TO "TemplateFiles"`, Migration liegt bei), API-Routen (`/api/upload/template-file`), UI und MinIO-Präfix (`CatchLogX/template_files`; alte Objekte unter `dummy_files/` bleiben über ihre gespeicherten Object-Keys abrufbar). Kanonischer Begriff: **template** (deutsch **Vorlage**) — „dummy" nicht mehr verwenden.
 
 ## Completed (this cycle)
 - [x] Privates Datenrepo `CatchLogX-Data` angelegt, Daten übernommen, im README verlinkt (#125)
@@ -27,7 +28,7 @@ Kickoff 2026-09-19 (siehe `docs/meetings/2026-09-19-kickoff.md`, Protokoll + Auf
 - [x] Excel upload with validation (schema, PIT tag, cross-file checks)
 - [x] SQL query interface with execution, save/load/delete, CSV export, preset queries
 - [x] Leaflet map component with marker support
-- [x] MinIO file storage (uploads + dummy files)
+- [x] MinIO file storage (uploads + template files)
 - [x] PostgreSQL migration (from SQLite)
 - [x] Dark mode support
 - [x] Password reset flow (email via nodemailer)

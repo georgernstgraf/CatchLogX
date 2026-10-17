@@ -3,15 +3,15 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Download, Eye, EyeOff, Trash2, Upload } from "lucide-react";
 import {
-  deleteDummyFile,
-  downloadDummyFile,
-  DummyFileRecord,
-  fetchDummyFiles,
-  updateDummyFileVisibility,
-  uploadDummyFileToBackend,
-} from "@/lib/dummy-files";
+  deleteTemplateFile,
+  downloadTemplateFile,
+  TemplateFileRecord,
+  fetchTemplateFiles,
+  updateTemplateFileVisibility,
+  uploadTemplateFileToBackend,
+} from "@/lib/template-files";
 
-const MAX_DUMMY_FILE_SIZE_BYTES = 8 * 1024 * 1024;
+const MAX_TEMPLATE_FILE_SIZE_BYTES = 8 * 1024 * 1024;
 
 function formatDateTime(value: string): string {
   const date = new Date(value);
@@ -40,8 +40,8 @@ function formatSize(sizeInBytes: number): string {
   return `${converted.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
-const AdminDummyFilesManager = () => {
-  const [dummyFiles, setDummyFiles] = useState<DummyFileRecord[]>([]);
+const AdminTemplateFilesManager = () => {
+  const [templateFiles, setTemplateFiles] = useState<TemplateFileRecord[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -53,11 +53,11 @@ const AdminDummyFilesManager = () => {
     setErrorMessage("");
 
     try {
-      const files = await fetchDummyFiles({ includeHidden: true });
-      setDummyFiles(files);
+      const files = await fetchTemplateFiles({ includeHidden: true });
+      setTemplateFiles(files);
     } catch (error) {
-      console.error("Could not load dummy files:", error);
-      setErrorMessage("Dummy files could not be loaded.");
+      console.error("Could not load template files:", error);
+      setErrorMessage("Template files could not be loaded.");
     } finally {
       setIsLoading(false);
     }
@@ -68,8 +68,8 @@ const AdminDummyFilesManager = () => {
   }, []);
 
   const visibleCount = useMemo(
-    () => dummyFiles.filter((file) => file.isVisible).length,
-    [dummyFiles],
+    () => templateFiles.filter((file) => file.isVisible).length,
+    [templateFiles],
   );
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -78,14 +78,14 @@ const AdminDummyFilesManager = () => {
     setSelectedFile(file);
   };
 
-  const handleUploadDummyFile = async () => {
+  const handleUploadTemplateFile = async () => {
     if (!selectedFile) {
       return;
     }
 
-    if (selectedFile.size > MAX_DUMMY_FILE_SIZE_BYTES) {
+    if (selectedFile.size > MAX_TEMPLATE_FILE_SIZE_BYTES) {
       setErrorMessage(
-        `The file is too large. Maximum allowed: ${formatSize(MAX_DUMMY_FILE_SIZE_BYTES)}.`,
+        `The file is too large. Maximum allowed: ${formatSize(MAX_TEMPLATE_FILE_SIZE_BYTES)}.`,
       );
       return;
     }
@@ -94,7 +94,7 @@ const AdminDummyFilesManager = () => {
     setErrorMessage("");
 
     try {
-      await uploadDummyFileToBackend(selectedFile);
+      await uploadTemplateFileToBackend(selectedFile);
       await loadFiles();
 
       setSelectedFile(null);
@@ -102,43 +102,43 @@ const AdminDummyFilesManager = () => {
         fileInputRef.current.value = "";
       }
     } catch (error) {
-      console.error("Could not upload dummy file:", error);
-      setErrorMessage("Dummy file could not be uploaded.");
+      console.error("Could not upload template file:", error);
+      setErrorMessage("Template file could not be uploaded.");
     } finally {
       setIsUploading(false);
     }
   };
 
   const handleToggleVisibility = (id: string) => {
-    const selected = dummyFiles.find((file) => file.id === id);
+    const selected = templateFiles.find((file) => file.id === id);
     if (!selected) {
       return;
     }
 
     setErrorMessage("");
-    updateDummyFileVisibility(id, !selected.isVisible)
+    updateTemplateFileVisibility(id, !selected.isVisible)
       .then(() => loadFiles())
       .catch((error) => {
-        console.error("Could not update dummy file visibility:", error);
+        console.error("Could not update template file visibility:", error);
         setErrorMessage("Visibility could not be updated.");
       });
   };
 
-  const handleDeleteDummyFile = (id: string) => {
+  const handleDeleteTemplateFile = (id: string) => {
     setErrorMessage("");
-    deleteDummyFile(id)
+    deleteTemplateFile(id)
       .then(() => loadFiles())
       .catch((error) => {
-        console.error("Could not delete dummy file:", error);
-        setErrorMessage("Dummy file could not be deleted.");
+        console.error("Could not delete template file:", error);
+        setErrorMessage("Template file could not be deleted.");
       });
   };
 
-  const handleDownload = async (file: DummyFileRecord) => {
+  const handleDownload = async (file: TemplateFileRecord) => {
     try {
-      await downloadDummyFile(file);
+      await downloadTemplateFile(file);
     } catch (error) {
-      console.error("Could not download dummy file:", error);
+      console.error("Could not download template file:", error);
       alert("Download failed.");
     }
   };
@@ -148,14 +148,14 @@ const AdminDummyFilesManager = () => {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-6">
         <div>
           <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">
-            Dummy Files
+            Template Files
           </h2>
           <p className="text-gray-600 dark:text-gray-400">
             Visible files are shown as downloads on the upload page.
           </p>
         </div>
         <div className="rounded-lg bg-[#e8f3f3] dark:bg-[#1f2f3e] border border-[#c7e0e0] dark:border-[#2d4257] px-4 py-2 text-sm text-[#235457] dark:text-[#b8d6d8]">
-          Visible: <strong>{visibleCount}</strong> / {dummyFiles.length}
+          Visible: <strong>{visibleCount}</strong> / {templateFiles.length}
         </div>
       </div>
 
@@ -175,7 +175,7 @@ const AdminDummyFilesManager = () => {
             Select File
           </button>
           <button
-            onClick={handleUploadDummyFile}
+            onClick={handleUploadTemplateFile}
             disabled={!selectedFile || isUploading}
             className={`px-4 py-2 rounded-lg text-white transition-colors inline-flex items-center justify-center gap-2 ${
               !selectedFile || isUploading
@@ -184,7 +184,7 @@ const AdminDummyFilesManager = () => {
             }`}
           >
             <Upload size={16} />
-            {isUploading ? "Uploading..." : "Upload Dummy File"}
+            {isUploading ? "Uploading..." : "Upload Template File"}
           </button>
           {selectedFile && (
             <p className="text-sm text-gray-600 dark:text-gray-300 break-all">
@@ -201,11 +201,11 @@ const AdminDummyFilesManager = () => {
 
       {isLoading ? (
         <div className="text-center py-12 text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg">
-          Loading dummy files...
+          Loading template files...
         </div>
-      ) : dummyFiles.length === 0 ? (
+      ) : templateFiles.length === 0 ? (
         <div className="text-center py-12 text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg">
-          No dummy files found.
+          No template files found.
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -227,7 +227,7 @@ const AdminDummyFilesManager = () => {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {dummyFiles.map((file) => (
+              {templateFiles.map((file) => (
                 <tr
                   key={file.id}
                   className="hover:bg-gray-50 dark:hover:bg-gray-700/60"
@@ -266,7 +266,7 @@ const AdminDummyFilesManager = () => {
                         Download
                       </button>
                       <button
-                        onClick={() => handleDeleteDummyFile(file.id)}
+                        onClick={() => handleDeleteTemplateFile(file.id)}
                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 transition-colors"
                         title="Delete file"
                       >
@@ -285,4 +285,4 @@ const AdminDummyFilesManager = () => {
   );
 };
 
-export default AdminDummyFilesManager;
+export default AdminTemplateFilesManager;

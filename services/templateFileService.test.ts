@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// Tests for the dummy file service (#96): listing, creation, visibility,
+// Tests for the template file service (#96): listing, creation, visibility,
 // soft deletion and download access rules. Prisma and MinIO are mocked.
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    dummyFiles: {
+    templateFiles: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
       create: vi.fn(),
@@ -13,19 +13,19 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 vi.mock("@/lib/minio", () => ({
-  uploadDummyFile: vi.fn(),
-  downloadDummyFileByObjectKey: vi.fn(),
+  uploadTemplateFile: vi.fn(),
+  downloadTemplateFileByObjectKey: vi.fn(),
 }));
 
-import { downloadDummyFileByObjectKey, uploadDummyFile } from "@/lib/minio";
+import { downloadTemplateFileByObjectKey, uploadTemplateFile } from "@/lib/minio";
 import { prisma } from "@/lib/prisma";
 import {
-  createDummyFile,
-  getDummyFileForDownload,
-  listDummyFiles,
-  setDummyFileVisibility,
-  softDeleteDummyFile,
-} from "@/services/dummyFileService";
+  createTemplateFile,
+  getTemplateFileForDownload,
+  listTemplateFiles,
+  setTemplateFileVisibility,
+  softDeleteTemplateFile,
+} from "@/services/templateFileService";
 
 const NOW = new Date("2025-01-15T12:00:00Z");
 
@@ -33,13 +33,13 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("listDummyFiles", () => {
+describe("listTemplateFiles", () => {
   it("returns only visible, non-deleted files for regular users", async () => {
-    vi.mocked(prisma.dummyFiles.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.templateFiles.findMany).mockResolvedValue([]);
 
-    await listDummyFiles(false);
+    await listTemplateFiles(false);
 
-    expect(prisma.dummyFiles.findMany).toHaveBeenCalledWith(
+    expect(prisma.templateFiles.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
           OR: [{ isDeleted: false }, { isDeleted: null }],
@@ -51,11 +51,11 @@ describe("listDummyFiles", () => {
   });
 
   it("also returns hidden files when includeHidden is set", async () => {
-    vi.mocked(prisma.dummyFiles.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.templateFiles.findMany).mockResolvedValue([]);
 
-    await listDummyFiles(true);
+    await listTemplateFiles(true);
 
-    expect(prisma.dummyFiles.findMany).toHaveBeenCalledWith(
+    expect(prisma.templateFiles.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { OR: [{ isDeleted: false }, { isDeleted: null }] },
       }),
@@ -63,7 +63,7 @@ describe("listDummyFiles", () => {
   });
 });
 
-describe("createDummyFile", () => {
+describe("createTemplateFile", () => {
   const input = {
     fileBuffer: Buffer.from("data"),
     filename: "sample.xlsx",
@@ -72,25 +72,25 @@ describe("createDummyFile", () => {
   };
 
   it("stores the file in MinIO and registers it as visible", async () => {
-    vi.mocked(uploadDummyFile).mockResolvedValue({
-      objectKey: "root/dummy_files/ts/sample.xlsx",
+    vi.mocked(uploadTemplateFile).mockResolvedValue({
+      objectKey: "root/template_files/ts/sample.xlsx",
       timestampFolder: "ts",
       filename: "sample.xlsx",
     });
-    vi.mocked(prisma.dummyFiles.create).mockResolvedValue({ id: "d1" } as any);
+    vi.mocked(prisma.templateFiles.create).mockResolvedValue({ id: "d1" } as any);
 
-    const created = await createDummyFile(input);
+    const created = await createTemplateFile(input);
 
-    expect(uploadDummyFile).toHaveBeenCalledWith(
+    expect(uploadTemplateFile).toHaveBeenCalledWith(
       input.fileBuffer,
       "sample.xlsx",
       "application/vnd.ms-excel",
     );
-    expect(prisma.dummyFiles.create).toHaveBeenCalledWith(
+    expect(prisma.templateFiles.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: {
           fileName: "sample.xlsx",
-          filePath: "root/dummy_files/ts/sample.xlsx",
+          filePath: "root/template_files/ts/sample.xlsx",
           uploadedByUserId: "admin-1",
           isVisible: true,
           isDeleted: false,
@@ -101,20 +101,20 @@ describe("createDummyFile", () => {
   });
 
   it("does not create a DB record when the MinIO upload fails", async () => {
-    vi.mocked(uploadDummyFile).mockRejectedValue(new Error("minio down"));
+    vi.mocked(uploadTemplateFile).mockRejectedValue(new Error("minio down"));
 
-    await expect(createDummyFile(input)).rejects.toThrow("minio down");
-    expect(prisma.dummyFiles.create).not.toHaveBeenCalled();
+    await expect(createTemplateFile(input)).rejects.toThrow("minio down");
+    expect(prisma.templateFiles.create).not.toHaveBeenCalled();
   });
 });
 
-describe("setDummyFileVisibility", () => {
+describe("setTemplateFileVisibility", () => {
   it("updates only the visibility flag of the given file", async () => {
-    vi.mocked(prisma.dummyFiles.update).mockResolvedValue({ id: "d1" } as any);
+    vi.mocked(prisma.templateFiles.update).mockResolvedValue({ id: "d1" } as any);
 
-    await setDummyFileVisibility("d1", false);
+    await setTemplateFileVisibility("d1", false);
 
-    expect(prisma.dummyFiles.update).toHaveBeenCalledWith(
+    expect(prisma.templateFiles.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "d1" },
         data: { isVisible: false },
@@ -123,85 +123,85 @@ describe("setDummyFileVisibility", () => {
   });
 });
 
-describe("softDeleteDummyFile", () => {
+describe("softDeleteTemplateFile", () => {
   it("marks the record as deleted with a timestamp and keeps the object", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
     try {
-      await softDeleteDummyFile("d1");
+      await softDeleteTemplateFile("d1");
     } finally {
       vi.useRealTimers();
     }
 
-    expect(prisma.dummyFiles.update).toHaveBeenCalledWith({
+    expect(prisma.templateFiles.update).toHaveBeenCalledWith({
       where: { id: "d1" },
       data: { isDeleted: true, deletedAt: NOW },
     });
-    expect(downloadDummyFileByObjectKey).not.toHaveBeenCalled();
+    expect(downloadTemplateFileByObjectKey).not.toHaveBeenCalled();
   });
 });
 
-describe("getDummyFileForDownload", () => {
+describe("getTemplateFileForDownload", () => {
   const record = (overrides: Record<string, unknown> = {}) => ({
     fileName: "sample.xlsx",
-    filePath: "root/dummy_files/ts/sample.xlsx",
+    filePath: "root/template_files/ts/sample.xlsx",
     isVisible: true,
     isDeleted: false,
     ...overrides,
   });
 
   beforeEach(() => {
-    vi.mocked(downloadDummyFileByObjectKey).mockResolvedValue({
-      objectKey: "root/dummy_files/ts/sample.xlsx",
+    vi.mocked(downloadTemplateFileByObjectKey).mockResolvedValue({
+      objectKey: "root/template_files/ts/sample.xlsx",
       fileBuffer: Buffer.from("bytes"),
     });
   });
 
   it("returns null for an unknown id", async () => {
-    vi.mocked(prisma.dummyFiles.findUnique).mockResolvedValue(null);
+    vi.mocked(prisma.templateFiles.findUnique).mockResolvedValue(null);
 
-    expect(await getDummyFileForDownload("nope", true)).toBeNull();
-    expect(downloadDummyFileByObjectKey).not.toHaveBeenCalled();
+    expect(await getTemplateFileForDownload("nope", true)).toBeNull();
+    expect(downloadTemplateFileByObjectKey).not.toHaveBeenCalled();
   });
 
   it("returns null for a deleted file, even for admins", async () => {
-    vi.mocked(prisma.dummyFiles.findUnique).mockResolvedValue(
+    vi.mocked(prisma.templateFiles.findUnique).mockResolvedValue(
       record({ isDeleted: true }) as any,
     );
 
-    expect(await getDummyFileForDownload("d1", true)).toBeNull();
-    expect(downloadDummyFileByObjectKey).not.toHaveBeenCalled();
+    expect(await getTemplateFileForDownload("d1", true)).toBeNull();
+    expect(downloadTemplateFileByObjectKey).not.toHaveBeenCalled();
   });
 
   it("hides hidden files from regular users", async () => {
-    vi.mocked(prisma.dummyFiles.findUnique).mockResolvedValue(
+    vi.mocked(prisma.templateFiles.findUnique).mockResolvedValue(
       record({ isVisible: false }) as any,
     );
 
-    expect(await getDummyFileForDownload("d1", false)).toBeNull();
-    expect(downloadDummyFileByObjectKey).not.toHaveBeenCalled();
+    expect(await getTemplateFileForDownload("d1", false)).toBeNull();
+    expect(downloadTemplateFileByObjectKey).not.toHaveBeenCalled();
   });
 
   it("lets admins download hidden files", async () => {
-    vi.mocked(prisma.dummyFiles.findUnique).mockResolvedValue(
+    vi.mocked(prisma.templateFiles.findUnique).mockResolvedValue(
       record({ isVisible: false }) as any,
     );
 
-    const download = await getDummyFileForDownload("d1", true);
+    const download = await getTemplateFileForDownload("d1", true);
 
     expect(download?.fileName).toBe("sample.xlsx");
     expect(download?.fileBuffer.toString()).toBe("bytes");
   });
 
   it("lets regular users download visible files", async () => {
-    vi.mocked(prisma.dummyFiles.findUnique).mockResolvedValue(
+    vi.mocked(prisma.templateFiles.findUnique).mockResolvedValue(
       record() as any,
     );
 
-    const download = await getDummyFileForDownload("d1", false);
+    const download = await getTemplateFileForDownload("d1", false);
 
-    expect(downloadDummyFileByObjectKey).toHaveBeenCalledWith(
-      "root/dummy_files/ts/sample.xlsx",
+    expect(downloadTemplateFileByObjectKey).toHaveBeenCalledWith(
+      "root/template_files/ts/sample.xlsx",
     );
     expect(download?.fileName).toBe("sample.xlsx");
   });

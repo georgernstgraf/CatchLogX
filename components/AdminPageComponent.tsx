@@ -14,7 +14,7 @@ import {
   UserPlus,
   Edit,
 } from "lucide-react";
-import AdminDummyFilesManager from "./AdminDummyFilesManager";
+import AdminTemplateFilesManager from "./AdminTemplateFilesManager";
 import { useAuth } from "./AuthProvider";
 
 type Upload = {
@@ -400,15 +400,15 @@ const AdminPageComponent = () => {
               User Management
             </button>
             <button
-              onClick={() => setActiveTab("dummy-files")}
+              onClick={() => setActiveTab("template-files")}
               className={`flex items-center px-4 py-2 border-b-2 transition-colors ${
-                activeTab === "dummy-files"
+                activeTab === "template-files"
                   ? "border-[#357174] text-[#357174]"
                   : "border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
               }`}
             >
               <Files className="mr-2" size={20} />
-              Dummy Files
+              Template Files
             </button>
           </div>
 
@@ -667,7 +667,7 @@ const AdminPageComponent = () => {
               </div>
             )}
 
-            {activeTab === "dummy-files" && <AdminDummyFilesManager />}
+            {activeTab === "template-files" && <AdminTemplateFilesManager />}
           </div>
         </div>
       </div>

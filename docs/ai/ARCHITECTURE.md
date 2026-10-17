@@ -18,7 +18,7 @@ Infrastructure: PostgreSQL 16 + MinIO via Docker Compose.
 - **Production (BOKU)** — desktop-class machine on Martin Seebacher's desk (institute IT, OE-level) inside the BOKUnet, productive since June 2026, so far accredited only informally by email. Maintenance access is deliberately restricted to university-sanctioned paths — see `DECISIONS.md` ("No self-managed maintenance tunnels into the BOKUnet") and #115. No standing tunnel, VPN bridge, or reverse tunnel may be attached to this machine.
 - **Dev instance `catchlogx.graf.priv.at`** — CNAME to `claw.graf.priv.at` (Georg's own VPS). Since 2026-10-17 the students' development copy runs there (#126), entirely under the dedicated system user `catchlogx` with **no root at runtime**:
   - rootless Docker (socket `/run/user/1003/docker.sock`) runs only PostgreSQL 16 from `~/dev-stack/docker-compose.yml`, bound to `127.0.0.1:5432`; volume `clx_pgdata`;
-  - MinIO is a native binary built from source at tag `RELEASE.2025-10-15T17-29-55Z` (`~/minio-bin/minio`, data in `~/minio-data`), started by user unit `minio.service` on `127.0.0.1:9000` (console `:9001`); bucket `catchlogx-files` with prefixes `CatchLogX/uploads` and `CatchLogX/dummy_files` is initialised with `mc` (Ubuntu package `minio-client`);
+  - MinIO is a native binary built from source at tag `RELEASE.2025-10-15T17-29-55Z` (`~/minio-bin/minio`, data in `~/minio-data`), started by user unit `minio.service` on `127.0.0.1:9000` (console `:9001`); bucket `catchlogx-files` with prefixes `CatchLogX/uploads` and `CatchLogX/template_files` is initialised with `mc` (Ubuntu package `minio-client`);
   - the app is a production build (`npm run build`) started by user unit `clx-app.service` on `127.0.0.1:40873`; repo clone at `~/repos/georgernstgraf/CatchLogX` (branch `dev`);
   - nginx on 443 terminates TLS (Let's Encrypt, certbot) and reverse-proxies to `127.0.0.1:40873`;
   - secrets live only in `~/dev-stack/.env` and the app's `.env` (mode 600, gitignored) — never in this repo or in SVN docs;
@@ -50,7 +50,7 @@ app/                    Next.js App Router pages + API routes
   api/auth/             Sign-in, logout, session, change-initial-password
   api/admin/            Admin CRUD (users, uploads, files)
   api/query/            SQL query execution + save
-  api/upload/           Excel upload (new, my, dummy-file)
+  api/upload/           Excel upload (new, my, template-file)
   api/forgot-password/  Forgot password request
   api/reset-password/   Password reset
 components/             React components (all client-side)
@@ -67,7 +67,7 @@ components/             React components (all client-side)
   SqlQueryComponent.tsx     SQL query UI with results table + map
   MapComponent.tsx          Leaflet map with marker support
   AdminPageComponent.tsx    Admin user/upload management
-  AdminDummyFilesManager.tsx Dummy file management UI
+  AdminTemplateFilesManager.tsx Template file management UI
   MyUploadsPageComponent.tsx User's upload list
 lib/                    Server-side utilities
   prisma.ts             Prisma singleton (imports from app/generated/prisma)
@@ -77,12 +77,12 @@ lib/                    Server-side utilities
   admin-middleware.ts   requireAdminAuth() + withAdminAuth() for admin routes
   minio.ts              MinIO client (file upload/download, bucket management)
   mailer.ts             Nodemailer SMTP transport (password reset emails)
-  dummy-files.ts        Dummy file tracking helpers
+  template-files.ts      Template file tracking helpers
 services/               Business logic layer (API routes delegate here)
   authService.ts        Sign-in, session validation
   passwordService.ts    Forgot-password, reset, change-initial-password
   adminService.ts       User CRUD, upload approval/rejection, file downloads
-  dummyFileService.ts   Dummy file list, upload, visibility, soft delete, download
+  templateFileService.ts  Template file list, upload, visibility, soft delete, download
   queryService.ts       SQL query validation, execution, save/delete
   uploadService.ts      Excel upload, validation, DB insertion
 prisma/
@@ -108,7 +108,7 @@ User ──< UserQueries          (saved SQL queries)
 UploadStates: UPLOADED | ACCEPTED | REJECTED | DB_ERROR | SAVED_IN_DB
 PasswordResetStates: REQUESTED | EXPIRED | DONE
 
-DummyFiles                    (MinIO dummy upload metadata)
+TemplateFiles                   (MinIO template upload metadata)
 
 RiverSite ──< Sampling ──< FishCatch ── FishSpecies
 FishCatch: added pitDec, pitHex, recapture fields for PIT tag tracking

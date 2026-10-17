@@ -50,7 +50,7 @@ services:
       mc alias set clx http://minio:9000 minioadmin minioadmin;
       mc mb --ignore-existing clx/catchlogx-files;
       printf '' | mc pipe clx/catchlogx-files/CatchLogX/uploads/.keep;
-      printf '' | mc pipe clx/catchlogx-files/CatchLogX/dummy_files/.keep;
+      printf '' | mc pipe clx/catchlogx-files/CatchLogX/template_files/.keep;
       "
 
   app:

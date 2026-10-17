@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminAuth } from "@/lib/admin-middleware";
 import {
-  setDummyFileVisibility,
-  softDeleteDummyFile,
-} from "@/services/dummyFileService";
+  setTemplateFileVisibility,
+  softDeleteTemplateFile,
+} from "@/services/templateFileService";
 
 export async function PATCH(
   request: NextRequest,
@@ -25,13 +25,13 @@ export async function PATCH(
       );
     }
 
-    const updated = await setDummyFileVisibility(id, body.isVisible);
+    const updated = await setTemplateFileVisibility(id, body.isVisible);
 
-    return NextResponse.json({ dummyFile: updated }, { status: 200 });
+    return NextResponse.json({ templateFile: updated }, { status: 200 });
   } catch (error) {
-    console.error("[dummy-file] Failed to update file:", error);
+    console.error("[template-file] Failed to update file:", error);
     return NextResponse.json(
-      { error: "Failed to update dummy file." },
+      { error: "Failed to update template file." },
       { status: 500 },
     );
   }
@@ -49,16 +49,16 @@ export async function DELETE(
   try {
     const { id } = await context.params;
 
-    await softDeleteDummyFile(id);
+    await softDeleteTemplateFile(id);
 
     return NextResponse.json(
-      { message: "Dummy file deleted." },
+      { message: "Template file deleted." },
       { status: 200 },
     );
   } catch (error) {
-    console.error("[dummy-file] Failed to delete file:", error);
+    console.error("[template-file] Failed to delete file:", error);
     return NextResponse.json(
-      { error: "Failed to delete dummy file." },
+      { error: "Failed to delete template file." },
       { status: 500 },
     );
   }

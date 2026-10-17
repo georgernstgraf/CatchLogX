@@ -4,15 +4,15 @@ import React, { useEffect, useRef, useState } from "react";
 import Sidebar from "./Sidebar";
 import DarkModeToggle from "./DarkModeToggle";
 import {
-  downloadDummyFile,
-  DummyFileRecord,
-  fetchDummyFiles,
-} from "@/lib/dummy-files";
+  downloadTemplateFile,
+  TemplateFileRecord,
+  fetchTemplateFiles,
+} from "@/lib/template-files";
 
 const UploadPageComponent = () => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [visibleDummyFiles, setVisibleDummyFiles] = useState<DummyFileRecord[]>(
+  const [visibleTemplateFiles, setVisibleTemplateFiles] = useState<TemplateFileRecord[]>(
     [],
   );
   const [uploadStatus, setUploadStatus] = useState<
@@ -25,20 +25,20 @@ const UploadPageComponent = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const syncDummyFiles = async () => {
+    const syncTemplateFiles = async () => {
       try {
-        const files = await fetchDummyFiles({ includeHidden: false });
-        setVisibleDummyFiles(files.filter((file) => file.isVisible));
+        const files = await fetchTemplateFiles({ includeHidden: false });
+        setVisibleTemplateFiles(files.filter((file) => file.isVisible));
       } catch (error) {
-        console.error("Could not load dummy files:", error);
-        setVisibleDummyFiles([]);
+        console.error("Could not load template files:", error);
+        setVisibleTemplateFiles([]);
       }
     };
 
-    syncDummyFiles();
+    syncTemplateFiles();
 
     const handleFocus = () => {
-      syncDummyFiles();
+      syncTemplateFiles();
     };
 
     window.addEventListener("focus", handleFocus);
@@ -177,12 +177,12 @@ const UploadPageComponent = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
-  const handleDownloadDummyTemplate = async (dummyFile: DummyFileRecord) => {
+  const handleDownloadTemplate = async (templateFile: TemplateFileRecord) => {
     try {
-      await downloadDummyFile(dummyFile);
+      await downloadTemplateFile(templateFile);
     } catch (error) {
-      console.error("Dummy template download failed:", error);
-      alert("Dummy file could not be downloaded.");
+      console.error("Template download failed:", error);
+      alert("Template file could not be downloaded.");
     }
   };
 
@@ -228,8 +228,8 @@ const UploadPageComponent = () => {
                   </p>
                   <ul className="list-disc list-inside space-y-1 ml-4">
                     <li>
-                      The structure matches the provided template exactly (dummy
-                      Excel file)
+                      The structure matches the provided template files
+                      exactly
                     </li>
                     <li>The first row contains the correct column headers</li>
                     <li>
@@ -294,7 +294,8 @@ const UploadPageComponent = () => {
                       or click here to select a file
                     </p>
                     <p className="text-sm text-[#357174] mb-4 font-medium">
-                      📋 Use the provided dummy files as your template
+                      📋 Use the provided template files as the basis for
+                      your upload
                     </p>
                     <button
                       onClick={() => fileInputRef.current?.click()}
@@ -306,30 +307,30 @@ const UploadPageComponent = () => {
                       Supported formats: .xlsx, .xls (max. 50MB)
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      💡 Tip: Download the dummy Excel template and use it as
-                      your base
+                      💡 Tip: Download a template file and use it as your
+                      base
                     </p>
 
-                    {visibleDummyFiles.length > 0 && (
+                    {visibleTemplateFiles.length > 0 && (
                       <div className="mt-6 w-full max-w-xl rounded-lg border border-[#c7e0e0] dark:border-[#2d4257] bg-[#e8f3f3] dark:bg-[#1f2f3e] p-4 text-left">
                         <p className="text-sm font-semibold text-[#235457] dark:text-[#b8d6d8]">
-                          Download Current Dummy Files
+                          Download Current Template Files
                         </p>
                         <p className="text-xs mt-1 text-[#2d666a] dark:text-[#9fbec0]">
                           Visible files are controlled via the admin panel.
                         </p>
                         <div className="mt-3 space-y-2">
-                          {visibleDummyFiles.map((dummyFile) => (
+                          {visibleTemplateFiles.map((templateFile) => (
                             <div
-                              key={dummyFile.id}
+                              key={templateFile.id}
                               className="flex items-center justify-between gap-3 rounded-md bg-white/70 dark:bg-gray-900/40 px-3 py-2"
                             >
                               <p className="text-xs sm:text-sm text-gray-700 dark:text-gray-200 break-all">
-                                {dummyFile.fileName}
+                                {templateFile.fileName}
                               </p>
                               <button
                                 onClick={() =>
-                                  handleDownloadDummyTemplate(dummyFile)
+                                  handleDownloadTemplate(templateFile)
                                 }
                                 className="shrink-0 px-3 py-1.5 text-xs font-medium rounded bg-[#357174] hover:bg-[#2a5a5d] text-white transition-colors"
                               >

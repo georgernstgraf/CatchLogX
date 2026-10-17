@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminAuth } from "@/lib/admin-middleware";
-import { createDummyFile } from "@/services/dummyFileService";
+import { createTemplateFile } from "@/services/templateFileService";
 
 export async function POST(req: NextRequest) {
   const authResult = await requireAdminAuth(req);
@@ -50,9 +50,9 @@ export async function POST(req: NextRequest) {
         headerFilename.toLowerCase().endsWith(ext),
       )
         ? headerFilename
-        : `dummy_file_${Date.now()}.xlsx`;
+        : `template_file_${Date.now()}.xlsx`;
 
-    const dummyFile = await createDummyFile({
+    const templateFile = await createTemplateFile({
       fileBuffer,
       filename,
       contentType: contentType || "application/octet-stream",
@@ -61,17 +61,17 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(
       {
-        message: "Dummy file uploaded successfully",
-        dummyFile,
+        message: "Template file uploaded successfully",
+        templateFile,
       },
       { status: 201 },
     );
   } catch (error: any) {
-    console.error("[dummy-file-upload] Upload failed:", error);
+    console.error("[template-file-upload] Upload failed:", error);
 
     return NextResponse.json(
       {
-        error: "Failed to upload dummy file",
+        error: "Failed to upload template file",
         details: error?.message ?? "Unknown error",
       },
       { status: 500 },
