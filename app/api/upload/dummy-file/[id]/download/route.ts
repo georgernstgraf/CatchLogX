@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/session";
-import { prisma } from "@/lib/prisma";
-import { downloadDummyFileByObjectKey } from "@/lib/minio";
+import { getDummyFileForDownload } from "@/services/dummyFileService";
 
 function guessContentType(fileName: string): string {
   if (fileName.toLowerCase().endsWith(".xlsx")) {
@@ -32,39 +31,20 @@ export async function GET(
   try {
     const { id } = await context.params;
 
-    const dummyFile = await prisma.dummyFiles.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        fileName: true,
-        filePath: true,
-        isVisible: true,
-        isDeleted: true,
-      },
-    });
+    const canSeeHidden =
+      session.user.role === "ADMIN" || session.user.role === "SUPER_ADMIN";
 
-    if (!dummyFile || dummyFile.isDeleted) {
+    const dummyFile = await getDummyFileForDownload(id, canSeeHidden);
+
+    // Unknown, deleted and hidden files are indistinguishable for the client.
+    if (!dummyFile) {
       return NextResponse.json(
         { error: "Dummy file not found." },
         { status: 404 },
       );
     }
 
-    if (
-      !dummyFile.isVisible &&
-      session.user.role !== "ADMIN" &&
-      session.user.role !== "SUPER_ADMIN"
-    ) {
-      return NextResponse.json(
-        { error: "Dummy file not found." },
-        { status: 404 },
-      );
-    }
-
-    const { fileBuffer } = await downloadDummyFileByObjectKey(
-      dummyFile.filePath,
-    );
-    const fileBytes = new Uint8Array(fileBuffer);
+    const fileBytes = new Uint8Array(dummyFile.fileBuffer);
 
     return new NextResponse(fileBytes, {
       status: 200,

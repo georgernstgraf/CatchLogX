@@ -76,6 +76,7 @@ NextAuth is configured in `lib/auth.ts` and `app/api/auth/[...nextauth]/route.ts
 
 API routes delegate to service modules in `services/`. Do NOT put business logic directly in route handlers:
 - `services/adminService.ts` — user CRUD, upload approval, file management
+- `services/dummyFileService.ts` — dummy file list, upload, visibility, soft delete, download
 - `services/authService.ts` — sign-in, session validation
 - `services/passwordService.ts` — forgot-password, reset-password, change-initial-password
 - `services/queryService.ts` — SQL query validation and execution

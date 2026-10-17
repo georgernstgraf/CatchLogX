@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireAdminAuth } from "@/lib/admin-middleware";
 import { requireAuth } from "@/lib/auth-middleware";
+import { listDummyFiles } from "@/services/dummyFileService";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -20,23 +20,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const dummyFiles = await prisma.dummyFiles.findMany({
-      where: {
-        OR: [{ isDeleted: false }, { isDeleted: null }],
-        ...(includeHidden ? {} : { isVisible: true }),
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-      select: {
-        id: true,
-        fileName: true,
-        filePath: true,
-        uploadedByUserId: true,
-        createdAt: true,
-        isVisible: true,
-      },
-    });
+    const dummyFiles = await listDummyFiles(includeHidden);
 
     return NextResponse.json({ dummyFiles }, { status: 200 });
   } catch (error) {

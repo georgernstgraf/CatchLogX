@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireAdminAuth } from "@/lib/admin-middleware";
+import {
+  setDummyFileVisibility,
+  softDeleteDummyFile,
+} from "@/services/dummyFileService";
 
 export async function PATCH(
   request: NextRequest,
@@ -22,20 +25,7 @@ export async function PATCH(
       );
     }
 
-    const updated = await prisma.dummyFiles.update({
-      where: { id },
-      data: {
-        isVisible: body.isVisible,
-      },
-      select: {
-        id: true,
-        fileName: true,
-        filePath: true,
-        uploadedByUserId: true,
-        createdAt: true,
-        isVisible: true,
-      },
-    });
+    const updated = await setDummyFileVisibility(id, body.isVisible);
 
     return NextResponse.json({ dummyFile: updated }, { status: 200 });
   } catch (error) {
@@ -59,13 +49,7 @@ export async function DELETE(
   try {
     const { id } = await context.params;
 
-    await prisma.dummyFiles.update({
-      where: { id },
-      data: {
-        isDeleted: true,
-        deletedAt: new Date(),
-      },
-    });
+    await softDeleteDummyFile(id);
 
     return NextResponse.json(
       { message: "Dummy file deleted." },

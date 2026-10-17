@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminAuth } from "@/lib/admin-middleware";
-import { uploadDummyFile } from "@/lib/minio";
-import { prisma } from "@/lib/prisma";
+import { createDummyFile } from "@/services/dummyFileService";
 
 export async function POST(req: NextRequest) {
   const authResult = await requireAdminAuth(req);
@@ -53,28 +52,11 @@ export async function POST(req: NextRequest) {
         ? headerFilename
         : `dummy_file_${Date.now()}.xlsx`;
 
-    const stored = await uploadDummyFile(
+    const dummyFile = await createDummyFile({
       fileBuffer,
       filename,
-      contentType || "application/octet-stream",
-    );
-
-    const dummyFile = await prisma.dummyFiles.create({
-      data: {
-        fileName: stored.filename,
-        filePath: stored.objectKey,
-        uploadedByUserId: authResult.user.id,
-        isVisible: true,
-        isDeleted: false,
-      },
-      select: {
-        id: true,
-        fileName: true,
-        filePath: true,
-        uploadedByUserId: true,
-        createdAt: true,
-        isVisible: true,
-      },
+      contentType: contentType || "application/octet-stream",
+      uploadedByUserId: authResult.user.id,
     });
 
     return NextResponse.json(
