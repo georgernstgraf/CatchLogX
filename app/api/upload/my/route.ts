@@ -9,24 +9,26 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const uploads = await prisma.uploads.findMany({
-      where: {
-        uploaded_by: authResult.user.id,
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-      select: {
-        id: true,
-        link: true,
-        state: true,
-        note: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+      const uploads = (
+        await prisma.uploads.findMany({
+          where: {
+            uploaded_by: authResult.user.id,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+          select: {
+            id: true,
+            state: true,
+            note: true,
+            createdAt: true,
+            updatedAt: true,
+            blob: { select: { fileName: true } },
+          },
+        })
+      ).map(({ blob, ...upload }) => ({ ...upload, fileName: blob.fileName }));
 
-    return NextResponse.json({ uploads }, { status: 200 });
+      return NextResponse.json({ uploads }, { status: 200 });
   } catch (error) {
     console.error("[upload/my] Failed to fetch uploads:", error);
     return NextResponse.json(

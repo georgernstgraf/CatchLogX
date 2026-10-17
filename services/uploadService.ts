@@ -2,20 +2,34 @@ import * as XLSX from "xlsx";
 import * as ExcelJS from "exceljs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { uploadUploadFile } from "@/lib/minio";
+import { buildFileBlobData, XLSX_MIME_TYPE } from "@/lib/fileBlobs";
+import { buildZip, putArchive } from "@/lib/errorArchive";
+import type { FileErrorGroup, FileReport } from "@/lib/uploadReport";
 
 // Types
 type CellValue = string | number | boolean | Date | null | undefined;
 type SheetRow = CellValue[];
 type DataObject = Record<string, CellValue>;
 
+// Row where every cell is null, undefined or a blank string.
+// Exported for unit tests (see services/uploadService.test.ts, #112).
+export const isEmptyRow = (row: SheetRow): boolean =>
+  row.every(
+    (cell) =>
+      cell === null ||
+      cell === undefined ||
+      (typeof cell === "string" && cell.trim() === ""),
+  );
+
 // vereinheitlichen von Strings zum Vergleich
-const normalize = (v: unknown): string =>
+// Exported for unit tests (see services/uploadService.test.ts, #112).
+export const normalize = (v: unknown): string =>
   String(v ?? "")
     .trim()
     .toLowerCase();
 
-function readLists(workbook: XLSX.WorkBook) {
+// Exported for unit tests (see services/uploadService.test.ts, #112).
+export function readLists(workbook: XLSX.WorkBook) {
   const sheet = workbook.Sheets["List"];
 
   // No List sheet → return empty object; list validation will be skipped
@@ -67,37 +81,52 @@ function inList(lists: Record<string, Set<string>>, listName: string) {
     });
 }
 
-//Zod Schema
+// z.coerce.string() turns undefined/null into "undefined"/"null", and empty
+// Excel cells arrive as undefined — map nullish to "" first so min(1) applies (#118).
+const emptyIfNullish = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((v) => v ?? "", schema);
 
-function buildSchema(lists: Record<string, Set<string>>) {
+//Zod Schema
+// Exported for unit tests (see services/uploadService.test.ts, #112).
+export function buildSchema(lists: Record<string, Set<string>>) {
   return z
     .object({
       country: inList(lists, "country"),
-      river_name: z.coerce
-        .string({ message: "River name must be a text value" })
-        .min(1, { message: "River name is required" }),
+      river_name: emptyIfNullish(
+        z.coerce
+          .string({ message: "River name must be a text value" })
+          .min(1, { message: "River name is required" }),
+      ),
       year: z.coerce
         .number({ message: "Year must be a number" })
         .int({ message: "Year must be a whole number" })
         .min(1990, { message: "Year must be between 1990 and 2100" })
         .max(2100, { message: "Year must be between 1990 and 2100" }),
-      data_provider: z.coerce
-        .string({ message: "Data provider must be a text value" })
-        .min(1, { message: "Data provider is required" }),
+      data_provider: emptyIfNullish(
+        z.coerce
+          .string({ message: "Data provider must be a text value" })
+          .min(1, { message: "Data provider is required" }),
+      ),
       approval_required: z.enum(["yes", "no"], {
         message: "Approval must be 'yes' or 'no'",
       }),
-      source: z.coerce
-        .string({ message: "Source must be a text value" })
-        .min(1, { message: "Source is required" }),
-      project: z.coerce
-        .string({ message: "Project name must be a text value" })
-        .max(150, {
-          message: "Project name must be less than 150 characters long",
-        }),
-      site_name: z.coerce
-        .string({ message: "Site name must be a text value" })
-        .min(1, { message: "Site name is required" }),
+      source: emptyIfNullish(
+        z.coerce
+          .string({ message: "Source must be a text value" })
+          .min(1, { message: "Source is required" }),
+      ),
+      project: emptyIfNullish(
+        z.coerce
+          .string({ message: "Project name must be a text value" })
+          .max(150, {
+            message: "Project name must be less than 150 characters long",
+          }),
+      ),
+      site_name: emptyIfNullish(
+        z.coerce
+          .string({ message: "Site name must be a text value" })
+          .min(1, { message: "Site name is required" }),
+      ),
       date: z.coerce.date({ message: "Invalid date format" }),
       fishing_district: z.coerce
         .string({ message: "Fishing district must be a text value" })
@@ -254,261 +283,517 @@ function buildSchema(lists: Record<string, Set<string>>) {
     });
 }
 
-export async function processUpload(fileBuffer: Buffer, userId: string) {
+/** Columns every DATA sheet must provide. */
+export const REQUIRED_COLUMNS = [
+  "country",
+  "river_name",
+  "year",
+  "data_provider",
+  "approval_required",
+  "source",
+  "project",
+  "site_name",
+  "date",
+  "lat_up",
+  "long_up",
+  "method",
+  "sampling_time",
+  "assessment",
+  "species",
+] as const;
+
+/** One uploaded file as it arrives from the API. */
+export type BulkUploadFile = {
+  fileName: string;
+  buffer: Buffer;
+};
+
+/** A single validation problem found in a file. */
+export type ValidationError = {
+  /** 1-based Excel row number (the header row is row 1). */
+  row: number;
+  /** Column the error belongs to, or `""` for file-level problems. */
+  column: string;
+  /** The offending cell value (`""` when the cell was empty). */
+  value: string;
+  /** Human-readable message that names the column and the value. */
+  message: string;
+};
+
+/** Result of validating one file: structure plus row-level problems. */
+export type ValidatedFile = {
+  fileName: string;
+  buffer: Buffer;
+  headers: string[];
+  /** Header row plus data rows, cut at the first fully empty row. */
+  rows: SheetRow[];
+  /** Data rows in the DATA sheet, header excluded (#132). */
+  dataRowCount: number;
+  errors: ValidationError[];
+  /** Set when the file cannot be parsed at all (missing sheet/columns …). */
+  structuralError?: { error: string; details: string };
+  /** PIT DEC → species, used for the cross-file duplicate check. */
+  pitDec: Map<string, { speciesName: string; rowNum: number }>;
+};
+
+export type BulkUploadOutcome =
+  | {
+      success: true;
+      report: FileReport[];
+      uploads: { id: string; fileName: string; state: string }[];
+    }
+  | { success: false; report: FileReport[]; zipToken: string };
+
+const cellToText = (value: CellValue): string => {
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value);
+};
+
+const withValue = (message: string, value: string): string =>
+  value ? `${message} (value: "${value}")` : message;
+
+/** Removes path separators so a client file name is safe to store. */
+export function sanitizeFileName(fileName: string): string {
+  return fileName.replace(/[\\/]/g, "_").trim() || "upload.xlsx";
+}
+
+/**
+ * Validates one workbook without touching the database (#88). Pure apart from
+ * `XLSX.read`, so a bulk upload can validate every file before writing.
+ */
+export function validateWorkbook(
+  fileName: string,
+  buffer: Buffer,
+): ValidatedFile {
+  const base: ValidatedFile = {
+    fileName,
+    buffer,
+    headers: [],
+    rows: [],
+    dataRowCount: 0,
+    errors: [],
+    pitDec: new Map(),
+  };
+
+  let workbook: XLSX.WorkBook;
   try {
-    const workbook = XLSX.read(fileBuffer, {
+    // `dense` stores rows as arrays instead of per-cell objects: ~2x faster and
+    // ~35% less peak memory on the BOKU bulk (247k rows, #132). Everything here
+    // reads sheets through XLSX.utils.sheet_to_json, which supports dense mode.
+    workbook = XLSX.read(buffer, {
       type: "buffer",
       cellDates: true,
+      dense: true,
     });
+  } catch (error) {
+    return {
+      ...base,
+      structuralError: {
+        error: "Unreadable file",
+        details: `The file could not be read as an Excel workbook: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      },
+    };
+  }
 
-    const lists = readLists(workbook);
-    const rowSchema = buildSchema(lists);
+  const rowSchema = buildSchema(readLists(workbook));
 
-    //DATA Sheet einlesen
-    const sheet = workbook.Sheets["DATA"];
-
-    if (!sheet) {
-      return {
-        success: false,
+  const sheet = workbook.Sheets["DATA"];
+  if (!sheet) {
+    return {
+      ...base,
+      structuralError: {
         error: "DATA sheet missing",
         details: "Required 'DATA' sheet is missing in the Excel file",
-        status: 400,
-      };
+      },
+    };
+  }
+
+  const rows = XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    raw: true,
+  }) as SheetRow[];
+
+  if (!rows || rows.length === 0) {
+    return {
+      ...base,
+      structuralError: {
+        error: "No data found",
+        details: "The DATA sheet contains no data",
+      },
+    };
+  }
+
+  const headers = (rows[0] as string[]) ?? [];
+  if (!headers || headers.length === 0) {
+    return {
+      ...base,
+      structuralError: {
+        error: "No headers found",
+        details: "The DATA sheet contains no column headers",
+      },
+    };
+  }
+
+  const missingColumns = REQUIRED_COLUMNS.filter((col) => !headers.includes(col));
+  if (missingColumns.length > 0) {
+    return {
+      ...base,
+      structuralError: {
+        error: "Missing required columns",
+        details: `Missing required columns: ${missingColumns.join(", ")}`,
+      },
+    };
+  }
+
+  const errors: ValidationError[] = [];
+  const pitDec = new Map<string, { speciesName: string; rowNum: number }>();
+  let end = rows.length;
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+
+    // Stop at the first fully empty row (trailing blanks are common).
+    if (isEmptyRow(row)) {
+      end = i;
+      break;
     }
 
-    const rows: SheetRow[] = XLSX.utils.sheet_to_json(sheet, {
+    const obj: DataObject = {};
+    headers.forEach((h: string, idx: number) => {
+      obj[h] = row[idx];
+    });
+
+    const result = rowSchema.safeParse(obj);
+
+    if (!result.success) {
+      for (const issue of result.error.issues) {
+        const column = String(issue.path[0] ?? "");
+        const columnIndex = headers.indexOf(column);
+        if (columnIndex === -1) continue;
+        const value = cellToText(row[columnIndex]);
+        errors.push({
+          row: i + 1,
+          column,
+          value,
+          message: withValue(issue.message, value),
+        });
+      }
+    }
+
+    const pitDecValue = obj["pit_dec"] ? String(obj["pit_dec"]).trim() : "";
+    const speciesName = obj["species"] ? String(obj["species"]).trim() : "";
+
+    if (pitDecValue && speciesName) {
+      const existing = pitDec.get(pitDecValue);
+      if (existing) {
+        if (existing.speciesName !== speciesName) {
+          errors.push({
+            row: i + 1,
+            column: "pit_dec",
+            value: pitDecValue,
+            message: `PIT DEC ${pitDecValue} occurs with different species (row ${existing.rowNum}: ${existing.speciesName}). It must always have the same species.`,
+          });
+        }
+      } else {
+        pitDec.set(pitDecValue, { speciesName, rowNum: i + 1 });
+      }
+    }
+  }
+
+  return {
+    ...base,
+    headers,
+    rows: rows.slice(0, end),
+    dataRowCount: Math.max(end - 1, 0),
+    errors,
+    pitDec,
+  };
+}
+
+/**
+ * Flags a PIT DEC that appears with different species *across* the files of
+ * one bulk (#88). Both affected files get an error.
+ */
+export function crossFilePitCheck(files: ValidatedFile[]): void {
+  const seen = new Map<
+    string,
+    { file: ValidatedFile; speciesName: string; rowNum: number }
+  >();
+
+  for (const file of files) {
+    if (file.structuralError) continue;
+
+    for (const [pitDec, info] of file.pitDec) {
+      const prior = seen.get(pitDec);
+      if (!prior) {
+        seen.set(pitDec, {
+          file,
+          speciesName: info.speciesName,
+          rowNum: info.rowNum,
+        });
+        continue;
+      }
+
+      if (prior.speciesName !== info.speciesName) {
+        prior.file.errors.push({
+          row: prior.rowNum,
+          column: "pit_dec",
+          value: pitDec,
+          message: `PIT DEC ${pitDec} occurs with different species in file "${file.fileName}" (row ${info.rowNum}: ${info.speciesName}). It must always have the same species.`,
+        });
+        file.errors.push({
+          row: info.rowNum,
+          column: "pit_dec",
+          value: pitDec,
+          message: `PIT DEC ${pitDec} occurs with different species in file "${prior.file.fileName}" (row ${prior.rowNum}: ${prior.speciesName}). It must always have the same species.`,
+        });
+      }
+    }
+  }
+}
+
+/** Checks the PIT DEC species of every file against already stored catches. */
+async function applyDbPitChecks(files: ValidatedFile[]): Promise<void> {
+  for (const file of files) {
+    if (file.structuralError) continue;
+
+    for (const [pitDec, info] of file.pitDec) {
+      try {
+        const existing = await prisma.fishCatch.findFirst({
+          where: { pitDec, recapture: false },
+          include: { species: true },
+        });
+
+        if (existing && existing.species.speciesName !== info.speciesName) {
+          file.errors.push({
+            row: info.rowNum,
+            column: "pit_dec",
+            value: pitDec,
+            message: `PIT DEC ${pitDec} already exists in the database with a different species (${existing.species.speciesName}). It must be marked as a recapture.`,
+          });
+        }
+      } catch (dbError) {
+        console.error("DB error while checking PIT DEC:", dbError);
+        file.errors.push({
+          row: info.rowNum,
+          column: "pit_dec",
+          value: pitDec,
+          message: "Could not check PIT DEC against the database.",
+        });
+      }
+    }
+  }
+}
+
+/** Groups identical errors (same column, value and message) into one entry. */
+export function groupErrors(errors: ValidationError[]): FileErrorGroup[] {
+  const groups = new Map<string, FileErrorGroup>();
+
+  for (const error of errors) {
+    const key = `${error.column}\u0000${error.value}\u0000${error.message}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.rows.push(error.row);
+    } else {
+      groups.set(key, {
+        column: error.column,
+        value: error.value,
+        message: error.message,
+        rows: [error.row],
+      });
+    }
+  }
+
+  return [...groups.values()].map((group) => ({
+    ...group,
+    rows: [...group.rows].sort((a, b) => a - b),
+  }));
+}
+
+/** Turns a validated file into its report entry. */
+export function buildFileReport(file: ValidatedFile): FileReport {
+  if (file.structuralError) {
+    return {
+      fileName: file.fileName,
+      status: "failed",
+      totalRows: 0,
+      passedRows: 0,
+      failedRows: 0,
+      errors: [
+        {
+          column: "-",
+          value: "",
+          message: file.structuralError.details,
+          rows: [],
+        },
+      ],
+    };
+  }
+
+  const failedRows = new Set(file.errors.map((error) => error.row));
+  const totalRows = file.dataRowCount;
+
+  return {
+    fileName: file.fileName,
+    status: file.errors.length > 0 ? "failed" : "passed",
+    totalRows,
+    passedRows: totalRows - failedRows.size,
+    failedRows: failedRows.size,
+    errors: groupErrors(file.errors),
+  };
+}
+
+/**
+ * Re-reads the DATA rows of a workbook for annotation (#132). Only the failure
+ * path needs row data: rows are dropped after validation so that a large bulk
+ * does not hold every workbook in memory.
+ *
+ * Exported for unit tests.
+ */
+export function readDataRowsForAnnotation(buffer: Buffer): SheetRow[] {
+  try {
+    const workbook = XLSX.read(buffer, {
+      type: "buffer",
+      cellDates: true,
+      dense: true,
+    });
+    const sheet = workbook.Sheets["DATA"];
+    if (!sheet) return [];
+    return XLSX.utils.sheet_to_json(sheet, {
       header: 1,
       raw: true,
     }) as SheetRow[];
-
-    if (!rows || rows.length === 0) {
-      return {
-        success: false,
-        error: "No data found",
-        details: "The DATA sheet contains no data",
-        status: 400,
-      };
-    }
-
-    const headers = rows[0] as string[];
-
-    if (!headers || headers.length === 0) {
-      return {
-        success: false,
-        error: "No headers found",
-        details: "The DATA sheet contains no column headers",
-        status: 400,
-      };
-    }
-
-    // Prüfe erforderliche Spalten
-    const requiredColumns = [
-      "country",
-      "river_name",
-      "year",
-      "data_provider",
-      "approval_required",
-      "source",
-      "project",
-      "site_name",
-      "date",
-      "lat_up",
-      "long_up",
-      "method",
-      "sampling_time",
-      "assessment",
-      "species",
-    ];
-
-    const missingColumns = requiredColumns.filter(
-      (col) => !headers.includes(col),
-    );
-
-    if (missingColumns.length > 0) {
-      return {
-        success: false,
-        error: "Missing required columns",
-        details: `Missing required columns: ${missingColumns.join(", ")}`,
-        status: 400,
-      };
-    }
-
-    const errorMap = new Map<string, string>(); // row_column -> message
-
-    // PIT DEC Validierung sammeln (für datei-übergreifende Prüfung)
-    const pitDecMap = new Map<
-      string,
-      { speciesName: string; rowNum: number }
-    >();
-
-    //Validierung der Datenzeilen
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-
-      // Prüfung ob die Zeile komplett leer ist (alle Werte sind null, undefined oder leere Strings)
-      const isEmptyRow = row.every(
-        (cell) =>
-          cell === null ||
-          cell === undefined ||
-          (typeof cell === "string" && cell.trim() === ""),
-      );
-
-      // Wenn leere Zeile gefunden, stoppe die Validierung
-      if (isEmptyRow) {
-        break;
-      }
-
-      const obj: DataObject = {};
-
-      // Zod Objekt mit den Spaltennamen als Schlüssel und den Zellenwerten als Werte erstellen
-      headers.forEach((h: string, idx: number) => {
-        obj[h] = row[idx];
-      });
-
-      const result = rowSchema.safeParse(obj);
-
-      if (!result.success) {
-        // Speichere nur Fehler für Excel-Markierung
-        result.error.issues.forEach((issue) => {
-          const columnIndex = headers.indexOf(issue.path[0] as string);
-          if (columnIndex !== -1) {
-            errorMap.set(`${i + 1}_${columnIndex}`, issue.message);
-          }
-        });
-      }
-
-      // PIT DEC Sammeln für datei-übergreifende Validierung
-      const pitDec = obj["pit_dec"] ? String(obj["pit_dec"]).trim() : null;
-      const speciesName = obj["species"] ? String(obj["species"]).trim() : null;
-
-      if (pitDec && speciesName) {
-        if (pitDecMap.has(pitDec)) {
-          const existing = pitDecMap.get(pitDec)!;
-          if (existing.speciesName !== speciesName) {
-            errorMap.set(
-              `${i + 1}_${headers.indexOf("pit_dec")}`,
-              `PIT DEC ${pitDec} kommt mit unterschiedlichen Arten vor (Zeile ${existing.rowNum}: ${existing.speciesName}). Muss gleiche Art haben.`,
-            );
-          }
-        } else {
-          pitDecMap.set(pitDec, { speciesName, rowNum: i + 1 });
-        }
-      }
-    }
-
-    // DB-Prüfung für existierende PIT DEC (nur wenn keine Fehler in der Datei)
-    if (errorMap.size === 0) {
-      for (const [pitDec, info] of pitDecMap.entries()) {
-        try {
-          const existingCatch = await prisma.fishCatch.findFirst({
-            where: { pitDec, recapture: false },
-            include: { species: true },
-          });
-
-          if (existingCatch) {
-            const existingSpeciesName = existingCatch.species.speciesName;
-            if (existingSpeciesName !== info.speciesName) {
-              errorMap.set(
-                `${info.rowNum}_${headers.indexOf("pit_dec")}`,
-                `PIT DEC ${pitDec} existiert bereits in der Datenbank mit anderer Art (${existingSpeciesName}). Muss als Recapture markiert werden.`,
-              );
-            }
-          }
-        } catch (dbError) {
-          console.error("DB Error checking PIT DEC:", dbError);
-          errorMap.set(
-            `${info.rowNum}_${headers.indexOf("pit_dec")}`,
-            `Fehler bei PIT DEC Prüfung gegen Datenbank.`,
-          );
-        }
-      }
-    }
-
-    if (errorMap.size > 0) {
-      const excelWorkbook = new ExcelJS.Workbook();
-
-      // Erstelle DATA Worksheet
-      const dataWorksheet = excelWorkbook.addWorksheet("DATA");
-
-      // Füge Headers hinzu
-      dataWorksheet.addRow(headers);
-
-      // Füge Datenzeilen hinzu
-      for (let i = 1; i < rows.length; i++) {
-        const row = rows[i];
-        const isEmptyRow = row.every(
-          (cell) =>
-            cell === null ||
-            cell === undefined ||
-            (typeof cell === "string" && cell.trim() === ""),
-        );
-        if (isEmptyRow) break;
-
-        dataWorksheet.addRow(row);
-      }
-
-      // Markiere Fehlerzellen mit rotem Hintergrund und Fehlernachricht als Notiz
-      for (const [key, message] of errorMap) {
-        const [rowIdx, colIdx] = key.split("_").map(Number);
-
-        const cell = dataWorksheet.getCell(rowIdx, colIdx + 1);
-        cell.fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: { argb: "FFFF9999" }, // Hellrot
-        };
-        cell.font = {
-          color: { argb: "FFCC0000" }, // Dunkelrot
-          bold: true,
-        };
-        cell.note = message;
-      }
-
-      const excelBuffer = await excelWorkbook.xlsx.writeBuffer();
-
-      return {
-        success: false,
-        error: "Validation failed",
-        excelError: true,
-        fileBuffer: excelBuffer,
-        status: 400,
-      };
-    }
-
-    // Datei in MinIO speichern
-    const filename = `upload_${Date.now()}_${userId}.xlsx`;
-    await uploadUploadFile(fileBuffer, filename);
-
-    // Upload-Eintrag in der Datenbank anlegen
-    const upload = await prisma.uploads.create({
-      data: {
-        uploaded_by: userId,
-        link: filename,
-        state: "UPLOADED",
-      },
-    });
-
-    return {
-      success: true,
-      data: {
-        processedRows: rows.length - 1,
-        upload: {
-          id: upload.id,
-          link: upload.link,
-          state: upload.state,
-          note: upload.note,
-          createdAt: upload.createdAt,
-          updatedAt: upload.updatedAt,
-        },
-      },
-      summary: "Validation finished successfully",
-    };
-  } catch (error: any) {
-    return {
-      success: false,
-      error: "Server error during file processing",
-      details: error.message,
-      status: 500,
-    };
+  } catch {
+    // Unreadable workbooks are returned unchanged by buildAnnotatedWorkbook.
+    return [];
   }
+}
+
+/** Restores the rows an annotated (failed) workbook needs. */
+function withRowsForAnnotation(file: ValidatedFile): ValidatedFile {
+  if (file.structuralError || file.errors.length === 0 || file.rows.length > 0) {
+    return file;
+  }
+  return { ...file, rows: readDataRowsForAnnotation(file.buffer) };
+}
+
+/**
+ * Rebuilds the workbook with the offending cells highlighted (red fill +
+ * note), as the download users get on a failed upload. Files with only
+ * structural problems are returned unchanged — there is nothing to mark.
+ */
+export async function buildAnnotatedWorkbook(
+  file: ValidatedFile,
+): Promise<Buffer> {
+  if (file.structuralError || file.errors.length === 0) {
+    return file.buffer;
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("DATA");
+
+  sheet.addRow(file.headers);
+  for (let i = 1; i < file.rows.length; i++) {
+    sheet.addRow(file.rows[i]);
+  }
+
+  for (const error of file.errors) {
+    const columnIndex = file.headers.indexOf(error.column);
+    if (columnIndex === -1) continue;
+
+    const cell = sheet.getCell(error.row, columnIndex + 1);
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFFF9999" }, // light red
+    };
+    cell.font = {
+      color: { argb: "FFCC0000" }, // dark red
+      bold: true,
+    };
+    cell.note = error.message;
+  }
+
+  return Buffer.from(await workbook.xlsx.writeBuffer());
+}
+
+/**
+ * Validates and stores a bulk upload (1..N files, #88).
+ *
+ * All-or-nothing: every file is validated first (read-only), then — only when
+ * no file has an error — all files and their `Uploads` rows are written in a
+ * single transaction. A failure writes nothing and returns a report plus a
+ * token for the annotated error ZIP.
+ */
+export async function processBulkUpload(
+  files: BulkUploadFile[],
+  userId: string,
+): Promise<BulkUploadOutcome> {
+  // Row data is only needed to count rows and to annotate a FAILED workbook, so
+  // it is released as soon as each file is validated (#132). Keeping every
+  // workbook's rows alive made a 14-file / 247k-row bulk cost ~1.6 GB RSS on a
+  // 3.8 GB host; the failure path re-reads the affected files instead.
+  const validated: ValidatedFile[] = files.map((file) => {
+    const result = validateWorkbook(file.fileName, file.buffer);
+    return { ...result, rows: [] };
+  });
+
+  crossFilePitCheck(validated);
+
+  const hasErrors = validated.some(
+    (file) => file.structuralError || file.errors.length > 0,
+  );
+  if (!hasErrors) {
+    await applyDbPitChecks(validated);
+  }
+
+  const report = validated.map(buildFileReport);
+
+  const failed = validated.filter(
+    (file) => file.structuralError || file.errors.length > 0,
+  );
+
+  if (failed.length > 0) {
+    const entries = await Promise.all(
+      failed.map(async (file) => ({
+        fileName: file.fileName,
+        data: await buildAnnotatedWorkbook(withRowsForAnnotation(file)),
+      })),
+    );
+    return { success: false, report, zipToken: putArchive(await buildZip(entries)) };
+  }
+
+  // One transaction for the whole bulk: every blob and every upload row, or
+  // nothing at all (#88).
+  const uploads = await prisma.$transaction(
+    validated.map((file) =>
+      prisma.uploads.create({
+        data: {
+          user: { connect: { id: userId } },
+          state: "UPLOADED",
+          blob: {
+            create: buildFileBlobData({
+              fileName: sanitizeFileName(file.fileName),
+              mimeType: XLSX_MIME_TYPE,
+              data: file.buffer,
+            }),
+          },
+        },
+        include: { blob: { select: { fileName: true } } },
+      }),
+    ),
+  );
+
+  return {
+    success: true,
+    report,
+    uploads: uploads.map((upload) => ({
+      id: upload.id,
+      fileName: upload.blob.fileName,
+      state: upload.state,
+    })),
+  };
 }

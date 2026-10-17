@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcrypt";
 import * as XLSX from "xlsx";
 import { Uploads, UserRoles } from "@/app/generated/prisma";
-import { downloadUploadFile } from "@/lib/minio";
+import { blobToBuffer } from "@/lib/fileBlobs";
 import { createMailerTransporter } from "@/lib/mailer";
 
 const adminRoles = new Set<UserRoles>(["ADMIN", "SUPER_ADMIN"]);
@@ -19,20 +19,26 @@ export async function fetchAllData() {
       createdAt: true,
     },
   });
-  const uploads = await prisma.uploads.findMany({
+  const uploadRows = await prisma.uploads.findMany({
     select: {
       id: true,
-      link: true,
       state: true,
       uploaded_by: true,
       note: true,
       createdAt: true,
       updatedAt: true,
+      blob: { select: { fileName: true } },
     },
     orderBy: {
       createdAt: "desc",
     },
   });
+
+  // Flatten the blob so API clients keep a single `fileName` field (#131).
+  const uploads = uploadRows.map(({ blob, ...upload }) => ({
+    ...upload,
+    fileName: blob.fileName,
+  }));
 
   return { uploads, users };
 }
@@ -41,35 +47,74 @@ export function getContentType(): string {
   return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 }
 
-export async function downloadFile(filename: string) {
-  const { fileBuffer } = await downloadUploadFile(filename);
-  return fileBuffer;
-}
-
-async function sendRejectEmail(upload: Uploads) {
-  const transporter = createMailerTransporter("admin-reject-upload");
-
-  const uploadWithUserInfo = await prisma.uploads.findFirst({
-    where: {
-      id: upload.id,
-    },
-    include: {
-      user: true,
-    },
+/** Loads the stored file of an upload by its id, for the admin download. */
+export async function downloadFile(uploadId: string) {
+  const upload = await prisma.uploads.findUnique({
+    where: { id: uploadId },
+    select: { blob: { select: { fileName: true, data: true } } },
   });
 
-  const userEmail = uploadWithUserInfo?.user.email;
-
-  if (!userEmail) {
-    throw new Error(`No user email found for upload ${upload.id}`);
+  if (!upload) {
+    return null;
   }
 
+  return {
+    fileName: upload.blob.fileName,
+    fileBuffer: blobToBuffer(upload.blob.data),
+  };
+}
+
+// Excel cell parsers used when pushing an accepted upload into the DB.
+// Exported for unit tests (see services/adminService.test.ts, #112).
+export function parseDate(value: any): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === "number") {
+    return new Date((value - 25569) * 86400 * 1000);
+  }
+  if (typeof value === "string") {
+    const parts = value.split(".");
+    if (parts.length === 3) {
+      const [d, m, y] = parts.map(Number);
+      if (d && m && y) return new Date(y, m - 1, d);
+    }
+    const d = new Date(value);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return null;
+}
+
+export function toFloat(value: any): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = parseFloat(String(value));
+  return isNaN(n) ? null : n;
+}
+
+export function toInt(value: any): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = parseInt(String(value), 10);
+  return isNaN(n) ? null : n;
+}
+
+export function toBoolean(value: any): boolean | null {
+  if (value === null || value === undefined) return null;
+  const str = String(value).toLowerCase().trim();
+  if (str === "yes") return true;
+  if (str === "no") return false;
+  return null;
+}
+
+// Exported for unit tests (see services/adminService.test.ts, #112).
+export function buildRejectEmailHtml(
+  upload: Uploads,
+  user: { name: string | null; username: string },
+) {
   const formattedDate = new Intl.DateTimeFormat("en-US", {
     dateStyle: "long",
     timeStyle: "short",
   }).format(new Date(upload.createdAt));
 
-  const htmlBody = `
+  return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -95,7 +140,7 @@ async function sendRejectEmail(upload: Uploads) {
           <tr>
             <td style="padding:36px 40px;">
               <p style="margin:0 0 20px;color:#2d2d2d;font-size:15px;line-height:1.6;">
-                Hello <strong>${uploadWithUserInfo?.user.name ?? uploadWithUserInfo?.user.username}</strong>,
+                Hello <strong>${user.name ?? user.username}</strong>,
               </p>
               <p style="margin:0 0 28px;color:#555555;font-size:15px;line-height:1.6;">
                 We regret to inform you that your recent upload has been reviewed and <strong style="color:#e74c3c;">rejected</strong> by our administration team. Please find the details below.
@@ -157,6 +202,27 @@ async function sendRejectEmail(upload: Uploads) {
 </body>
 </html>
   `;
+}
+
+async function sendRejectEmail(upload: Uploads) {
+  const transporter = createMailerTransporter("admin-reject-upload");
+
+  const uploadWithUserInfo = await prisma.uploads.findFirst({
+    where: {
+      id: upload.id,
+    },
+    include: {
+      user: true,
+    },
+  });
+
+  const userEmail = uploadWithUserInfo?.user.email;
+
+  if (!userEmail) {
+    throw new Error(`No user email found for upload ${upload.id}`);
+  }
+
+  const htmlBody = buildRejectEmailHtml(upload, uploadWithUserInfo.user);
 
   const mailResult = await transporter.sendMail({
     from: `"CatchLogX" <${process.env.NODEMAILER_USER}>`,
@@ -171,13 +237,21 @@ async function sendRejectEmail(upload: Uploads) {
 }
 
 async function acceptUploadAndPushToDb(upload: Uploads) {
-  const objectName = upload.link.replace(/^\.\//, "");
-
   let rows: Record<string, any>[];
+  let fileName = upload.blobId;
 
   try {
-    const { fileBuffer } = await downloadUploadFile(objectName);
-    const workbook = XLSX.read(fileBuffer, { type: "buffer" });
+    const blob = await prisma.fileBlob.findUnique({
+      where: { id: upload.blobId },
+      select: { fileName: true, data: true },
+    });
+
+    if (!blob) {
+      throw new Error("Stored file blob is missing.");
+    }
+
+    fileName = blob.fileName;
+    const workbook = XLSX.read(blobToBuffer(blob.data), { type: "buffer" });
     const sheetName = workbook.Sheets["DATA"] ? "DATA" : workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
     const allRows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, {
@@ -210,46 +284,8 @@ async function acceptUploadAndPushToDb(upload: Uploads) {
   }
 
   console.log(
-    `[acceptUploadAndPushToDb] Processing ${rows.length} rows from ${objectName}`,
+    `[acceptUploadAndPushToDb] Processing ${rows.length} rows from ${fileName}`,
   );
-
-  function parseDate(value: any): Date | null {
-    if (!value) return null;
-    if (value instanceof Date) return value;
-    if (typeof value === "number") {
-      return new Date((value - 25569) * 86400 * 1000);
-    }
-    if (typeof value === "string") {
-      const parts = value.split(".");
-      if (parts.length === 3) {
-        const [d, m, y] = parts.map(Number);
-        if (d && m && y) return new Date(y, m - 1, d);
-      }
-      const d = new Date(value);
-      if (!isNaN(d.getTime())) return d;
-    }
-    return null;
-  }
-
-  function toFloat(value: any): number | null {
-    if (value === null || value === undefined || value === "") return null;
-    const n = parseFloat(String(value));
-    return isNaN(n) ? null : n;
-  }
-
-  function toInt(value: any): number | null {
-    if (value === null || value === undefined || value === "") return null;
-    const n = parseInt(String(value), 10);
-    return isNaN(n) ? null : n;
-  }
-
-  function toBoolean(value: any): boolean | null {
-    if (value === null || value === undefined) return null;
-    const str = String(value).toLowerCase().trim();
-    if (str === "yes") return true;
-    if (str === "no") return false;
-    return null;
-  }
 
   const errors: string[] = [];
   let processedRows = 0;
@@ -620,14 +656,16 @@ async function acceptUploadAndPushToDb(upload: Uploads) {
   });
 }
 
+export type UploadAction = "accept" | "deny";
+
 export async function updateUpload(
   id: string,
-  action: string,
+  action: UploadAction,
   reason: string | undefined,
 ): Promise<{ upload: Uploads; emailError?: boolean } | null> {
   const upload = await prisma.uploads.findUnique({
     where: { id },
-    select: { id: true, link: true, state: true },
+    select: { id: true, blobId: true, state: true },
   });
 
   if (!upload) {
@@ -880,6 +918,11 @@ export async function deleteUser(
 
   const actorRole = sessionData.user.role;
   const isSuperAdmin = actorRole === "SUPER_ADMIN";
+
+  // Checked here too, not only by withAdminAuth, and before the inactive-target bypass (#117).
+  if (!isSuperAdmin && !adminRoles.has(actorRole)) {
+    return { forbidden: true, reason: "Admin access required" };
+  }
 
   // Existing no-delete restrictions are bypassed for inactive target accounts.
   if (user.isActive) {

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import DarkModeToggle from "./DarkModeToggle";
+import { escapeCsv } from "@/lib/csv";
 
 interface Location {
   lat: number;
@@ -472,14 +473,6 @@ ORDER BY "Count" DESC;`;
   const handleDownloadCsv = useCallback(() => {
     if (results.length === 0) return;
     const columns = Object.keys(results[0]);
-    const escapeCsv = (val: unknown) => {
-      const str = String(val ?? "");
-      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
-        return '"' + str.replace(/"/g, '""') + '"';
-      }
-      return str;
-    };
-
     const lines: string[] = [];
     // 1. SQL query
     lines.push("# SQL Query");
@@ -757,7 +750,15 @@ ORDER BY "Count" DESC;`;
             <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300">
               SQL Query
             </h2>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
+              <a
+                href="https://github.com/georgernstgraf/CatchLogX/blob/master/prisma/schema.prisma"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 hover:underline"
+              >
+                View the data model (schema.prisma)
+              </a>
               <button
                 onClick={() => setShowSaveDialog(true)}
                 className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600"

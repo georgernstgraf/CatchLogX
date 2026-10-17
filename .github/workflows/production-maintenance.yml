@@ -1,0 +1,207 @@
+name: Production maintenance
+
+# Manual jobs that run ON the BOKU production machine, through its self-hosted
+# runner. That runner is the only sanctioned path to production: there is no
+# SSH or tunnel access by decision (#115).
+#
+# Safety rules for this workflow:
+#   - workflow_dispatch only. It must never run on pull_request, so untrusted
+#     fork code can never reach the self-hosted BOKU runner.
+#   - This repository is public. Database dumps and MinIO exports stay on the
+#     machine; only structural output (schema diff, row counts, migration
+#     bookkeeping) may ever be uploaded as artifacts.
+#   - The audit job is read-only: it never writes to the database and never
+#     stops or restarts the app.
+#
+# Runner labelling: docs/ai/PITFALLS.md states that only master-triggered
+# workflows may name the `boku` label. This workflow is the deliberate
+# exception for the one-time migration window - it is dispatch-only, it takes
+# write access to trigger, and the code it runs is reviewed on dev first
+# (#138).
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep_backups:
+        description: "Backup sets to retain on the machine"
+        required: true
+        default: "5"
+        type: string
+
+concurrency:
+  group: prod-maintenance
+  cancel-in-progress: false
+
+env:
+  PG_CONTAINER: clx-postgres
+  MINIO_CONTAINER: clx-minio
+  PG_USER: clxadmin
+  PG_DB: clx
+  MINIO_BUCKET: catchlogx-files
+  # Credentials default to the values the db-push-era compose shipped with;
+  # set the secrets when #122 rotates them.
+  MC_USER: ${{ secrets.PROD_MINIO_USER || 'minioadmin' }}
+  MC_PASS: ${{ secrets.PROD_MINIO_PASSWORD || 'minioadmin' }}
+  BACKUP_ROOT: ${{ vars.PROD_BACKUP_DIR || 'catchlogx-backups' }}
+  APP_CONTAINER: clx-web
+
+jobs:
+  audit:
+    name: Audit and back up production
+    runs-on: [self-hosted, boku]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Preconditions
+        run: |
+          set -euo pipefail
+          docker inspect "$PG_CONTAINER" >/dev/null
+          docker inspect "$MINIO_CONTAINER" >/dev/null
+          echo "Both production containers are running."
+
+      - name: Back up the database
+        run: |
+          set -euo pipefail
+          STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+          DEST="$HOME/$BACKUP_ROOT/$STAMP"
+          mkdir -p "$DEST"
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+          echo "DEST=$DEST" >> "$GITHUB_ENV"
+
+          # Local socket inside the container: the official postgres image
+          # trusts local connections, so no password is involved here.
+          docker exec "$PG_CONTAINER" pg_dump -U "$PG_USER" -d "$PG_DB" -Fc > "$DEST/db.dump"
+
+          # Never trust an archive we have not listed.
+          docker run --rm -v "$DEST:/backup:ro" postgres:16-alpine \
+            pg_restore --list /backup/db.dump > "$DEST/db.dump.list"
+          test -s "$DEST/db.dump.list"
+
+          echo "Database dump verified: $(du -h "$DEST/db.dump" | cut -f1)"
+
+      - name: Export the MinIO bucket
+        run: |
+          set -euo pipefail
+          # Discover the container's network instead of guessing the compose
+          # project name.
+          NET="$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}' "$MINIO_CONTAINER" | head -n1)"
+          docker run --rm --network "$NET" -v "$DEST:/backup" \
+            -e "MC_HOST_prod=http://${MC_USER}:${MC_PASS}@${MINIO_CONTAINER}:9000" \
+            minio/mc:latest \
+            mc mirror --overwrite --quiet "prod/${MINIO_BUCKET}" /backup/minio
+          echo "Exported $(find "$DEST/minio" -type f | wc -l) objects ($(du -sh "$DEST/minio" | cut -f1))."
+
+      - name: Prune old backups
+        run: |
+          set -euo pipefail
+          KEEP="${{ inputs.keep_backups }}"
+          case "$KEEP" in ''|*[!0-9]*) echo "::error::keep_backups must be a number"; exit 1;; esac
+          ls -1dt "$HOME/$BACKUP_ROOT"/*/ 2>/dev/null | tail -n "+$((KEEP + 1))" | xargs -r rm -rf
+          echo "Retained backup sets:"
+          ls -1dt "$HOME/$BACKUP_ROOT"/*/
+
+      # The running app container is the source of truth for the connection
+      # string - no guessed or hardcoded credentials. Inside the container the
+      # database is reached as `db`; from the runner host it is published on
+      # loopback.
+      - name: Resolve the production database URL
+        run: |
+          set -euo pipefail
+          if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+            URL="$(docker exec "$APP_CONTAINER" printenv DATABASE_URL)"
+            URL="${URL/@db:5432/@127.0.0.1:5432}"
+          else
+            URL="${{ secrets.PROD_DATABASE_URL }}"
+          fi
+          if [ -z "$URL" ]; then
+            echo "::error::Could not determine the production database URL"
+            exit 1
+          fi
+          echo "PROD_DATABASE_URL=$URL" >> "$GITHUB_ENV"
+          echo "Resolved the database URL from $APP_CONTAINER."
+
+      - name: Schema drift report
+        run: |
+          set -euo pipefail
+          npx prisma migrate diff \
+            --from-url "$PROD_DATABASE_URL" \
+            --to-schema-datamodel prisma/schema.prisma \
+            --script > drift.sql
+          if grep -q 'This is an empty migration' drift.sql; then
+            echo "Database matches schema.prisma - no drift."
+          else
+            echo "::warning::Schema drift detected; see drift.sql"
+          fi
+
+      - name: Row counts
+        run: |
+          set -euo pipefail
+          docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -A -t -F'|' <<'SQL' > row-counts.txt
+          SELECT format('SELECT %L, count(*) FROM %I.%I;', n.nspname||'.'||c.relname, n.nspname, c.relname)
+          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE c.relkind = 'r' AND n.nspname = 'public'
+          ORDER BY 1 \gexec
+          SQL
+          cat row-counts.txt
+
+      - name: Migration bookkeeping
+        run: |
+          set -euo pipefail
+          {
+            echo "# _prisma_migrations"
+            if [ -z "$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc "SELECT to_regclass('public.\"_prisma_migrations\"')")" ]; then
+              echo "ABSENT - this database has never been tracked by Prisma Migrate (db push era)."
+            else
+              docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -c \
+                'SELECT migration_name, started_at, finished_at, rolled_back_at, applied_steps_count FROM "_prisma_migrations" ORDER BY started_at;'
+            fi
+          } > migration-state.txt
+          cat migration-state.txt
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Production audit"
+            echo ""
+            echo "- Backup set: \`$DEST\`"
+            echo "- Database dump: $(du -h "$DEST/db.dump" 2>/dev/null | cut -f1)"
+            echo "- MinIO export: $(find "$DEST/minio" -type f 2>/dev/null | wc -l) objects, $(du -sh "$DEST/minio" 2>/dev/null | cut -f1)"
+            echo ""
+            echo "### Migration bookkeeping"
+            echo '```'
+            cat migration-state.txt 2>/dev/null
+            echo '```'
+            echo ""
+            echo "### Schema drift (legacy database -> schema.prisma)"
+            echo '```sql'
+            head -n 80 drift.sql 2>/dev/null
+            echo '```'
+            echo ""
+            echo "### Row counts"
+            echo '```'
+            cat row-counts.txt 2>/dev/null
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Structural reports only - never the dump or the MinIO export.
+      - name: Upload structural reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-audit-${{ env.STAMP || github.run_id }}
+          path: |
+            drift.sql
+            row-counts.txt
+            migration-state.txt
+          retention-days: 30
+          if-no-files-found: warn

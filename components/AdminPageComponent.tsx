@@ -14,12 +14,12 @@ import {
   UserPlus,
   Edit,
 } from "lucide-react";
-import AdminDummyFilesManager from "./AdminDummyFilesManager";
+import AdminTemplateFilesManager from "./AdminTemplateFilesManager";
 import { useAuth } from "./AuthProvider";
 
 type Upload = {
   id: string;
-  link: string;
+  fileName: string;
   uploaded_by: string;
   createdAt: string;
   updatedAt: string;
@@ -116,16 +116,16 @@ const AdminPageComponent = () => {
       const searchMatch =
         search.length === 0 ||
         upload.id.toLowerCase().includes(search) ||
-        upload.link.toLowerCase().includes(search) ||
+        upload.fileName.toLowerCase().includes(search) ||
         upload.uploaded_by.toLowerCase().includes(search);
 
       return stateMatch && searchMatch;
     });
   }, [uploadSearch, uploadStateFilter, uploads]);
 
-  const handleDownload = async (filename: string) => {
+  const handleDownload = async (uploadId: string) => {
     try {
-      const response = await fetch(`/api/admin/download/${filename}`, {
+      const response = await fetch(`/api/admin/download/${uploadId}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -133,12 +133,14 @@ const AdminPageComponent = () => {
       });
 
       if (response.ok) {
+        const disposition = response.headers.get("content-disposition") ?? "";
+        const match = /filename="?([^"]+)"?/.exec(disposition);
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.style.display = "none";
         a.href = url;
-        a.download = filename;
+        a.download = match?.[1] ?? "upload.xlsx";
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
@@ -400,15 +402,15 @@ const AdminPageComponent = () => {
               User Management
             </button>
             <button
-              onClick={() => setActiveTab("dummy-files")}
+              onClick={() => setActiveTab("template-files")}
               className={`flex items-center px-4 py-2 border-b-2 transition-colors ${
-                activeTab === "dummy-files"
+                activeTab === "template-files"
                   ? "border-[#357174] text-[#357174]"
                   : "border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
               }`}
             >
               <Files className="mr-2" size={20} />
-              Dummy Files
+              Template Files
             </button>
           </div>
 
@@ -475,7 +477,7 @@ const AdminPageComponent = () => {
                               />
                               <div>
                                 <h3 className="font-semibold text-gray-800 dark:text-gray-100">
-                                  {upload.link}
+                                  {upload.fileName}
                                 </h3>
                                 <p className="text-sm text-gray-500 dark:text-gray-400">
                                   Upload-ID: {upload.id}
@@ -498,9 +500,7 @@ const AdminPageComponent = () => {
                           <div className="flex space-x-2">
                             <button
                               onClick={() => {
-                                console.log(upload);
-                                console.log(upload.link);
-                                handleDownload(upload.link);
+                                handleDownload(upload.id);
                               }}
                               className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors flex items-center"
                               title="Download file"
@@ -667,7 +667,7 @@ const AdminPageComponent = () => {
               </div>
             )}
 
-            {activeTab === "dummy-files" && <AdminDummyFilesManager />}
+            {activeTab === "template-files" && <AdminTemplateFilesManager />}
           </div>
         </div>
       </div>

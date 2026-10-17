@@ -9,16 +9,17 @@ type MailerConfig = {
   password: string;
 };
 
-function parseBoolean(value: string | undefined): boolean {
+// Exported for unit tests (see lib/mailer.test.ts, #112).
+export function parseBoolean(value: string | undefined): boolean {
   return value === "true" || value === "1";
 }
 
-function parsePort(value: string | undefined): number {
+export function parsePort(value: string | undefined): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 587;
 }
 
-function getMailerConfig(): MailerConfig {
+export function getMailerConfig(): MailerConfig {
   const host = process.env.NODEMAILER_HOST ?? "";
   const user = process.env.NODEMAILER_USER ?? "";
   const password = process.env.NODEMAILER_PASSWORD ?? "";

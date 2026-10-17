@@ -4,41 +4,128 @@ import React, { useEffect, useRef, useState } from "react";
 import Sidebar from "./Sidebar";
 import DarkModeToggle from "./DarkModeToggle";
 import {
-  downloadDummyFile,
-  DummyFileRecord,
-  fetchDummyFiles,
-} from "@/lib/dummy-files";
+  downloadTemplateFile,
+  TemplateFileRecord,
+  fetchTemplateFiles,
+} from "@/lib/template-files";
+import { downloadErrorArchive, uploadFiles } from "@/lib/upload-client";
+import {
+  FileReport,
+  MAX_UPLOAD_FILES,
+  MAX_UPLOAD_FILE_BYTES,
+  MAX_UPLOAD_TOTAL_BYTES,
+} from "@/lib/uploadReport";
+
+const MAX_UPLOAD_FILE_MB = Math.round(MAX_UPLOAD_FILE_BYTES / (1024 * 1024));
+
+const formatFileSize = (bytes: number) => {
+  if (bytes === 0) return "0 Bytes";
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+};
+
+const isExcelFile = (file: File) => {
+  const excelTypes = [
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+    "application/vnd.ms-excel", // .xls
+  ];
+  return (
+    excelTypes.includes(file.type) ||
+    file.name.endsWith(".xlsx") ||
+    file.name.endsWith(".xls")
+  );
+};
+
+/** Per-file validation report, shared by the single and bulk upload. */
+const FileReportRow = ({ report }: { report: FileReport }) => {
+  const passed = report.status === "passed";
+
+  return (
+    <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between gap-3 p-3 bg-gray-50 dark:bg-gray-700/40">
+        <div className="min-w-0">
+          <p className="font-medium text-gray-900 dark:text-gray-100 break-all">
+            {report.fileName}
+          </p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {report.totalRows} rows checked · {report.passedRows} ok ·{" "}
+            {report.failedRows} failed
+          </p>
+        </div>
+        <span
+          className={`shrink-0 px-2 py-1 text-xs font-semibold rounded ${
+            passed
+              ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+              : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+          }`}
+        >
+          {passed ? "passed" : "failed"}
+        </span>
+      </div>
+
+      {!passed && report.errors.length > 0 && (
+        <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+          {report.errors.map((error, index) => (
+            <li key={index} className="p-3 text-sm">
+              <p className="text-gray-800 dark:text-gray-200">
+                <span className="font-semibold">
+                  {error.column === "-" ? "File" : error.column}
+                </span>
+                {error.value && (
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {" "}
+                    · value &quot;{error.value}&quot;
+                  </span>
+                )}
+              </p>
+              <p className="text-gray-600 dark:text-gray-400 mt-0.5">
+                {error.message}
+              </p>
+              {error.rows.length > 0 && (
+                <p className="text-xs text-gray-400 mt-1">
+                  {error.rows.length} row{error.rows.length === 1 ? "" : "s"}:{" "}
+                  {error.rows.join(", ")}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};
 
 const UploadPageComponent = () => {
   const [isDragOver, setIsDragOver] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [visibleDummyFiles, setVisibleDummyFiles] = useState<DummyFileRecord[]>(
-    [],
-  );
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [visibleTemplateFiles, setVisibleTemplateFiles] = useState<
+    TemplateFileRecord[]
+  >([]);
   const [uploadStatus, setUploadStatus] = useState<
     "idle" | "uploading" | "success" | "error"
   >("idle");
+  const [report, setReport] = useState<FileReport[]>([]);
+  const [zipToken, setZipToken] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
-  const [errorType, setErrorType] = useState<
-    "validation" | "structural" | null
-  >(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const syncDummyFiles = async () => {
+    const syncTemplateFiles = async () => {
       try {
-        const files = await fetchDummyFiles({ includeHidden: false });
-        setVisibleDummyFiles(files.filter((file) => file.isVisible));
+        const files = await fetchTemplateFiles({ includeHidden: false });
+        setVisibleTemplateFiles(files.filter((file) => file.isVisible));
       } catch (error) {
-        console.error("Could not load dummy files:", error);
-        setVisibleDummyFiles([]);
+        console.error("Could not load template files:", error);
+        setVisibleTemplateFiles([]);
       }
     };
 
-    syncDummyFiles();
+    syncTemplateFiles();
 
     const handleFocus = () => {
-      syncDummyFiles();
+      syncTemplateFiles();
     };
 
     window.addEventListener("focus", handleFocus);
@@ -48,17 +135,41 @@ const UploadPageComponent = () => {
     };
   }, []);
 
-  // Validate if file is an Excel document
-  const isExcelFile = (file: File) => {
-    const excelTypes = [
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
-      "application/vnd.ms-excel", // .xls
-    ];
-    return (
-      excelTypes.includes(file.type) ||
-      file.name.endsWith(".xlsx") ||
-      file.name.endsWith(".xls")
+  const addFiles = (incoming: File[]) => {
+    const excelFiles = incoming.filter(isExcelFile);
+
+    if (excelFiles.length !== incoming.length) {
+      alert("Please select only Excel files (.xlsx or .xls).");
+    }
+    if (excelFiles.length === 0) return;
+
+    const acceptedFiles = excelFiles.filter(
+      (file) => file.size <= MAX_UPLOAD_FILE_BYTES,
     );
+
+    if (acceptedFiles.length !== excelFiles.length) {
+      alert(
+        `Each file must be at most ${MAX_UPLOAD_FILE_MB} MiB. Larger files were not added.`,
+      );
+    }
+    if (acceptedFiles.length === 0) return;
+
+    setUploadStatus("idle");
+    setReport([]);
+    setZipToken(null);
+    setErrorMessage("");
+
+    setSelectedFiles((current) => {
+      const names = new Set(current.map((file) => file.name));
+      const merged = [...current];
+      for (const file of acceptedFiles) {
+        if (!names.has(file.name)) {
+          merged.push(file);
+          names.add(file.name);
+        }
+      }
+      return merged;
+    });
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -74,117 +185,92 @@ const UploadPageComponent = () => {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
-
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
-      const file = files[0];
-      if (isExcelFile(file)) {
-        setSelectedFile(file);
-        setUploadStatus("idle");
-      } else {
-        alert("Please select only Excel files (.xlsx or .xls).");
-      }
-    }
+    addFiles(Array.from(e.dataTransfer.files));
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      const file = files[0];
-      if (isExcelFile(file)) {
-        setSelectedFile(file);
-        setUploadStatus("idle");
-      } else {
-        alert("Please select only Excel files (.xlsx or .xls).");
-      }
-    }
+    addFiles(Array.from(e.target.files ?? []));
+    e.target.value = "";
   };
 
+  const removeFile = (fileName: string) => {
+    setSelectedFiles((current) =>
+      current.filter((file) => file.name !== fileName),
+    );
+  };
+
+  const totalBytes = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+  const tooManyFiles = selectedFiles.length > MAX_UPLOAD_FILES;
+  const tooLarge = totalBytes > MAX_UPLOAD_TOTAL_BYTES;
+  const canUpload =
+    selectedFiles.length > 0 &&
+    !tooManyFiles &&
+    !tooLarge &&
+    uploadStatus !== "uploading";
+
   const handleUpload = async () => {
-    if (!selectedFile) return;
+    if (!canUpload) return;
 
     setUploadStatus("uploading");
     setErrorMessage("");
-    setErrorType(null);
+    setReport([]);
+    setZipToken(null);
 
     try {
-      const response = await fetch("/api/upload/new", {
-        method: "POST",
-        body: selectedFile,
-      });
+      const outcome = await uploadFiles(selectedFiles);
 
-      const contentType = response.headers.get("content-type") || "";
-
-      // Download validation error workbook
-      if (
-        contentType.includes(
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-      ) {
-        const blob = await response.blob();
-
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "validation_errors.xlsx";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-
+      if (!outcome.ok) {
         setUploadStatus("error");
-        setErrorType("validation");
         setErrorMessage(
-          "An error was found during validation. An Excel file with the highlighted errors has been downloaded.",
+          outcome.details || outcome.error || "An unknown error occurred.",
         );
-        return;
-      }
-
-      // JSON response for success or structural errors
-      const data = await response.json();
-
-      if (!response.ok) {
-        setUploadStatus("error");
-        setErrorType("structural");
-        setErrorMessage(
-          data.details || data.error || "An unknown error occurred.",
-        );
+        setReport(outcome.report);
+        setZipToken(outcome.zipToken ?? null);
         return;
       }
 
       setUploadStatus("success");
+      setReport(outcome.report);
+      setSelectedFiles([]);
     } catch (error) {
       console.error("Upload error:", error);
       setUploadStatus("error");
-      setErrorType("structural");
-      setErrorMessage("Network error: File could not be uploaded.");
+      setErrorMessage("Network error: files could not be uploaded.");
     }
   };
 
   const resetUpload = () => {
-    setSelectedFile(null);
+    setSelectedFiles([]);
     setUploadStatus("idle");
+    setReport([]);
+    setZipToken(null);
+    setErrorMessage("");
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return "0 Bytes";
-    const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-  };
-
-  const handleDownloadDummyTemplate = async (dummyFile: DummyFileRecord) => {
+  const handleDownloadErrors = async () => {
+    if (!zipToken) return;
     try {
-      await downloadDummyFile(dummyFile);
+      await downloadErrorArchive(zipToken);
     } catch (error) {
-      console.error("Dummy template download failed:", error);
-      alert("Dummy file could not be downloaded.");
+      console.error("Error report download failed:", error);
+      alert("The error report could not be downloaded.");
     }
   };
+
+  const handleDownloadTemplate = async (templateFile: TemplateFileRecord) => {
+    try {
+      await downloadTemplateFile(templateFile);
+    } catch (error) {
+      console.error("Template download failed:", error);
+      alert("Template file could not be downloaded.");
+    }
+  };
+
+  const uploadFailed = report.some((entry) => entry.status === "failed");
+  const showSuccess = uploadStatus === "success" && report.length > 0;
 
   return (
     <div className="flex flex-row min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -196,10 +282,12 @@ const UploadPageComponent = () => {
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-              Upload Excel File
+              Upload Excel Files
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
-              Upload your Excel file for administrator review.
+              Upload one or more Excel files for administrator review. A bulk
+              upload is treated as a whole: either every file passes validation
+              or none is submitted.
             </p>
           </div>
           {/* Disclaimer Box */}
@@ -224,12 +312,11 @@ const UploadPageComponent = () => {
                 </h3>
                 <div className="text-sm text-orange-700 dark:text-orange-400">
                   <p className="mb-2">
-                    Please ensure your Excel file meets the following criteria:
+                    Please ensure your Excel files meet the following criteria:
                   </p>
                   <ul className="list-disc list-inside space-y-1 ml-4">
                     <li>
-                      The structure matches the provided template exactly (dummy
-                      Excel file)
+                      The structure matches the provided template files exactly
                     </li>
                     <li>The first row contains the correct column headers</li>
                     <li>
@@ -238,12 +325,17 @@ const UploadPageComponent = () => {
                     </li>
                     <li>Data formats are correct (date, numbers, text)</li>
                     <li>No additional or deleted columns</li>
-                    <li>Maximum of 10,000 rows per file</li>
+                    <li>
+                      At most {MAX_UPLOAD_FILES} files,{" "}
+                      {MAX_UPLOAD_FILE_MB} MiB per file and{" "}
+                      {Math.round(MAX_UPLOAD_TOTAL_BYTES / (1024 * 1024))} MiB in
+                      total per upload
+                    </li>
                   </ul>
                   <p className="mt-3 text-xs bg-orange-100 dark:bg-orange-900/40 p-2 rounded">
-                    <strong>Important:</strong> After upload, your file is
-                    reviewed manually by an administrator. You will receive a
-                    status update once the review is completed.
+                    <strong>Important:</strong> All uploaded files are validated
+                    together. If a single file fails, the whole upload is
+                    rejected and nothing is submitted for review.
                   </p>
                 </div>
               </div>
@@ -251,7 +343,39 @@ const UploadPageComponent = () => {
           </div>
           {/* Upload Area */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8">
-            {!selectedFile ? (
+            {showSuccess ? (
+              <div className="space-y-6">
+                {/* Success Message */}
+                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                  <p className="text-green-700 dark:text-green-300 font-medium">
+                    {report.length} file{report.length === 1 ? "" : "s"} passed
+                    validation and are waiting for administrator review.
+                  </p>
+                  <div className="mt-2 text-sm text-green-600 dark:text-green-400">
+                    You will be notified once the review is complete.
+                  </div>
+                </div>
+
+                {/* Upload report */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                    Upload report
+                  </h3>
+                  {report.map((entry) => (
+                    <FileReportRow key={entry.fileName} report={entry} />
+                  ))}
+                </div>
+
+                <div className="flex justify-center">
+                  <button
+                    onClick={resetUpload}
+                    className="px-6 py-3 rounded-lg font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    Start new upload
+                  </button>
+                </div>
+              </div>
+            ) : selectedFiles.length === 0 ? (
               <div
                 className={`border-2 border-dashed rounded-lg p-12 text-center transition-all duration-300 ${
                   isDragOver
@@ -287,49 +411,49 @@ const UploadPageComponent = () => {
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
                       {isDragOver
-                        ? "Drop file here..."
-                        : "Drop Excel file here"}
+                        ? "Drop files here..."
+                        : "Drop Excel files here"}
                     </h3>
                     <p className="text-gray-500 dark:text-gray-400 mb-4">
-                      or click here to select a file
+                      or click here to select files
                     </p>
                     <p className="text-sm text-[#357174] mb-4 font-medium">
-                      📋 Use the provided dummy files as your template
+                      📋 Use the provided template files as the basis for your
+                      upload
                     </p>
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       className="bg-[#357174] hover:bg-[#2a5a5d] text-white px-6 py-2 rounded-lg font-medium transition-colors duration-200"
                     >
-                      Select File
+                      Select Files
                     </button>
                     <p className="text-xs text-gray-400 mt-2">
-                      Supported formats: .xlsx, .xls (max. 50MB)
+                      Supported formats: .xlsx, .xls
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      💡 Tip: Download the dummy Excel template and use it as
-                      your base
+                      💡 Tip: Download a template file and use it as your base
                     </p>
 
-                    {visibleDummyFiles.length > 0 && (
+                    {visibleTemplateFiles.length > 0 && (
                       <div className="mt-6 w-full max-w-xl rounded-lg border border-[#c7e0e0] dark:border-[#2d4257] bg-[#e8f3f3] dark:bg-[#1f2f3e] p-4 text-left">
                         <p className="text-sm font-semibold text-[#235457] dark:text-[#b8d6d8]">
-                          Download Current Dummy Files
+                          Download Current Template Files
                         </p>
                         <p className="text-xs mt-1 text-[#2d666a] dark:text-[#9fbec0]">
                           Visible files are controlled via the admin panel.
                         </p>
                         <div className="mt-3 space-y-2">
-                          {visibleDummyFiles.map((dummyFile) => (
+                          {visibleTemplateFiles.map((templateFile) => (
                             <div
-                              key={dummyFile.id}
+                              key={templateFile.id}
                               className="flex items-center justify-between gap-3 rounded-md bg-white/70 dark:bg-gray-900/40 px-3 py-2"
                             >
                               <p className="text-xs sm:text-sm text-gray-700 dark:text-gray-200 break-all">
-                                {dummyFile.fileName}
+                                {templateFile.fileName}
                               </p>
                               <button
                                 onClick={() =>
-                                  handleDownloadDummyTemplate(dummyFile)
+                                  handleDownloadTemplate(templateFile)
                                 }
                                 className="shrink-0 px-3 py-1.5 text-xs font-medium rounded bg-[#357174] hover:bg-[#2a5a5d] text-white transition-colors"
                               >
@@ -346,167 +470,124 @@ const UploadPageComponent = () => {
                   ref={fileInputRef}
                   type="file"
                   accept=".xlsx,.xls"
+                  multiple
                   onChange={handleFileSelect}
                   className="hidden"
                 />
               </div>
             ) : (
               <div className="space-y-6">
-                {/* Selected File Info */}
-                <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                      <svg
-                        className="w-6 h-6 text-green-600"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                        />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-gray-100">
-                        {selectedFile.name}
-                      </p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {formatFileSize(selectedFile.size)}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={resetUpload}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                    disabled={uploadStatus === "uploading"}
-                  >
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+                {/* Selected files */}
+                <div className="space-y-2">
+                  {selectedFiles.map((file) => (
+                    <div
+                      key={file.name}
+                      className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </button>
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900 dark:text-gray-100 break-all">
+                          {file.name}
+                        </p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          {formatFileSize(file.size)}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => removeFile(file.name)}
+                        className="text-gray-400 hover:text-gray-600 transition-colors ml-3"
+                        disabled={uploadStatus === "uploading"}
+                        aria-label={`Remove ${file.name}`}
+                      >
+                        <svg
+                          className="w-5 h-5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
                 </div>
-                {/* Upload Button */}
-                <div className="flex justify-center">
+
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
+                  {selectedFiles.length} file
+                  {selectedFiles.length === 1 ? "" : "s"} ·{" "}
+                  {formatFileSize(totalBytes)}
+                  {tooManyFiles &&
+                    ` — at most ${MAX_UPLOAD_FILES} files per upload`}
+                  {tooLarge &&
+                    ` — at most ${Math.round(
+                      MAX_UPLOAD_TOTAL_BYTES / (1024 * 1024),
+                    )} MiB in total`}
+                </p>
+
+                {/* Actions */}
+                <div className="flex flex-wrap items-center justify-center gap-3">
                   <button
                     onClick={handleUpload}
-                    disabled={
-                      uploadStatus === "uploading" || uploadStatus === "success"
-                    }
+                    disabled={!canUpload}
                     className={`px-8 py-3 rounded-lg font-medium transition-all duration-200 ${
-                      uploadStatus === "uploading"
+                      !canUpload
                         ? "bg-gray-400 text-white cursor-not-allowed"
-                        : uploadStatus === "success"
-                          ? "bg-green-600 text-white cursor-not-allowed"
-                          : "bg-[#357174] hover:bg-[#2a5a5d] text-white hover:shadow-lg"
+                        : "bg-[#357174] hover:bg-[#2a5a5d] text-white hover:shadow-lg"
                     }`}
                   >
-                    {uploadStatus === "uploading" && (
-                      <svg
-                        className="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        ></circle>
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        ></path>
-                      </svg>
-                    )}
-                    {uploadStatus === "success" && (
-                      <svg
-                        className="w-5 h-5 mr-2 inline"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
-                    )}
                     {uploadStatus === "uploading"
                       ? "Uploading..."
-                      : uploadStatus === "success"
-                        ? "Submitted Successfully"
-                        : "Submit File for Review"}
+                      : `Submit ${selectedFiles.length} File${
+                          selectedFiles.length === 1 ? "" : "s"
+                        } for Review`}
+                  </button>
+                  <button
+                    onClick={resetUpload}
+                    disabled={uploadStatus === "uploading"}
+                    className="px-6 py-3 rounded-lg font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    {report.length > 0 ? "Start over" : "Cancel"}
                   </button>
                 </div>
-                {/* Success Message */}
-                {uploadStatus === "success" && (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <div className="flex items-center">
-                      <svg
-                        className="w-5 h-5 text-green-400 mr-2"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
+
+                {report.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                      Upload report
+                    </h3>
+                    {report.map((entry) => (
+                      <FileReportRow key={entry.fileName} report={entry} />
+                    ))}
+                    {uploadFailed && zipToken && (
+                      <button
+                        onClick={handleDownloadErrors}
+                        className="w-full sm:w-auto px-6 py-3 rounded-lg font-medium bg-red-600 hover:bg-red-700 text-white transition-colors"
                       >
-                        <path
-                          fillRule="evenodd"
-                          d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                      <p className="text-green-700 font-medium">
-                        Your file was submitted successfully and is waiting for
-                        administrator review.
-                      </p>
-                    </div>
-                    <div className="mt-2 text-sm text-green-600">
-                      You will be notified once the review is complete.
-                    </div>
+                        Download failed files (.zip)
+                      </button>
+                    )}
                   </div>
                 )}
+
                 {/* Error Message */}
                 {uploadStatus === "error" && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <div className="flex items-start">
-                      <svg
-                        className="w-5 h-5 text-red-400 mr-2 mt-0.5"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                      <div>
-                        <h3 className="text-sm font-medium text-red-800 mb-2">
-                          {errorType === "validation"
-                            ? "Validation Error"
-                            : "File Structure Error"}
-                        </h3>
-                        <p className="text-sm text-red-700">{errorMessage}</p>
-                        {errorType === "validation"}
-                      </div>
-                    </div>
+                    <h3 className="text-sm font-medium text-red-800 mb-2">
+                      {report.length > 0
+                        ? "Upload rejected — files were not imported"
+                        : "Upload failed"}
+                    </h3>
+                    <p className="text-sm text-red-700">{errorMessage}</p>
+                    {zipToken && (
+                      <p className="text-sm text-red-700 mt-1">
+                        Fix the marked cells in the downloaded files and upload
+                        again.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

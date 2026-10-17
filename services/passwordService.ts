@@ -51,54 +51,24 @@ export async function findUserOrThrow(username: string): Promise<FindUserType> {
   }
 }
 
+/**
+ * Validity of a password-reset link in minutes (spec: max. 10 minutes, #39).
+ * Single source of truth for the token lookup and for every mail text.
+ */
+const RESET_TOKEN_TTL_MINUTES = 10;
+
 export function createResetToken(): string {
   const token = crypto.randomBytes(24).toString("hex");
   return token;
 }
 
-export async function initiatePasswordReset(
-  username: string,
-  timestamp: string,
-  email: string,
-) {
-  const resetToken = createResetToken();
+// Exported for unit tests (see services/passwordService.test.ts, #112).
+export function buildResetLink(token: string): string {
+  return `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${token}`;
+}
 
-  try {
-    const existingResets = await prisma.passwordResets.findMany({
-      where: {
-        username: username,
-      },
-    });
-    if (existingResets.length > 0) {
-      await prisma.passwordResets.updateMany({
-        data: {
-          state: "EXPIRED",
-        },
-        where: {
-          username: username,
-        },
-      });
-    }
-    await prisma.passwordResets.create({
-      data: {
-        username: username,
-        timestamp: new Date(timestamp),
-        state: "REQUESTED",
-        token: resetToken,
-      },
-    });
-  } catch (e) {
-    console.error(
-      "Error while creating password reset entry in DB. Error: ",
-      e,
-    );
-  }
-
-  const transporter = createMailerTransporter("forgot-password");
-
-  const resetLink = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${resetToken}`;
-
-  const emailHtml = `
+export function buildResetEmailHtml(username: string, resetLink: string) {
+  return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -151,7 +121,7 @@ export async function initiatePasswordReset(
               </p>
               
               <p style="margin: 0 0 8px; font-size: 14px; line-height: 1.6; color: #6b7280;">
-                <strong>Important:</strong> This link will expire in 15 minutes for security reasons.
+                <strong>Important:</strong> This link will expire in ${RESET_TOKEN_TTL_MINUTES} minutes for security reasons.
               </p>
               
               <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #6b7280;">
@@ -191,6 +161,51 @@ export async function initiatePasswordReset(
 </body>
 </html>
       `;
+}
+
+export async function initiatePasswordReset(
+  username: string,
+  timestamp: string,
+  email: string,
+) {
+  const resetToken = createResetToken();
+
+  try {
+    const existingResets = await prisma.passwordResets.findMany({
+      where: {
+        username: username,
+      },
+    });
+    if (existingResets.length > 0) {
+      await prisma.passwordResets.updateMany({
+        data: {
+          state: "EXPIRED",
+        },
+        where: {
+          username: username,
+        },
+      });
+    }
+    await prisma.passwordResets.create({
+      data: {
+        username: username,
+        timestamp: new Date(timestamp),
+        state: "REQUESTED",
+        token: resetToken,
+      },
+    });
+  } catch (e) {
+    console.error(
+      "Error while creating password reset entry in DB. Error: ",
+      e,
+    );
+  }
+
+  const transporter = createMailerTransporter("forgot-password");
+
+  const resetLink = buildResetLink(resetToken);
+
+  const emailHtml = buildResetEmailHtml(username, resetLink);
 
   try {
     const mailResult = await transporter.sendMail({
@@ -198,7 +213,7 @@ export async function initiatePasswordReset(
       to: email,
       subject: "Password Reset Request",
       html: emailHtml,
-      text: `Hello ${username},\n\nWe received a request to reset the password for your CatchLogX account. If you didn't make this request, you can safely ignore this email.\n\nTo reset your password, visit this link:\n${resetLink}\n\nThis link will expire in 24 hours for security reasons.\n\nBest regards,\nThe CatchLogX Team`,
+      text: `Hello ${username},\n\nWe received a request to reset the password for your CatchLogX account. If you didn't make this request, you can safely ignore this email.\n\nTo reset your password, visit this link:\n${resetLink}\n\nThis link will expire in ${RESET_TOKEN_TTL_MINUTES} minutes for security reasons.\n\nBest regards,\nThe CatchLogX Team`,
     });
 
     console.info(
@@ -219,7 +234,7 @@ export async function validateResetToken(token: string) {
       token: token,
       state: "REQUESTED",
       timestamp: {
-        gte: new Date(Date.now() - 1000 * 60 * 15),
+        gte: new Date(Date.now() - 1000 * 60 * RESET_TOKEN_TTL_MINUTES),
       },
     },
   });

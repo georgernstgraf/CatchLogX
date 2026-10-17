@@ -4,20 +4,63 @@
 Next.js 16.0 (App Router), TypeScript (strict), Prisma + PostgreSQL, Tailwind CSS v4, NextAuth.js v4.
 
 ## Infrastructure
-PostgreSQL 16 and MinIO run via Docker Compose (`docker-compose.yml`).
-- Start: `docker compose up -d db minio minio-init` (or `docker compose up -d` for full stack)
+PostgreSQL 16 runs via Docker Compose (`docker-compose.yml`). Uploaded files and
+templates are stored **in the database** (`FileBlob`, `bytea`) — no object store
+is involved (see `docs/ai/DECISIONS.md`, 2026-10-17).
+- Start: `docker compose up -d db db-shadow-init` (or `docker compose up -d` for full stack)
+
+On the dev instance `catchlogx.graf.priv.at` the app runs as a systemd **user** service under the
+`catchlogx` user and serves an **immutable release**: `catchlogx.service` runs
+`node ~/current/server.js`, where `~/current` → `~/releases/<sha>/` (Next.js `output: "standalone"`).
+
+Deploys are **push-driven**: the `deploy` job in `.github/workflows/test.yml` (gated by
+`needs: [test, migration-drift]`) builds on the self-hosted runner
+`actions.runner.catchlogx-vps.service` (label `vps`, running under the same `catchlogx` user
+manager), publishes the release with `scripts/publish-release.sh`, applies `prisma migrate deploy`,
+restarts `catchlogx.service` and health-checks `127.0.0.1:40873`. So
+`systemctl --user restart catchlogx.service` is a plain ~2 s restart with **no build**, and a
+rollback is "point `~/current` at the previous release and restart". Units live in
+`~/.config/systemd/user/`. Never kill raw PIDs (see `PITFALLS.md`).
 
 ## Commands
 ```
-npm run dev           # start dev server (needs PostgreSQL + MinIO running)
+npm run dev           # start dev server (needs PostgreSQL running)
 npm run build         # production build
-npm run lint          # ESLint via next lint
+npm run lint          # ESLint directly (eslint .) — Next 16 removed `next lint`
+npm run typecheck     # tsc --noEmit
+npm test              # Vitest, single run (vitest run) — pure service-logic tests, no DB needed
 npm run create-user   # create admin user (hardcoded admin/admin, dev only)
 npx prisma generate   # regenerate Prisma client (required after schema changes)
-npx prisma db push    # push schema to DB (dev — migrations are not kept current)
+npx prisma migrate dev --name <name>   # schema change (dev): create + apply a migration
+npx prisma migrate deploy              # apply pending migrations (dev instance, production)
 ```
 
-No test runner or typecheck script is configured. TypeScript errors surface during `next build` or `next lint`.
+## Tests (Vitest, #112)
+
+- Config: `vitest.config.ts` (mirrors the `@/*` alias from `tsconfig.json`), `environment: "node"`
+- Test files live next to the source: `services/*.test.ts`, `lib/*.test.ts`, `middleware.test.ts`
+- Rule: no real DB or SMTP. Replace I/O modules with `vi.mock` (`@/lib/prisma`,
+  `@/lib/mailer`, `bcrypt`; `fetch` via `vi.stubGlobal`) so `npm test` stays fast and runs in the hook/CI.
+- Templates: `services/adminService.test.ts` (mocked prisma/mailer, permission matrix, Excel built
+  in memory via `XLSX.utils`), `lib/session.test.ts` (fake timers + real `NextRequest`), `services/queryService.test.ts` (pure).
+- To make helpers testable, lift/export them from their module with `// Exported for unit tests (#112).`
+  (e.g. `normalize`, `buildSchema`, `parseDate`, `buildRejectEmailHtml`). No behaviour changes.
+- Not covered: API route handlers, React components (no jsdom), `lib/auth.ts` (NextAuth, unused).
+
+## Git Workflow (Trunk-Based)
+
+- **Trunk = `dev` branch.** All work happens directly on `dev` — **no feature branches**.
+- `master` is production (protected: PR + 1 approval); it receives merges from `dev` only.
+- **Pull first:** At the start of every work session run `git pull --ff-only origin dev` before touching code.
+- Commit early and often; every commit must reference a GitHub issue (see Git / Issues below).
+- **Pre-push hook (lint + typecheck + test gate):** Pushes to `dev` are aborted when `npm run lint`, `npm run typecheck` (`tsc --noEmit`), or `npm test` (`npx vitest run`) fails. Output is shown directly (not suppressed) so a failure is visible without re-running the command.
+  - Hook lives at `.githooks/pre-push`; activate once per clone with:
+    `git config core.hooksPath .githooks`
+  - Check activation with `npm run check:hooks` (warns only — never fails).
+  - Agents: warn about an inactive hook at session start (see the
+    `issue-workflow` skill) — warn only, let the user activate it.
+- **CI is source of truth:** `.github/workflows/test.yml` runs `npm run lint` + `npm run typecheck` + `npm test` on push/PR to `dev`/`master`.
+  The local hook is fast feedback only — hooks are bypassable (`--no-verify`) and opt-in per clone.
 
 ## Prisma
 
@@ -29,6 +72,22 @@ After any schema change, run `npx prisma generate` before `next dev` or `next bu
 
 **Database is PostgreSQL** (migrated from SQLite). Connection via `DATABASE_URL` env var.
 Query logging is disabled (empty `log: []` in `lib/prisma.ts`).
+
+### Migrations: migration-only workflow (#129)
+
+**The migration history in `prisma/migrations/` is the single source of truth for the schema.**
+
+- **Schema change (dev):** `npx prisma migrate dev --name <name>` — creates a migration *and* applies it.
+  Requires a shadow database: set `SHADOW_DATABASE_URL` (dev: `clx_shadow`, created by the
+  `db-shadow-init` service in `docker-compose.yml`).
+- **Deploy (dev instance, production, CI):** `npx prisma migrate deploy` — applies pending migrations only.
+- **`npx prisma db push` is banned** outside throwaway sandboxes. It bypasses the history, writes no
+  migration, and silently drops/recreates tables on renames (data loss).
+- **CI enforces this:** the `migration-drift` job in `.github/workflows/test.yml` applies the history to an
+  empty database and fails when it no longer matches `schema.prisma`.
+- History state: a single baseline `20261017190000_init` was generated from `schema.prisma` on 2026-10-17
+  (#129) after the history had drifted (the `UserRoles` enum had never been migrated). The dev database was
+  rebuilt from it; the BOKU production database is rebuilt from it at the maintenance appointment (#122).
 
 ## Auth
 
@@ -49,6 +108,7 @@ NextAuth is configured in `lib/auth.ts` and `app/api/auth/[...nextauth]/route.ts
 
 API routes delegate to service modules in `services/`. Do NOT put business logic directly in route handlers:
 - `services/adminService.ts` — user CRUD, upload approval, file management
+- `services/templateFileService.ts` — template file list, upload, visibility, soft delete, download
 - `services/authService.ts` — sign-in, session validation
 - `services/passwordService.ts` — forgot-password, reset-password, change-initial-password
 - `services/queryService.ts` — SQL query validation and execution
@@ -56,7 +116,7 @@ API routes delegate to service modules in `services/`. Do NOT put business logic
 
 ## File Storage
 
-Uploaded files are stored in **MinIO** (S3-compatible), managed via `lib/minio.ts`. The bucket is `catchlogx-files` with `uploads/` and `dummy_files/` prefixes. MinIO must be running for upload/download to work.
+Uploaded files and template files are stored as **PostgreSQL blobs** (`FileBlob`, `bytea`), written together with their metadata row in a single (nested) create so file bytes and upload record cannot drift. Helpers: `lib/fileBlobs.ts`. Downloads stream the bytes back out of the database.
 
 ## Conventions
 
@@ -78,10 +138,12 @@ Uploaded files are stored in **MinIO** (S3-compatible), managed via `lib/minio.t
 | Session validation (server) | `lib/session.ts` |
 | API auth middleware (server) | `lib/auth-middleware.ts` |
 | Admin auth middleware (server) | `lib/admin-middleware.ts` |
-| MinIO client | `lib/minio.ts` |
+| File blob helpers | `lib/fileBlobs.ts` |
 | Email sender (nodemailer) | `lib/mailer.ts` |
 | Admin panel page | `app/admin/page.tsx` |
 | User creation (dev seed) | `scripts/create-user.ts` |
+| Supervision log (hours) | `docs/Betreuung.md` |
+| Meeting minutes | `docs/meetings/` (one file per meeting: `YYYY-MM-DD-topic.md`, German) |
 
 ## Git / Issues
 

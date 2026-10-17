@@ -1,13 +1,23 @@
 name: Deploy CatchLogX
 
+# TEMPORARY: manual-only until the one-time production cutover has run (#137).
+#
+# Production (Martin's BOKU desktop) still runs the last master push from
+# 2026-09-19 - the MinIO + `prisma db push` era. A push to master would deploy
+# the current compose file, whose app container runs `prisma migrate deploy`
+# against a database with no matching migration bookkeeping: the baseline
+# collides with the existing tables, the container's `&&` chain aborts and
+# production stays down.
+#
+# Do NOT dispatch this before the cutover job (#141) has put production on the
+# migration-tracked schema. Push-trigger semantics are restored by the gated
+# production deploy pipeline (#144), which replaces this workflow entirely.
 on:
-  push:
-    branches:
-      - master
+  workflow_dispatch:
 
 jobs:
   deploy:
-    runs-on: [self-hosted, linux, x64]
+    runs-on: [self-hosted, boku]
 
     steps:
       - name: Update repository
