@@ -11,7 +11,6 @@ import {
 import { downloadErrorArchive, uploadFiles } from "@/lib/upload-client";
 import {
   FileReport,
-  MAX_ROWS_PER_FILE,
   MAX_UPLOAD_FILES,
   MAX_UPLOAD_FILE_BYTES,
   MAX_UPLOAD_TOTAL_BYTES,
@@ -325,10 +324,6 @@ const UploadPageComponent = () => {
                     </li>
                     <li>Data formats are correct (date, numbers, text)</li>
                     <li>No additional or deleted columns</li>
-                    <li>
-                      Maximum of {MAX_ROWS_PER_FILE.toLocaleString("en-US")} rows
-                      per file
-                    </li>
                     <li>
                       At most {MAX_UPLOAD_FILES} files,{" "}
                       {MAX_UPLOAD_FILE_MB} MiB per file and{" "}

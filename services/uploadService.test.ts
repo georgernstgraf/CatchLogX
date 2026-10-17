@@ -14,7 +14,6 @@ vi.mock("@/lib/prisma", () => ({
 
 import { prisma } from "@/lib/prisma";
 import { getArchive } from "@/lib/errorArchive";
-import { MAX_ROWS_PER_FILE } from "@/lib/uploadReport";
 import {
   buildAnnotatedWorkbook,
   buildSchema,
@@ -222,27 +221,6 @@ describe("validateWorkbook", () => {
     expect(file.errors).toHaveLength(1);
     expect(file.errors[0]).toMatchObject({ row: 3, column: "pit_dec", value: "123" });
     expect(file.errors[0].message).toMatch(/PIT DEC 123.*row 2.*Brown trout/);
-  });
-
-  // The 10,000-row limit was only stated in the upload page's checklist; the
-  // validator ran unbounded on big workbooks, burning minutes of CPU and RAM
-  // building per-row messages (#132).
-  it("rejects a workbook past the row limit without row-by-row validation", () => {
-    const tooMany = Array.from({ length: MAX_ROWS_PER_FILE + 1 }, () => validRow);
-    const file = validateWorkbook("big.xlsx", dataFile(tooMany));
-
-    expect(file.structuralError).toMatchObject({ error: "Too many rows" });
-    expect(file.structuralError?.details).toContain(
-      `at most ${MAX_ROWS_PER_FILE}`,
-    );
-    expect(file.errors).toEqual([]);
-  });
-
-  it("accepts a workbook exactly at the row limit", () => {
-    const atLimit = Array.from({ length: MAX_ROWS_PER_FILE }, () => validRow);
-    const file = validateWorkbook("limit.xlsx", dataFile(atLimit));
-
-    expect(file.structuralError).toBeUndefined();
   });
 });
 

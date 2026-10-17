@@ -5,7 +5,6 @@ import { prisma } from "@/lib/prisma";
 import { buildFileBlobData, XLSX_MIME_TYPE } from "@/lib/fileBlobs";
 import { buildZip, putArchive } from "@/lib/errorArchive";
 import type { FileErrorGroup, FileReport } from "@/lib/uploadReport";
-import { MAX_ROWS_PER_FILE } from "@/lib/uploadReport";
 
 // Types
 type CellValue = string | number | boolean | Date | null | undefined;
@@ -328,6 +327,8 @@ export type ValidatedFile = {
   headers: string[];
   /** Header row plus data rows, cut at the first fully empty row. */
   rows: SheetRow[];
+  /** Data rows in the DATA sheet, header excluded (#132). */
+  dataRowCount: number;
   errors: ValidationError[];
   /** Set when the file cannot be parsed at all (missing sheet/columns …). */
   structuralError?: { error: string; details: string };
@@ -370,13 +371,21 @@ export function validateWorkbook(
     buffer,
     headers: [],
     rows: [],
+    dataRowCount: 0,
     errors: [],
     pitDec: new Map(),
   };
 
   let workbook: XLSX.WorkBook;
   try {
-    workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
+    // `dense` stores rows as arrays instead of per-cell objects: ~2x faster and
+    // ~35% less peak memory on the BOKU bulk (247k rows, #132). Everything here
+    // reads sheets through XLSX.utils.sheet_to_json, which supports dense mode.
+    workbook = XLSX.read(buffer, {
+      type: "buffer",
+      cellDates: true,
+      dense: true,
+    });
   } catch (error) {
     return {
       ...base,
@@ -443,20 +452,6 @@ export function validateWorkbook(
   const pitDec = new Map<string, { speciesName: string; rowNum: number }>();
   let end = rows.length;
 
-  // Fail fast before the per-row validation loop (#132): a workbook past this
-  // limit is rejected as a structural error instead of costing minutes of CPU
-  // and memory producing thousands of per-row messages.
-  const dataRowCount = rows.length - 1;
-  if (dataRowCount > MAX_ROWS_PER_FILE) {
-    return {
-      ...base,
-      structuralError: {
-        error: "Too many rows",
-        details: `The DATA sheet has ${dataRowCount} data rows; at most ${MAX_ROWS_PER_FILE} are allowed per file.`,
-      },
-    };
-  }
-
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
 
@@ -508,7 +503,14 @@ export function validateWorkbook(
     }
   }
 
-  return { ...base, headers, rows: rows.slice(0, end), errors, pitDec };
+  return {
+    ...base,
+    headers,
+    rows: rows.slice(0, end),
+    dataRowCount: Math.max(end - 1, 0),
+    errors,
+    pitDec,
+  };
 }
 
 /**
@@ -632,7 +634,7 @@ export function buildFileReport(file: ValidatedFile): FileReport {
   }
 
   const failedRows = new Set(file.errors.map((error) => error.row));
-  const totalRows = Math.max(file.rows.length - 1, 0);
+  const totalRows = file.dataRowCount;
 
   return {
     fileName: file.fileName,
@@ -642,6 +644,40 @@ export function buildFileReport(file: ValidatedFile): FileReport {
     failedRows: failedRows.size,
     errors: groupErrors(file.errors),
   };
+}
+
+/**
+ * Re-reads the DATA rows of a workbook for annotation (#132). Only the failure
+ * path needs row data: rows are dropped after validation so that a large bulk
+ * does not hold every workbook in memory.
+ *
+ * Exported for unit tests.
+ */
+export function readDataRowsForAnnotation(buffer: Buffer): SheetRow[] {
+  try {
+    const workbook = XLSX.read(buffer, {
+      type: "buffer",
+      cellDates: true,
+      dense: true,
+    });
+    const sheet = workbook.Sheets["DATA"];
+    if (!sheet) return [];
+    return XLSX.utils.sheet_to_json(sheet, {
+      header: 1,
+      raw: true,
+    }) as SheetRow[];
+  } catch {
+    // Unreadable workbooks are returned unchanged by buildAnnotatedWorkbook.
+    return [];
+  }
+}
+
+/** Restores the rows an annotated (failed) workbook needs. */
+function withRowsForAnnotation(file: ValidatedFile): ValidatedFile {
+  if (file.structuralError || file.errors.length === 0 || file.rows.length > 0) {
+    return file;
+  }
+  return { ...file, rows: readDataRowsForAnnotation(file.buffer) };
 }
 
 /**
@@ -696,9 +732,14 @@ export async function processBulkUpload(
   files: BulkUploadFile[],
   userId: string,
 ): Promise<BulkUploadOutcome> {
-  const validated = files.map((file) =>
-    validateWorkbook(file.fileName, file.buffer),
-  );
+  // Row data is only needed to count rows and to annotate a FAILED workbook, so
+  // it is released as soon as each file is validated (#132). Keeping every
+  // workbook's rows alive made a 14-file / 247k-row bulk cost ~1.6 GB RSS on a
+  // 3.8 GB host; the failure path re-reads the affected files instead.
+  const validated: ValidatedFile[] = files.map((file) => {
+    const result = validateWorkbook(file.fileName, file.buffer);
+    return { ...result, rows: [] };
+  });
 
   crossFilePitCheck(validated);
 
@@ -719,7 +760,7 @@ export async function processBulkUpload(
     const entries = await Promise.all(
       failed.map(async (file) => ({
         fileName: file.fileName,
-        data: await buildAnnotatedWorkbook(file),
+        data: await buildAnnotatedWorkbook(withRowsForAnnotation(file)),
       })),
     );
     return { success: false, report, zipToken: putArchive(await buildZip(entries)) };
