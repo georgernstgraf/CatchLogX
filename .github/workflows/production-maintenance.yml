@@ -22,6 +22,14 @@ name: Production maintenance
 on:
   workflow_dispatch:
     inputs:
+      job:
+        description: "Which maintenance job to run"
+        type: choice
+        options:
+          - audit
+          - rehearse
+          - all
+        default: audit
       keep_backups:
         description: "Backup sets to retain on the machine"
         required: true
@@ -48,6 +56,7 @@ env:
 jobs:
   audit:
     name: Audit and back up production
+    if: inputs.job == 'audit' || inputs.job == 'all'
     runs-on: [self-hosted, boku]
 
     steps:
@@ -279,3 +288,190 @@ jobs:
             migration-state.txt
           retention-days: 30
           if-no-files-found: warn
+
+  # Rehearsal for the one-time cutover (#140): copy the production database,
+  # run the adoption script against the copy with the real MinIO export, then
+  # repeat, verify and throw the copy away. Production is never written to.
+  rehearse:
+    name: Rehearse the adoption against a copy of production
+    if: inputs.job == 'rehearse' || inputs.job == 'all'
+    runs-on: [self-hosted, boku]
+
+    env:
+      SCRATCH_DB: clx_rehearsal
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Resolve the production database URL
+        run: |
+          set -euo pipefail
+          if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+            URL="$(docker exec "$APP_CONTAINER" printenv DATABASE_URL)"
+            URL="${URL/@db:5432/@127.0.0.1:5432}"
+          else
+            URL="${{ secrets.PROD_DATABASE_URL }}"
+          fi
+          if [ -z "$URL" ]; then
+            echo "::error::Could not determine the production database URL"
+            exit 1
+          fi
+          echo "PROD_DATABASE_URL=$URL" >> "$GITHUB_ENV"
+          # Same server, separate database for the rehearsal.
+          echo "SCRATCH_URL=${URL/clx?/$SCRATCH_DB?}" >> "$GITHUB_ENV"
+          echo "Resolved the database URL from $APP_CONTAINER."
+
+      - name: Export the MinIO bucket
+        run: |
+          set -euo pipefail
+          EXPORT="$HOME/clx-rehearsal-export"
+          rm -rf "$EXPORT" && mkdir -p "$EXPORT"
+          echo "EXPORT=$EXPORT" >> "$GITHUB_ENV"
+          NET="$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}' "$MINIO_CONTAINER" | head -n1)"
+          docker run --rm --network "$NET" -v "$EXPORT:/backup" \
+            -e "MC_HOST_prod=http://${MC_USER}:${MC_PASS}@${MINIO_CONTAINER}:9000" \
+            minio/mc:latest mirror --overwrite "prod/${MINIO_BUCKET}" /backup
+          echo "Exported $(find "$EXPORT" -type f | wc -l) objects ($(du -sh "$EXPORT" | cut -f1))."
+
+      - name: Copy the production database to the scratch database
+        run: |
+          set -euo pipefail
+          docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d postgres -q -c "DROP DATABASE IF EXISTS $SCRATCH_DB;"
+          docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d postgres -q -c "CREATE DATABASE $SCRATCH_DB;"
+          docker exec "$PG_CONTAINER" pg_dump -U "$PG_USER" -d "$PG_DB" \
+            | docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$SCRATCH_DB" -q
+          echo "Copied $PG_DB to $SCRATCH_DB."
+
+      # Row counts must survive the adoption unchanged.
+      - name: Row counts before
+        run: |
+          set -euo pipefail
+          counts() {
+            docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$1" -A -t -F'|' <<'SQL'
+          SELECT format('SELECT %L, count(*) FROM %I.%I;', n.nspname||'.'||c.relname, n.nspname, c.relname)
+          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE c.relkind = 'r' AND n.nspname = 'public'
+          ORDER BY 1 \gexec
+          SQL
+          }
+          counts "$SCRATCH_DB" | sed 's/^public\.DummyFiles/public.TemplateFiles/' | grep -v _prisma_migrations > counts-before.txt
+          cat counts-before.txt
+
+      - name: Rehearsal (dry run)
+        run: |
+          set -euo pipefail
+          DATABASE_URL="$SCRATCH_URL" npx tsx scripts/adopt-legacy-prod.ts --source-dir "$EXPORT" --dry-run
+
+      - name: Rehearsal (apply)
+        run: |
+          set -euo pipefail
+          DATABASE_URL="$SCRATCH_URL" npx tsx scripts/adopt-legacy-prod.ts --source-dir "$EXPORT"
+
+      - name: Rehearsal (second run must be a no-op)
+        run: |
+          set -euo pipefail
+          OUTPUT="$(DATABASE_URL="$SCRATCH_URL" npx tsx scripts/adopt-legacy-prod.ts --source-dir "$EXPORT")"
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "write 0 blob(s)" || { echo "::error::second run was not a no-op"; exit 1; }
+
+      # The same bookkeeping the cutover will perform: mark the history as
+      # applied, then prove that migrate deploy is a no-op and the schema
+      # matches schema.prisma exactly.
+      - name: Migration bookkeeping and drift check
+        env:
+          DATABASE_URL: ${{ env.SCRATCH_URL }}
+        run: |
+          set -euo pipefail
+          npx prisma migrate resolve --applied 20261017190000_init
+          npx prisma migrate resolve --applied 20261017200000_replace_minio_with_file_blobs
+          npx prisma migrate status
+          npx prisma migrate deploy
+          npx prisma migrate diff \
+            --from-url "$SCRATCH_URL" \
+            --to-schema-datamodel prisma/schema.prisma \
+            --script > drift-after.sql
+          if grep -q 'This is an empty migration' drift-after.sql; then
+            echo "Schema matches schema.prisma exactly."
+          else
+            echo "::error::the adopted schema still differs from schema.prisma"
+            cat drift-after.sql
+            exit 1
+          fi
+
+      - name: Blob verification
+        run: |
+          set -euo pipefail
+          docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$SCRATCH_DB" -A -t -F'|' <<'SQL' | tee blob-report.txt
+          SELECT 'blobs='||count(*)||' bytes='||coalesce(sum("sizeBytes"),0) FROM "FileBlob";
+          SELECT 'uploads unlinked='||count(*) FROM "Uploads" WHERE "blobId" IS NULL;
+          SELECT 'templates unlinked='||count(*) FROM "TemplateFiles" WHERE "blobId" IS NULL;
+          SELECT 'uploads with mismatched size='||count(*) FROM "Uploads" u JOIN "FileBlob" b ON b.id = u."blobId" WHERE b."sizeBytes" <> length(b.data);
+          SQL
+
+      - name: Row counts after
+        run: |
+          set -euo pipefail
+          docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$SCRATCH_DB" -A -t -F'|' <<'SQL' | grep -v _prisma_migrations | grep -v "^public.FileBlob|" > counts-after.txt
+          SELECT format('SELECT %L, count(*) FROM %I.%I;', n.nspname||'.'||c.relname, n.nspname, c.relname)
+          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE c.relkind = 'r' AND n.nspname = 'public'
+          ORDER BY 1 \gexec
+          SQL
+          if diff -u counts-before.txt counts-after.txt > counts.diff; then
+            echo "Row counts preserved by the adoption."
+          else
+            echo "::error::row counts changed during the adoption"
+            cat counts.diff
+            exit 1
+          fi
+
+      - name: Report
+        if: always()
+        run: |
+          {
+            echo "## Adoption rehearsal against a copy of production"
+            echo ""
+            echo "### Row counts (before vs. after)"
+            echo '```'
+            cat counts-before.txt 2>/dev/null
+            echo '```'
+            echo "### Blobs"
+            echo '```'
+            cat blob-report.txt 2>/dev/null
+            echo '```'
+            echo "### Remaining schema drift after adoption (must be empty)"
+            echo '```sql'
+            cat drift-after.sql 2>/dev/null
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload structural reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-rehearsal-${{ github.run_id }}
+          path: |
+            counts-before.txt
+            counts-after.txt
+            blob-report.txt
+            drift-after.sql
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Drop the scratch database
+        if: always()
+        run: |
+          docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d postgres -q -c "DROP DATABASE IF EXISTS $SCRATCH_DB;" || true
+          rm -rf "$HOME/clx-rehearsal-export" || true
+          echo "Scratch database and export removed."
