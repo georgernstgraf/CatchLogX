@@ -18,6 +18,19 @@ name: Production maintenance
 # exception for the one-time migration window - it is dispatch-only, it takes
 # write access to trigger, and the code it runs is reviewed on dev first
 # (#138).
+#
+# The `cutover` job (#141) is the ONE place in this repository that is allowed
+# to WRITE to production (and the only workflow that runs on `boku` besides the
+# dispatch-only audit/rehearsal/legacy deploy). It retires the db-push-era app
+# container, takes a fresh dump + MinIO export, runs the adoption script,
+# verifies the result and brings up the migration-tracked stack. Because it
+# mutates production it is gated three ways:
+#   - dispatch-only: it can never be reached by a push or a pull request;
+#   - ref-guarded to `master`: it only runs for `--ref master`;
+#   - armed by the typed confirmation input `confirm=ADOPT-PRODUCTION`.
+# It must NOT be dispatched before the on-site maintenance appointment (#122)
+# has been agreed with Martin: it stops the live app and takes production down
+# by design, in one ordered run so the db-push-era app can never come back.
 
 on:
   workflow_dispatch:
@@ -28,8 +41,14 @@ on:
         options:
           - audit
           - rehearse
+          - cutover
           - all
         default: audit
+      confirm:
+        description: "Type ADOPT-PRODUCTION to arm the cutover job (ignored by audit/rehearse/all)"
+        required: true
+        default: ""
+        type: string
       keep_backups:
         description: "Backup sets to retain on the machine"
         required: true
@@ -495,3 +514,472 @@ jobs:
           docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d postgres -q -c "DROP DATABASE IF EXISTS $SCRATCH_DB;" || true
           rm -rf "$HOME/clx-rehearsal-export" || true
           echo "Scratch database and export removed."
+
+  # One-time cutover of the production machine from the `prisma db push` era to
+  # the migration-tracked baseline (#141). This is the only job that WRITES to
+  # production, and it does so in a single ordered run so there is never a
+  # window in which the db-push-era app can come back:
+  #   1. retire the old app container - nothing on the machine can run `db push`;
+  #   2. fresh database dump + MinIO export (the safety net);
+  #   3. run the adoption script (#139);
+  #   4. verify: drift empty, `migrate status` up to date, row counts preserved;
+  #   5. update the on-machine checkout so the old compose is gone;
+  #   6. bring up the new stack, health-check it, smoke-test sign-in + download.
+  # The adoption script is idempotent, so the job is re-dispatchable. On any
+  # failure the app is left DOWN on purpose (never half-alive) and the recovery
+  # contract is printed (see the failure step). Runs ONLY for job=cutover, only
+  # on master, and only with the exact confirmation token.
+  cutover:
+    name: One-time production cutover (#141)
+    if: inputs.job == 'cutover' && github.ref == 'refs/heads/master'
+    runs-on: [self-hosted, boku]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      # Refuse to touch production unless the operator typed the exact token.
+      # Passed through the environment so the input value can never be
+      # interpreted by the shell.
+      - name: Require the typed confirmation
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRM" != "ADOPT-PRODUCTION" ]; then
+            echo "::error::cutover refused: re-dispatch with confirm=ADOPT-PRODUCTION"
+            exit 1
+          fi
+          echo "Confirmation accepted."
+
+      - name: Preconditions
+        run: |
+          set -euo pipefail
+          docker inspect "$PG_CONTAINER" >/dev/null
+          docker inspect "$MINIO_CONTAINER" >/dev/null
+          # `clx-web` may legitimately be absent: a re-dispatch after a partial
+          # failure starts with the old container already removed.
+          if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+            echo "$APP_CONTAINER is present (first run)."
+          else
+            echo "$APP_CONTAINER is already gone (re-dispatch)."
+          fi
+
+          # Only two database shapes may be cut over; anything else is a state no
+          # automated job may guess at.
+          LEGACY="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc "SELECT to_regclass('public.\"DummyFiles\"') IS NOT NULL")"
+          TEMPLATES="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc "SELECT to_regclass('public.\"TemplateFiles\"') IS NOT NULL")"
+          BLOBS="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc "SELECT to_regclass('public.\"FileBlob\"') IS NOT NULL")"
+          if [ "$LEGACY" = "t" ] && [ "$BLOBS" = "f" ]; then
+            SHAPE="legacy"
+          elif [ "$TEMPLATES" = "t" ] && [ "$BLOBS" = "t" ] && [ "$LEGACY" = "f" ]; then
+            SHAPE="adopted"
+          else
+            echo "::error::unexpected database shape (DummyFiles=$LEGACY TemplateFiles=$TEMPLATES FileBlob=$BLOBS) - refusing to cut over"
+            exit 1
+          fi
+          echo "DB_SHAPE=$SHAPE" >> "$GITHUB_ENV"
+          echo "Database shape: $SHAPE"
+
+      # Resolve the connection string BEFORE the app container is removed: the
+      # running app is the source of truth. On a re-dispatch it is already gone,
+      # so fall back to the secret and finally to the Postgres container's own
+      # credentials (5432 is published on loopback).
+      - name: Resolve the production database URL
+        run: |
+          set -euo pipefail
+          if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+            URL="$(docker exec "$APP_CONTAINER" printenv DATABASE_URL)"
+            URL="${URL/@db:5432/@127.0.0.1:5432}"
+          else
+            URL="${{ secrets.PROD_DATABASE_URL }}"
+          fi
+          if [ -z "$URL" ]; then
+            PGPASS="$(docker exec "$PG_CONTAINER" printenv POSTGRES_PASSWORD 2>/dev/null || true)"
+            if [ -z "$PGPASS" ]; then
+              echo "::error::Could not determine the production database URL"
+              exit 1
+            fi
+            URL="postgresql://${PG_USER}:${PGPASS}@127.0.0.1:5432/${PG_DB}?schema=public"
+          fi
+          echo "PROD_DATABASE_URL=$URL" >> "$GITHUB_ENV"
+          echo "Resolved the production database URL."
+
+      # Step 1: retire the db-push-era app. From here on nothing on the machine
+      # can run `db push` again, and the app is intentionally down.
+      - name: Retire the db-push-era app container
+        run: |
+          set -euo pipefail
+          if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+            docker update --restart=no "$APP_CONTAINER"
+            docker stop "$APP_CONTAINER"
+            docker rm "$APP_CONTAINER"
+            echo "Removed $APP_CONTAINER with its restart policy disabled."
+          else
+            echo "$APP_CONTAINER is already gone - nothing to retire."
+          fi
+
+      # Step 2: the safety net. Fail if either the dump or the export is empty.
+      - name: Back up the database and the MinIO bucket
+        run: |
+          set -euo pipefail
+          STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+          DEST="$HOME/$BACKUP_ROOT/cutover-$STAMP"
+          mkdir -p "$DEST/minio"
+          echo "CUTOVER_STAMP=$STAMP" >> "$GITHUB_ENV"
+          echo "CUTOVER_DEST=$DEST" >> "$GITHUB_ENV"
+
+          # Local socket inside the container: the official postgres image
+          # trusts local connections, so no password is involved here.
+          docker exec "$PG_CONTAINER" pg_dump -U "$PG_USER" -d "$PG_DB" -Fc > "$DEST/db.dump"
+          test -s "$DEST/db.dump" || { echo "::error::the database dump is empty"; exit 1; }
+          # Never trust an archive we have not listed (custom format -> pg_restore).
+          docker run --rm -v "$DEST:/backup:ro" postgres:16-alpine \
+            pg_restore --list /backup/db.dump > "$DEST/db.dump.list"
+          test -s "$DEST/db.dump.list" || { echo "::error::the database dump did not list"; exit 1; }
+
+          # Run mc as the runner user so the export is not root-owned.
+          NET="$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}' "$MINIO_CONTAINER" | head -n1)"
+          MC_HOME="$(mktemp -d)"
+          docker run --rm --network "$NET" --user "$(id -u):$(id -g)" \
+            -v "$DEST/minio:/backup" -v "$MC_HOME:/mc-home" -e HOME=/mc-home \
+            -e "MC_HOST_prod=http://${MC_USER}:${MC_PASS}@${MINIO_CONTAINER}:9000" \
+            minio/mc:latest mirror --overwrite "prod/${MINIO_BUCKET}" /backup
+          rm -rf "$MC_HOME"
+          COUNT="$(find "$DEST/minio" -type f | wc -l)"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::the MinIO export produced no files"
+            exit 1
+          fi
+          echo "Backup set: $DEST (dump $(du -h "$DEST/db.dump" | cut -f1), $COUNT objects)"
+
+      # Row counts must survive the adoption unchanged. The legacy table name is
+      # normalised so a re-dispatch over an already-adopted database compares the
+      # same set; `_prisma_migrations` and the new `FileBlob` table are excluded
+      # from both sides for the same reason.
+      - name: Row counts before
+        run: |
+          set -euo pipefail
+          docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -A -t -F'|' <<'SQL' \
+            | sed 's/^public\.DummyFiles/public.TemplateFiles/' \
+            | grep -v _prisma_migrations \
+            | grep -v "^public.FileBlob|" \
+            | sort > row-counts-before.txt
+          SELECT format('SELECT %L, count(*) FROM %I.%I;', n.nspname||'.'||c.relname, n.nspname, c.relname)
+          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE c.relkind = 'r' AND n.nspname = 'public'
+          ORDER BY 1 \gexec
+          SQL
+          cat row-counts-before.txt
+          grep '^public.Session|' row-counts-before.txt || true
+
+      # Step 3: the adoption itself.
+      - name: Adoption (dry run)
+        run: |
+          set -euo pipefail
+          DATABASE_URL="$PROD_DATABASE_URL" npx tsx scripts/adopt-legacy-prod.ts --source-dir "$CUTOVER_DEST/minio" --dry-run
+
+      - name: Adoption (apply)
+        run: |
+          set -euo pipefail
+          DATABASE_URL="$PROD_DATABASE_URL" npx tsx scripts/adopt-legacy-prod.ts --source-dir "$CUTOVER_DEST/minio"
+
+      - name: Adoption (second run must be a no-op)
+        run: |
+          set -euo pipefail
+          OUTPUT="$(DATABASE_URL="$PROD_DATABASE_URL" npx tsx scripts/adopt-legacy-prod.ts --source-dir "$CUTOVER_DEST/minio")"
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "write 0 blob(s)" || { echo "::error::second run was not a no-op"; exit 1; }
+
+      # Step 4: the same bookkeeping the rehearsal proved: mark the history as
+      # applied (only for migrations not yet recorded, so a re-dispatch is safe),
+      # then prove that migrate deploy is a no-op and the schema matches exactly.
+      - name: Migration bookkeeping and drift check
+        env:
+          DATABASE_URL: ${{ env.PROD_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          resolve_if_needed() {
+            local name="$1" recorded
+            recorded="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc \
+              "SELECT 1 FROM \"_prisma_migrations\" WHERE migration_name = '$name' LIMIT 1" 2>/dev/null || true)"
+            if [ -n "$recorded" ]; then
+              echo "$name is already recorded - skipping resolve."
+            else
+              npx prisma migrate resolve --applied "$name"
+            fi
+          }
+          resolve_if_needed 20261017190000_init
+          resolve_if_needed 20261017200000_replace_minio_with_file_blobs
+          npx prisma migrate status | tee migration-state.txt
+          npx prisma migrate deploy
+          npx prisma migrate diff \
+            --from-url "$PROD_DATABASE_URL" \
+            --to-schema-datamodel prisma/schema.prisma \
+            --script > drift-after.sql
+          if grep -q 'This is an empty migration' drift-after.sql; then
+            echo "Schema matches schema.prisma exactly."
+          else
+            echo "::error::the adopted schema still differs from schema.prisma"
+            cat drift-after.sql
+            exit 1
+          fi
+
+      - name: Blob verification
+        run: |
+          set -euo pipefail
+          docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -A -t -F'|' <<'SQL' | tee blob-report.txt
+          SELECT 'blobs='||count(*)||' bytes='||coalesce(sum("sizeBytes"),0) FROM "FileBlob";
+          SELECT 'uploads unlinked='||count(*) FROM "Uploads" WHERE "blobId" IS NULL;
+          SELECT 'templates unlinked='||count(*) FROM "TemplateFiles" WHERE "blobId" IS NULL;
+          SELECT 'uploads with mismatched size='||count(*) FROM "Uploads" u JOIN "FileBlob" b ON b.id = u."blobId" WHERE b."sizeBytes" <> length(b.data);
+          SQL
+          grep -q '^uploads unlinked=0$' blob-report.txt || { echo "::error::an upload has no blob"; exit 1; }
+          grep -q '^templates unlinked=0$' blob-report.txt || { echo "::error::a template has no blob"; exit 1; }
+          grep -q '^uploads with mismatched size=0$' blob-report.txt || { echo "::error::a blob size does not match its bytes"; exit 1; }
+
+      - name: Row counts after
+        run: |
+          set -euo pipefail
+          docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -A -t -F'|' <<'SQL' \
+            | sed 's/^public\.DummyFiles/public.TemplateFiles/' \
+            | grep -v _prisma_migrations \
+            | grep -v "^public.FileBlob|" \
+            | sort > row-counts-after.txt
+          SELECT format('SELECT %L, count(*) FROM %I.%I;', n.nspname||'.'||c.relname, n.nspname, c.relname)
+          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE c.relkind = 'r' AND n.nspname = 'public'
+          ORDER BY 1 \gexec
+          SQL
+          cat row-counts-after.txt
+          if diff -u row-counts-before.txt row-counts-after.txt > counts.diff; then
+            echo "Row counts preserved by the adoption."
+          else
+            echo "::error::row counts changed during the adoption"
+            cat counts.diff
+            exit 1
+          fi
+          echo "Sessions before: $(grep '^public.Session|' row-counts-before.txt || echo 'n/a')"
+          echo "Sessions after:  $(grep '^public.Session|' row-counts-after.txt || echo 'n/a')"
+
+      # Step 5: the on-machine checkout must move to the upgrading commit before
+      # the stack is brought up, because the container runs FROM that checkout.
+      # This is what removes the old compose (with `prisma db push`) from the
+      # machine.
+      - name: Point the on-machine checkout at the upgrading commit
+        run: |
+          set -euo pipefail
+          cd /opt/CatchLogX
+          git fetch origin master
+          git reset --hard "${{ github.sha }}"
+          for compose in docker-compose.yml docker-compose.yaml; do
+            if [ -f "$compose" ] && grep -q 'db push' "$compose"; then
+              echo "::error::$compose still contains a db push command"
+              exit 1
+            fi
+          done
+          echo "Checkout updated to $(git rev-parse --short HEAD); no db push in the compose file."
+
+      # Step 6: bring up the new code (it applies migrations, now a no-op) and
+      # health-check it. The app builds inside the container on first start, so
+      # allow up to ~10 minutes; fail fast if the container exits.
+      - name: Bring up the new stack and health-check it
+        run: |
+          set -euo pipefail
+          cd /opt/CatchLogX
+          docker compose up -d --build
+          for attempt in $(seq 1 60); do
+            if docker inspect -f '{{.State.Running}}' "$APP_CONTAINER" 2>/dev/null | grep -q true; then
+              if curl -fsS -o /dev/null http://127.0.0.1:3001/; then
+                echo "New stack is healthy (attempt $attempt)."
+                exit 0
+              fi
+            elif docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+              echo "::error::$APP_CONTAINER exited before becoming healthy"
+              docker logs --tail 50 "$APP_CONTAINER" || true
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "::error::health check timed out after ~10 minutes"
+          docker logs --tail 100 "$APP_CONTAINER" || true
+          exit 1
+
+      # Sign-in + file download smoke test. The secrets must hold an ADMIN (or
+      # SUPER_ADMIN) account on production: the download goes through the
+      # admin-only route. If they are unset the job does NOT fail - it warns, and
+      # the report says the smoke test was skipped.
+      - name: Smoke test (sign-in, session, file download)
+        env:
+          SMOKE_USER: ${{ secrets.PROD_SMOKE_USER }}
+          SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SMOKE_USER" ] || [ -z "$SMOKE_PASSWORD" ]; then
+            echo "::warning::PROD_SMOKE_USER/PROD_SMOKE_PASSWORD are not set - skipping the smoke test"
+            echo "Smoke test: SKIPPED (set PROD_SMOKE_USER/PROD_SMOKE_PASSWORD)" | tee smoke-result.txt
+            echo "Smoke test: SKIPPED (set PROD_SMOKE_USER/PROD_SMOKE_PASSWORD)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Build the JSON body in Node so credentials can never be mangled by
+          # the shell.
+          BODY="$(SMOKE_USER="$SMOKE_USER" SMOKE_PASSWORD="$SMOKE_PASSWORD" node -e \
+            'process.stdout.write(JSON.stringify({username:process.env.SMOKE_USER,password:process.env.SMOKE_PASSWORD}))')"
+
+          # 1. sign in and capture the session cookie.
+          CODE="$(curl -sS -o signin.json -w '%{http_code}' -c cookies.txt \
+            -H 'Content-Type: application/json' -d "$BODY" \
+            http://127.0.0.1:3001/api/auth/sign-in)"
+          if [ "$CODE" != "200" ]; then
+            echo "::error::sign-in returned HTTP $CODE"; cat signin.json; exit 1
+          fi
+          grep -q 'session-token' cookies.txt || { echo "::error::no session-token cookie was set"; exit 1; }
+
+          # 2. the cookie validates against the preserved Session table.
+          CODE="$(curl -sS -o session.json -w '%{http_code}' -b cookies.txt \
+            http://127.0.0.1:3001/api/auth/session)"
+          if [ "$CODE" != "200" ] || ! grep -q '"authenticated":true' session.json; then
+            echo "::error::session validation failed (HTTP $CODE)"; cat session.json; exit 1
+          fi
+
+          # 3. download one real upload through the admin route and compare bytes.
+          ROW="$(docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -A -t -F'|' -c \
+            'SELECT u.id, b."sizeBytes" FROM "Uploads" u JOIN "FileBlob" b ON b.id = u."blobId" LIMIT 1')"
+          ID="${ROW%%|*}"; SIZE="${ROW##*|}"
+          if [ -z "$ID" ] || [ "$ID" = "$SIZE" ]; then
+            echo "::error::no upload with a blob found"; exit 1
+          fi
+          CODE="$(curl -sS -o download.bin -w '%{http_code}' -b cookies.txt \
+            "http://127.0.0.1:3001/api/admin/download/$ID")"
+          if [ "$CODE" != "200" ]; then
+            echo "::error::file download returned HTTP $CODE"; exit 1
+          fi
+          GOT="$(stat -c%s download.bin)"
+          if [ "$GOT" != "$SIZE" ]; then
+            echo "::error::downloaded $GOT bytes, expected $SIZE"; exit 1
+          fi
+          echo "Smoke test: OK (sign-in, session, download of $ID, $GOT bytes)" | tee smoke-result.txt
+
+      # The failure path. It must run before the summary and must never touch the
+      # on-machine checkout (its state is unknown). The app is stopped, not
+      # restarted: a half-alive production is worse than a stopped one.
+      - name: Failure - stop the app and print the recovery contract
+        if: failure()
+        run: |
+          set +e
+          docker stop "$APP_CONTAINER" >/dev/null 2>&1 || true
+
+          DEST="${CUTOVER_DEST:-<no backup set was created>}"
+          read -r -d '' CONTRACT <<EOF
+          ============================== RECOVERY CONTRACT ==============================
+          The application is DOWN ON PURPOSE. Do not run the db-push-era code against
+          the database again.
+
+          Option A - fix the cause and re-dispatch this job. The cutover is idempotent
+          and finishes whatever is still missing:
+            gh workflow run production-maintenance.yml --ref master -f job=cutover -f confirm=ADOPT-PRODUCTION
+
+          Option B - restore first, then re-dispatch. The pre-cutover dump is at
+          $DEST/db.dump (custom format, verified with pg_restore --list):
+            docker exec -i $PG_CONTAINER pg_restore -U $PG_USER -d $PG_DB --clean --if-exists < "$DEST/db.dump"
+          then re-dispatch this job.
+
+          NEVER run the legacy compose or the db-push-era app against the adopted schema.
+          ===============================================================================
+          EOF
+          echo "$CONTRACT"
+          {
+            echo "## Cutover FAILED - the app is stopped"
+            echo ""
+            echo '```'
+            echo "$CONTRACT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Production cutover (#141)"
+            echo ""
+            echo "- Database shape at start: \`${DB_SHAPE:-unknown}\`"
+            echo "- Backup set on the machine: \`${CUTOVER_DEST:-<none>}\`"
+            echo ""
+            echo "### Migration state after the adoption"
+            echo '```'
+            cat migration-state.txt 2>/dev/null || true
+            echo '```'
+            echo ""
+            echo "### Remaining schema drift (must be empty)"
+            echo '```sql'
+            cat drift-after.sql 2>/dev/null || true
+            echo '```'
+            echo ""
+            echo "### Row counts before / after"
+            echo '```'
+            cat row-counts-before.txt 2>/dev/null || true
+            echo '--- diff (must be empty) ---'
+            cat counts.diff 2>/dev/null || echo "(no diff: row counts preserved)"
+            echo '```'
+            echo ""
+            echo "### Sessions (must be identical - users are not logged out)"
+            echo '```'
+            grep '^public.Session|' row-counts-before.txt 2>/dev/null | sed 's/^/before: /' || true
+            grep '^public.Session|' row-counts-after.txt 2>/dev/null | sed 's/^/after:  /' || true
+            echo '```'
+            echo ""
+            echo "### Blobs"
+            echo '```'
+            cat blob-report.txt 2>/dev/null || true
+            echo '```'
+            echo ""
+            echo "### Smoke test"
+            echo '```'
+            cat smoke-result.txt 2>/dev/null || echo "Smoke test: not reached"
+            echo '```'
+            echo ""
+            echo "### Recovery contract (only relevant if the job failed)"
+            echo '```'
+            echo "App stays stopped on failure. Re-dispatch this idempotent job (with"
+            echo "confirm=ADOPT-PRODUCTION), or restore \$CUTOVER_DEST/db.dump first."
+            echo '```'
+            echo ""
+            echo "### Production state after the cutover - record in docs/ai/STATE.md"
+            echo '```'
+            echo "Cutover run:       https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "Upgrading commit:  ${{ github.sha }}"
+            echo "Backup set:        ${CUTOVER_DEST:-<none>}"
+            echo "Blobs:             $(head -n 1 blob-report.txt 2>/dev/null || echo 'n/a')"
+            echo "Sessions:          $(grep '^public.Session|' row-counts-after.txt 2>/dev/null || echo 'n/a')"
+            echo "Smoke test:        $(head -n 1 smoke-result.txt 2>/dev/null || echo 'n/a')"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Structural reports only - never the dump or the MinIO export (the repo
+      # is public).
+      - name: Upload structural reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-cutover-${{ github.run_id }}
+          path: |
+            row-counts-before.txt
+            row-counts-after.txt
+            counts.diff
+            blob-report.txt
+            drift-after.sql
+            migration-state.txt
+            smoke-result.txt
+          retention-days: 30
+          if-no-files-found: warn
