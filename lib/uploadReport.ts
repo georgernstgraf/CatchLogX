@@ -6,9 +6,15 @@
  * same report.
  */
 
-/** Upload limits, enforced by the API and pre-checked in the UI. */
+/**
+ * Upload limits, enforced by the API and pre-checked in the UI.
+ *
+ * The reverse proxy must allow a larger body than MAX_UPLOAD_TOTAL_BYTES:
+ * nginx defaults to `client_max_body_size 1m` and answers 413 before the app
+ * sees the files (see docs/ai/PITFALLS.md, #132).
+ */
 export const MAX_UPLOAD_FILES = 20;
-export const MAX_UPLOAD_TOTAL_BYTES = 100 * 1024 * 1024; // 100 MiB
+export const MAX_UPLOAD_TOTAL_BYTES = 500 * 1024 * 1024; // 500 MiB
 
 /** Errors that share a column, offending value and message are grouped. */
 export type FileErrorGroup = {
