@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Standalone output ships a self-contained server bundle so the deploy
+  // pipeline can build once per commit and deploy by swapping releases (#135).
+  output: "standalone",
 };
 
 export default nextConfig;
