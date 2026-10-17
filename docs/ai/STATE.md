@@ -18,6 +18,7 @@ Kickoff 2026-09-19 (siehe `docs/meetings/2026-09-19-kickoff.md`, Protokoll + Auf
 - Vor-Ort-Wartungstermin durch Georg bei Martin geplant — Checkliste in #122 (Backup, dokumentierter SSH-Zugang statt verstecktem Tunnel, Secret-Rotation, alter Runner entfernen)
 - VPS-Instanz `catchlogx.graf.priv.at` existiert (Georgs VPS); Studierende deployen dort eine Kopie; zweiter Self-hosted Actions-Runner geplant (#123)
 - **Dev-Instanz live seit 2026-10-17** (#126): komplett unter System-User `catchlogx`, rootless Docker (nur PostgreSQL 16, `127.0.0.1:5432`), MinIO als aus Source gebautes Binary (`minio.service`, `127.0.0.1:9000/9001`), App als Production-Build (`clx-app.service`, `127.0.0.1:40873`) hinter nginx/TLS auf `https://catchlogx.graf.priv.at`. Dev-User `admin`/`admin` (nur Instanz, nie Prod). Setup-Details: `ARCHITECTURE.md` (Deployment Topology), DECISIONS-Eintrag 2026-10-17.
+- **Demo-Datensatz geseedet** (#127): `npm run seed:demo` legt idempotent 2 Dev-User, 125 Fischarten, 10 Standorte, 10 Samplings, 50 Fänge sowie die Vorlagedateien (`import-template.xlsx`/`.csv`) als sichtbare Dummy-Files an. Auf der Dev-Instanz verifiziert (zweiter Lauf ohne Duplikate).
 
 ## Completed (this cycle)
 - [x] Privates Datenrepo `CatchLogX-Data` angelegt, Daten übernommen, im README verlinkt (#125)
