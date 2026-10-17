@@ -140,6 +140,25 @@ jobs:
           echo "=== mc admin info ==="
           mc admin info prod 2>&1 || echo "(unavailable)"
 
+          echo "=== all containers ==="
+          docker ps -a --format '{{.Names}} | {{.Image}} | {{.Status}} | {{.Ports}}'
+
+          echo "=== containers attached to the app network ==="
+          docker network inspect "$NET" --format '{{range .Containers}}{{.Name}} {{.IPv4Address}}{{"\n"}}{{end}}' 2>&1 || true
+
+          echo "=== how the app resolves its storage endpoint ==="
+          docker exec "$APP_CONTAINER" getent hosts "$(docker exec "$APP_CONTAINER" printenv MINIO_ENDPOINT 2>/dev/null || echo minio)" 2>&1 || true
+
+          echo "=== on-disk layout of the bucket (structure and sizes, names masked) ==="
+          docker run --rm -v "catchlogx_clx_miniodata:/data:ro" alpine sh -c '
+            echo "bucket tree (depth 3, names masked):"
+            find /data/catchlogx-files -maxdepth 3 | sed -E "s#/data/catchlogx-files/?##; s#[^/]{25,}#<name>#g" | head -n 40
+            echo "object directories: $(find /data/catchlogx-files -name xl.meta | wc -l)"
+            echo "part files (data for large objects): $(find /data/catchlogx-files -name "part.*" | wc -l)"
+            echo "largest 10 files:"
+            find /data/catchlogx-files -type f -printf "%s %p\n" 2>/dev/null | sort -rn | head -n 10 | sed -E "s#[^ ]{25,}#<name>#g"
+          ' 2>&1 || true
+
           echo "=== app container storage configuration ==="
           docker exec "$APP_CONTAINER" sh -c 'printenv' | grep -iE '^(MINIO|UPLOAD|STORAGE)' | sed 's/\(SECRET\|KEY\)=.*/\1=<redacted>/I' || echo "(none)"
 
