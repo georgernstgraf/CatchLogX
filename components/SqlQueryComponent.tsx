@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import DarkModeToggle from "./DarkModeToggle";
+import { escapeCsv } from "@/lib/csv";
 
 interface Location {
   lat: number;
@@ -472,14 +473,6 @@ ORDER BY "Count" DESC;`;
   const handleDownloadCsv = useCallback(() => {
     if (results.length === 0) return;
     const columns = Object.keys(results[0]);
-    const escapeCsv = (val: unknown) => {
-      const str = String(val ?? "");
-      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
-        return '"' + str.replace(/"/g, '""') + '"';
-      }
-      return str;
-    };
-
     const lines: string[] = [];
     // 1. SQL query
     lines.push("# SQL Query");
