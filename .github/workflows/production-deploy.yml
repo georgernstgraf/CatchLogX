@@ -26,7 +26,12 @@ name: Deploy CatchLogX
 #   * the build happens ONCE in this job, in a one-shot container of the same
 #     image the app uses. Starting the app container never rebuilds - that is
 #     what docker-compose.prod.yml and the shared clx_node_modules volume are
-#     for.
+#     for;
+#   * the app is stopped before that build, because the build rewrites the
+#     `node_modules`/`.next` the running container serves from. That is a
+#     deliberate, brief downtime; it disappears with the immutable-release
+#     topology (#143). A failure therefore leaves the app stopped, and the
+#     recovery is the rollback below.
 #
 # Rollback: re-dispatch this same workflow with `ref` set to the previous
 # master commit. The deploy is idempotent and re-runnable:
@@ -127,14 +132,24 @@ jobs:
             exit 1
           fi
 
-          # 2. and the migration history must already be applied, i.e.
-          #    `migrate status` must be clean. On the db-push era database it
-          #    reports the whole history as pending.
-          if ! DATABASE_URL="$URL" npx prisma migrate status | tee migrate-status.txt; then
+          # 2. and the baseline must already be recorded as applied (that is the
+          #    adopted signal), with no half-applied migration left behind. A
+          #    ref that itself adds a migration is NOT refused here - applying
+          #    it is exactly what this deploy is for (step "Apply pending
+          #    migrations" below runs `migrate deploy`).
+          ADOPTED="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc \
+            "SELECT count(*) FROM \"_prisma_migrations\" WHERE migration_name = '20261017190000_init' AND finished_at IS NOT NULL")"
+          INCOMPLETE="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc \
+            "SELECT count(*) FROM \"_prisma_migrations\" WHERE finished_at IS NULL AND rolled_back_at IS NULL")"
+          if [ "$ADOPTED" != "1" ]; then
             echo "::error::production is not on the adopted schema yet - run the cutover (#141) first"
             exit 1
           fi
-          echo "Production is on the adopted, migration-tracked schema."
+          if [ "$INCOMPLETE" != "0" ]; then
+            echo "::error::$INCOMPLETE migration(s) are half-applied on production - refusing to deploy"
+            exit 1
+          fi
+          echo "Production is on the adopted, migration-tracked schema (baseline recorded)."
 
       # Step a: the container runs FROM the on-machine checkout, so it must be
       # at the requested commit before anything is built.
@@ -177,6 +192,23 @@ jobs:
           fi
           echo "NODE_MODULES_VOLUME=$VOL" >> "$GITHUB_ENV"
           echo "Shared node_modules volume: $VOL"
+
+      # The app is stopped BEFORE the build on purpose. The build (`npm ci`,
+      # `prisma generate`, `next build`) rewrites the very `node_modules` and
+      # `.next` the running container serves from, so building over a live app
+      # would leave it erroring for the whole build. A deliberate, brief
+      # downtime is the honest interim tradeoff; the immutable-release topology
+      # (#143) removes it by building into a new release and only repointing
+      # `current`.
+      - name: Stop the app before building
+        run: |
+          set -euo pipefail
+          if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+            docker stop "$APP_CONTAINER"
+            echo "$APP_CONTAINER stopped - the build must not race a live app."
+          else
+            echo "$APP_CONTAINER was not running."
+          fi
 
       # Step b: build once, in the job. A one-shot container of the SAME image
       # and with the SAME mounts the app will have (the bind mount plus the
@@ -258,3 +290,29 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           echo "Deployed commit: $DEPLOY_SHA"
+
+      # A failure anywhere leaves the app stopped, because it is stopped before
+      # the build and only started again at the end. The recovery is the same
+      # as the rollback: redeploy the previous master commit.
+      - name: Failure - report the state and the recovery
+        if: failure()
+        run: |
+          set +e
+          STATUS="$(docker inspect -f '{{.State.Status}}' "$APP_CONTAINER" 2>/dev/null || echo missing)"
+          {
+            echo "## Production deploy FAILED"
+            echo ""
+            echo "- App container \`$APP_CONTAINER\`: \`$STATUS\` (it is stopped before the build, so a failure normally leaves it down)"
+            echo "- Requested ref: \`${{ inputs.ref }}\`"
+            echo ""
+            echo "**Recovery:** re-dispatch this workflow with the previous master commit -"
+            echo "that deploys the last known good code:"
+            echo ""
+            echo '```'
+            echo "gh workflow run production-deploy.yml --ref master -f ref=<previous-master-commit>"
+            echo '```'
+            echo ""
+            echo "Do not run the db-push-era code and do not hand-edit the schema: production"
+            echo "is migration-tracked since the cutover (#141)."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Deploy failed - app status: $STATUS. Recovery: re-dispatch with the previous master commit."
