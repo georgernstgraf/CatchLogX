@@ -1,6 +1,6 @@
 # Architecture
 
-Living structural map of the system as of 2026-10-16.
+Living structural map of the system as of 2026-10-17.
 Overwritten when structural changes occur during a session.
 
 ## Overview
@@ -8,6 +8,10 @@ CatchLogX is a Next.js 16.0 web application for BOKU Wien's hydrobiology departm
 It manages fish catch data via Excel upload, SQL querying, and visualization.
 Stack: Next.js App Router, TypeScript, Prisma ORM + PostgreSQL, Tailwind CSS v4, NextAuth.js v4.
 Infrastructure: PostgreSQL 16 + MinIO via Docker Compose.
+
+## Repositories
+- **`georgernstgraf/CatchLogX`** (this repo, **public**) — application code only.
+- **`georgernstgraf/CatchLogX-Data`** (**private**) — the Excel deliveries from BOKU hydrobiology (provenance, structure, and naming conventions in its own README and `docs/ai/`); trunk `main`, no Git LFS, append-only. The data itself must never land in this public repo (#125).
 
 ## Deployment Topology
 - **Local development** — `docker compose up -d` (PostgreSQL 16 + MinIO + app container), app on port 3001.
