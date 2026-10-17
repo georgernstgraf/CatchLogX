@@ -1,12 +1,13 @@
 # Project State
 
-Current status as of 2026-10-17.
+Current status as of 2026-10-18.
 
 ## Current Focus
-Zwei Stränge laufen parallel:
+Drei Stränge laufen parallel:
 
 1. **Datenablage getrennt** (#125) — die Befischungsdaten der BOKU liegen seit 2026-10-17 im privaten Schwesterrepo `georgernstgraf/CatchLogX-Data` (39 Dateien, 282,1 MiB). Dieses Repo hier ist public und enthält nur noch Anwendungscode. Offen: die read-only-Rollen der fünf Diplom-User (`CatchLogX-Data#2`).
 2. **Infrastruktur/Vor-Ort** — zweiter Self-hosted-Runner auf dem VPS (#123) und der Wartungstermin am BOKU-Server (#122).
+3. **Produktions-Upgrade** (#137–#145) — Martins Maschine läuft noch auf `dc2f1e4` (MinIO + `prisma db push`). Ein **datenerhaltender** Pfad bringt sie über den `boku`-Runner auf das migrationsgeführte Schema, ohne Sessions/Uploads/Templates zu verlieren: Audit + Backup (#138) → Adoptionsskript (#139) → Rehearsal gegen eine Prod-Kopie (#140) → Cutover in einem Job (#141) → immutable Release + systemd-Unit (#143) → gated Deploy (#144). #137 (Prod-Deploy nur noch manuell) und #138 liegen auf `dev`; **wirksam werden beide erst nach dem `master`-Merge** (workflow_dispatch braucht die Datei auf dem Default-Branch, und `master` verlangt eine zweite Approval — siehe `PITFALLS.md`).
 
 **Trunk-based development on `dev`** — keine Feature-Branches; `git pull --ff-only origin dev` beim Sessionstart. `master` ist Produktion (protected: PR + 1 Approval, auch für Admins), Merges kommen nur aus `dev`. Der Pre-Push-Gate (`.githooks/pre-push`, Lint + Typecheck + Test) schützt `dev`; **CI (`.github/workflows/test.yml`) ist die Quelle der Wahrheit**.
 
@@ -45,6 +46,7 @@ Kickoff 2026-09-19 (siehe `docs/meetings/2026-09-19-kickoff.md`, Protokoll + Auf
 - [x] AGENTS.md + docs/ai/ knowledge files created
 
 ## Pending
+- [ ] Produktions-Upgrade (#137–#145): #137 (Prod-Deploy manuell) und #138 (Audit/Backup-Workflow) liegen auf `dev`; der Audit ist erst nach dem `master`-Merge dispatchbar, der Cutover (#141) folgt nach Rehearsal (#140)
 - [ ] `CatchLogX-Data#2`: read-only-Rollen für die fünf Diplom-User nach dem Accept setzen (nur über die Web-UI möglich, siehe `PITFALLS.md`)
 - [x] Migration-only-Schema-Workflow etabliert (#129): eine Baseline `20261017190000_init` aus `schema.prisma`, `db push` aus allen Deploy-Pfaden verbannt, CI-Drift-Gate + Shadow-DB `clx_shadow`
 - [ ] NextAuth v4 is configured but not integrated with the custom session system
