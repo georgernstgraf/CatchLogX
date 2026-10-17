@@ -103,10 +103,15 @@ jobs:
           # Discover the container's network instead of guessing the compose
           # project name.
           NET="$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}' "$MINIO_CONTAINER" | head -n1)"
-          docker run --rm --network "$NET" -v "$DEST:/backup" \
+          # Run as the runner user so the exported files are not root-owned
+          # (otherwise backup pruning cannot remove them later).
+          MC_HOME="$(mktemp -d)"
+          docker run --rm --network "$NET" --user "$(id -u):$(id -g)" \
+            -v "$DEST:/backup" -v "$MC_HOME:/mc-home" -e HOME=/mc-home \
             -e "MC_HOST_prod=http://${MC_USER}:${MC_PASS}@${MINIO_CONTAINER}:9000" \
             minio/mc:latest \
             mirror --overwrite "prod/${MINIO_BUCKET}" /backup/minio
+          rm -rf "$MC_HOME"
           echo "Exported $(find "$DEST/minio" -type f | wc -l) objects ($(du -sh "$DEST/minio" | cut -f1))."
 
       # The production bucket is expected to hold the 18 uploads and the
@@ -188,7 +193,13 @@ jobs:
           set -euo pipefail
           KEEP="${{ inputs.keep_backups }}"
           case "$KEEP" in ''|*[!0-9]*) echo "::error::keep_backups must be a number"; exit 1;; esac
-          ls -1dt "$HOME/$BACKUP_ROOT"/*/ 2>/dev/null | tail -n "+$((KEEP + 1))" | xargs -r rm -rf
+          # Files written by container runs of older iterations can be
+          # root-owned; clear them through a container before removing the set.
+          remove_tree() {
+            docker run --rm -v "$1:/x" alpine sh -c 'rm -rf /x/* /x/.[!.]* 2>/dev/null || true' >/dev/null 2>&1 || true
+            rm -rf "$1" || true
+          }
+          ls -1dt "$HOME/$BACKUP_ROOT"/*/ 2>/dev/null | tail -n "+$((KEEP + 1))" | while read -r old; do remove_tree "$old"; done
           echo "Retained backup sets:"
           ls -1dt "$HOME/$BACKUP_ROOT"/*/
 
@@ -328,20 +339,29 @@ jobs:
             exit 1
           fi
           echo "PROD_DATABASE_URL=$URL" >> "$GITHUB_ENV"
-          # Same server, separate database for the rehearsal.
-          echo "SCRATCH_URL=${URL/clx?/$SCRATCH_DB?}" >> "$GITHUB_ENV"
+          # Same server, separate database for the rehearsal. Strip the query
+          # first - a glob-style ${URL/clx?/...} would match inside the user name.
+          BASE="${URL%%\?*}"
+          echo "SCRATCH_URL=${BASE%/*}/$SCRATCH_DB?schema=public" >> "$GITHUB_ENV"
           echo "Resolved the database URL from $APP_CONTAINER."
 
       - name: Export the MinIO bucket
         run: |
           set -euo pipefail
           EXPORT="$HOME/clx-rehearsal-export"
+          # Leftovers from an earlier run may be root-owned - clear them first.
+          if [ -e "$EXPORT" ]; then
+            docker run --rm -v "$EXPORT:/x" alpine sh -c 'rm -rf /x/* /x/.[!.]* 2>/dev/null || true' >/dev/null 2>&1 || true
+          fi
           rm -rf "$EXPORT" && mkdir -p "$EXPORT"
           echo "EXPORT=$EXPORT" >> "$GITHUB_ENV"
           NET="$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}' "$MINIO_CONTAINER" | head -n1)"
-          docker run --rm --network "$NET" -v "$EXPORT:/backup" \
+          MC_HOME="$(mktemp -d)"
+          docker run --rm --network "$NET" --user "$(id -u):$(id -g)" \
+            -v "$EXPORT:/backup" -v "$MC_HOME:/mc-home" -e HOME=/mc-home \
             -e "MC_HOST_prod=http://${MC_USER}:${MC_PASS}@${MINIO_CONTAINER}:9000" \
             minio/mc:latest mirror --overwrite "prod/${MINIO_BUCKET}" /backup
+          rm -rf "$MC_HOME"
           echo "Exported $(find "$EXPORT" -type f | wc -l) objects ($(du -sh "$EXPORT" | cut -f1))."
 
       - name: Copy the production database to the scratch database
