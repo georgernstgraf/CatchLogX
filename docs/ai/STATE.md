@@ -19,7 +19,8 @@ Kickoff 2026-09-19 (siehe `docs/meetings/2026-09-19-kickoff.md`, Protokoll + Auf
 - VPS-Instanz `catchlogx.graf.priv.at` existiert (Georgs VPS); Studierende deployen dort eine Kopie; zweiter Self-hosted Actions-Runner geplant (#123)
 - **Dev-Instanz live seit 2026-10-17** (#126): komplett unter System-User `catchlogx`, rootless Docker (nur PostgreSQL 16, `127.0.0.1:5432`), MinIO als aus Source gebautes Binary (`minio.service`, `127.0.0.1:9000/9001`), App als Production-Build (`clx-app.service`, `127.0.0.1:40873`) hinter nginx/TLS auf `https://catchlogx.graf.priv.at`. Dev-User `admin`/`admin` (nur Instanz, nie Prod). Setup-Details: `ARCHITECTURE.md` (Deployment Topology), DECISIONS-Eintrag 2026-10-17.
 - **Demo-Datensatz geseedet** (#127): `npm run seed:demo` legt idempotent 2 Dev-User, 125 Fischarten, 10 Standorte, 10 Samplings, 50 Fänge sowie die Vorlagedateien (`import-template.xlsx`/`.csv`) als sichtbare Template-Files an. Auf der Dev-Instanz verifiziert (zweiter Lauf ohne Duplikate).
-- **„Dummy" → „Template" umbenannt** (#128): Der Begriff „dummy file" war irreführend — die Datei ist eine direkt befüllbare Vorlage (früher „Eingabemaske"). Umbenannt in Code, Prisma-Modell (`ALTER TABLE "DummyFiles" RENAME TO "TemplateFiles"`, Migration liegt bei), API-Routen (`/api/upload/template-file`), UI und MinIO-Präfix (`CatchLogX/template_files`; alte Objekte unter `dummy_files/` bleiben über ihre gespeicherten Object-Keys abrufbar). Kanonischer Begriff: **template** (deutsch **Vorlage**) — „dummy" nicht mehr verwenden.
+- **„Dummy" → „Template" umbenannt** (#128): Der Begriff „dummy file" war irreführend — die Datei ist eine direkt befüllbare Vorlage (früher „Eingabemaske"). Umbenannt in Code, Prisma-Modell (`TemplateFiles`; die Umbenennung steckt jetzt in der Baseline `20261017190000_init`), API-Routen (`/api/upload/template-file`), UI und MinIO-Präfix (`CatchLogX/template_files`; alte Objekte unter `dummy_files/` bleiben über ihre gespeicherten Object-Keys abrufbar). Kanonischer Begriff: **template** (deutsch **Vorlage**) — „dummy" nicht mehr verwenden.
+- **Migration-only-Workflow etabliert** (#129): Die Migrations-History log bisher (`UserRoles`-Enum nie migriert); eine einzige Baseline `20261017190000_init` ist jetzt die Schema-Wahrheit, `db push` ist aus allen Deploy-Pfaden verbannt, CI prüft Drift (`migration-drift`-Job), Shadow-DB `clx_shadow` für `migrate dev`. **Dev-DB aus der Baseline neu aufgebaut** (nur Seed-Daten). **BOKU-Prod-DB wird beim Wartungstermin neu aufgebaut** (#122, vorher `pg_dump`).
 
 ## Completed (this cycle)
 - [x] Privates Datenrepo `CatchLogX-Data` angelegt, Daten übernommen, im README verlinkt (#125)
@@ -41,7 +42,7 @@ Kickoff 2026-09-19 (siehe `docs/meetings/2026-09-19-kickoff.md`, Protokoll + Auf
 
 ## Pending
 - [ ] `CatchLogX-Data#2`: read-only-Rollen für die fünf Diplom-User nach dem Accept setzen (nur über die Web-UI möglich, siehe `PITFALLS.md`)
-- [ ] Database migrations are not current — `prisma db push` is used instead of `prisma migrate dev`
+- [x] Migration-only-Schema-Workflow etabliert (#129): eine Baseline `20261017190000_init` aus `schema.prisma`, `db push` aus allen Deploy-Pfaden verbannt, CI-Drift-Gate + Shadow-DB `clx_shadow`
 - [ ] NextAuth v4 is configured but not integrated with the custom session system
 - [ ] Fish search component was removed (issue #60)
 - [ ] 26 Dependabot alerts incl. 4 critical (see #109)
@@ -51,4 +52,4 @@ Kickoff 2026-09-19 (siehe `docs/meetings/2026-09-19-kickoff.md`, Protokoll + Auf
 None.
 
 ## Next Session Suggestion
-`CatchLogX-Data#2` ist schnell erledigt (Web-UI, sobald die Einladungen angenommen sind). Danach: Vor-Ort-Vorbereitung (#122) und VPS-Runner (#123) sind die aktiven Infrastruktur-Stränge; code-seitig echte Prisma-Migrationen statt `prisma db push` und Route-Handler-/Komponententests (jsdom + Testing Library).
+`CatchLogX-Data#2` ist schnell erledigt (Web-UI, sobald die Einladungen angenommen sind). Danach: Vor-Ort-Vorbereitung (#122, inkl. Prod-DB-Neuaufbau aus der Migrations-Baseline) und VPS-Runner (#123) sind die aktiven Infrastruktur-Stränge; code-seitig Route-Handler-/Komponententests (jsdom + Testing Library).

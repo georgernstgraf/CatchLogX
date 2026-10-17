@@ -50,16 +50,16 @@ Die Anwendung ermöglicht es Mitarbeitern der BOKU Wien, Befischungsdaten zu erf
 Voraussetzungen: Node.js 20, Docker.
 
 ```bash
-# 1. PostgreSQL + MinIO starten
-docker compose up -d db minio minio-init
+# 1. PostgreSQL + MinIO starten (db-shadow-init legt die Schatten-DB für `migrate dev` an)
+docker compose up -d db db-shadow-init minio minio-init
 
-# 2. .env anlegen: DATABASE_URL, MINIO_* und NODEMAILER_* setzen
+# 2. .env anlegen: DATABASE_URL, SHADOW_DATABASE_URL (clx_shadow), MINIO_* und NODEMAILER_* setzen
 
 # 3. Prisma-Client generieren (nach jeder Schema-Änderung wiederholen)
 npx prisma generate
 
-# 4. Schema in die Datenbank übernehmen
-npx prisma db push
+# 4. Schema in die Datenbank übernehmen (Migrations-History, nie db push)
+npx prisma migrate deploy
 
 # 5. Dev-Benutzer + Demo-Datensatz (Arten, Standorte, Befischungen, Fänge,
 #    Vorlagedateien) anlegen — idempotent, mehrfach ausführbar
@@ -127,7 +127,7 @@ CatchLogX/
 │   ├── mailer.ts             # Nodemailer
 │   └── csv.ts                # CSV-Export-Escaping
 ├── prisma/
-│   └── schema.prisma         # DB-Schema (Änderungen via `prisma db push`)
+│   └── schema.prisma         # DB-Schema (Änderungen via `prisma migrate dev`)
 ├── scripts/                  # create-user, Seed- und Wipe-Scripts
 ├── docs/ai/                  # Projektwissen (Architektur, Entscheidungen, ...)
 ├── samples/                  # Beispieldaten

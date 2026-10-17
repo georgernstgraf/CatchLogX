@@ -18,6 +18,19 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # Creates the shadow database required by `prisma migrate dev` (issue #129).
+  db-shadow-init:
+    image: postgres:16-alpine
+    container_name: clx-postgres-shadow-init
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: clxadmin
+    entrypoint: >
+      sh -c "createdb -h db -U clxadmin clx_shadow || echo 'clx_shadow already exists';
+      echo 'shadow database ready';"
+
   minio:
     image: minio/minio:latest
     container_name: clx-minio
@@ -63,6 +76,7 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://clxadmin:clxadmin@db:5432/clx?schema=public
+      SHADOW_DATABASE_URL: postgresql://clxadmin:clxadmin@db:5432/clx_shadow?schema=public
       NEXTAUTH_URL: https://catchlogx.test.a19.at
       NEXTAUTH_SECRET: "your-secure-secret-change-in-production"
       NEXT_TELEMETRY_DISABLED: "1"
@@ -88,7 +102,7 @@ services:
     command: >
       sh -c "npm ci --include=dev || npm install --include=dev
       && npx prisma generate
-      && npx prisma db push
+      && npx prisma migrate deploy
       && npx tsx scripts/insert-fish.ts
       && npm run build
       && npx next start -p 3001

@@ -87,7 +87,7 @@ services/               Business logic layer (API routes delegate here)
   uploadService.ts      Excel upload, validation, DB insertion
 prisma/
   schema.prisma         Data model + generator (output: app/generated/prisma)
-  migrations/           Historical migrations (not actively maintained — use db push)
+  migrations/           Migration history — single baseline `*_init` (schema source of truth)
 scripts/                Dev utilities
   create-user.ts        User creation (admin/admin)
   insert-fish.ts        Seed fish species
@@ -147,6 +147,6 @@ Admin API route (server + edge)
 1. `docker compose up -d db minio minio-init` (PostgreSQL + MinIO)
 2. Set `DATABASE_URL` and MinIO env vars in `.env`
 3. `npx prisma generate`
-4. `npx prisma db push`
+4. `npx prisma migrate deploy`
 5. `npm run create-user` (optional: + seed scripts)
 6. `npm run dev`

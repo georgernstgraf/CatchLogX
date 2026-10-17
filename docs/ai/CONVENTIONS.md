@@ -42,7 +42,7 @@ Follow these without question. Do not deviate unless explicitly told.
 ## Database
 - Prisma singleton pattern in `lib/prisma.ts` (globalThis caching)
 - PostgreSQL 16 via Docker (`docker compose up -d db`)
-- Schema changes: `npx prisma db push` (no migrate workflow maintained)
+- Schema changes: `npx prisma migrate dev --name <name>` (creates + applies a migration; needs `SHADOW_DATABASE_URL`); deploy with `npx prisma migrate deploy`. **Never `prisma db push`** (#129)
 - Run `npx prisma generate` after any schema change, before `next dev` or `next build`
 
 ## Environment Variables

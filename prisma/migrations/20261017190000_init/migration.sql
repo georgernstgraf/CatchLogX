@@ -1,4 +1,7 @@
 -- CreateEnum
+CREATE TYPE "UserRoles" AS ENUM ('SUPER_ADMIN', 'ADMIN', 'VIEWER');
+
+-- CreateEnum
 CREATE TYPE "UploadStates" AS ENUM ('UPLOADED', 'ACCEPTED', 'REJECTED', 'DB_ERROR', 'SAVED_IN_DB');
 
 -- CreateEnum
@@ -11,7 +14,8 @@ CREATE TABLE "User" (
     "hashedPassword" TEXT NOT NULL,
     "name" TEXT,
     "email" TEXT NOT NULL,
-    "role" TEXT NOT NULL DEFAULT 'viewer',
+    "role" "UserRoles" NOT NULL DEFAULT 'VIEWER',
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
     "isFirstLogin" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -32,7 +36,7 @@ CREATE TABLE "UserQueries" (
 );
 
 -- CreateTable
-CREATE TABLE "DummyFiles" (
+CREATE TABLE "TemplateFiles" (
     "id" TEXT NOT NULL,
     "fileName" TEXT NOT NULL,
     "filePath" TEXT NOT NULL,
@@ -42,7 +46,7 @@ CREATE TABLE "DummyFiles" (
     "isDeleted" BOOLEAN,
     "deletedAt" TIMESTAMP(3),
 
-    CONSTRAINT "DummyFiles_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "TemplateFiles_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -194,3 +198,4 @@ ALTER TABLE "fish_catches" ADD CONSTRAINT "fish_catches_samplingId_fkey" FOREIGN
 
 -- AddForeignKey
 ALTER TABLE "fish_catches" ADD CONSTRAINT "fish_catches_speciesId_fkey" FOREIGN KEY ("speciesId") REFERENCES "fish_species"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+

@@ -5,7 +5,7 @@ Next.js 16.0 (App Router), TypeScript (strict), Prisma + PostgreSQL, Tailwind CS
 
 ## Infrastructure
 PostgreSQL 16 and MinIO run via Docker Compose (`docker-compose.yml`).
-- Start: `docker compose up -d db minio minio-init` (or `docker compose up -d` for full stack)
+- Start: `docker compose up -d db db-shadow-init minio minio-init` (or `docker compose up -d` for full stack)
 
 ## Commands
 ```
@@ -16,7 +16,8 @@ npm run typecheck     # tsc --noEmit
 npm test              # Vitest, single run (vitest run) — pure service-logic tests, no DB/MinIO needed
 npm run create-user   # create admin user (hardcoded admin/admin, dev only)
 npx prisma generate   # regenerate Prisma client (required after schema changes)
-npx prisma db push    # push schema to DB (dev — migrations are not kept current)
+npx prisma migrate dev --name <name>   # schema change (dev): create + apply a migration
+npx prisma migrate deploy              # apply pending migrations (dev instance, production)
 ```
 
 ## Tests (Vitest, #112)
@@ -56,6 +57,22 @@ After any schema change, run `npx prisma generate` before `next dev` or `next bu
 
 **Database is PostgreSQL** (migrated from SQLite). Connection via `DATABASE_URL` env var.
 Query logging is disabled (empty `log: []` in `lib/prisma.ts`).
+
+### Migrations: migration-only workflow (#129)
+
+**The migration history in `prisma/migrations/` is the single source of truth for the schema.**
+
+- **Schema change (dev):** `npx prisma migrate dev --name <name>` — creates a migration *and* applies it.
+  Requires a shadow database: set `SHADOW_DATABASE_URL` (dev: `clx_shadow`, created by the
+  `db-shadow-init` service in `docker-compose.yml`).
+- **Deploy (dev instance, production, CI):** `npx prisma migrate deploy` — applies pending migrations only.
+- **`npx prisma db push` is banned** outside throwaway sandboxes. It bypasses the history, writes no
+  migration, and silently drops/recreates tables on renames (data loss).
+- **CI enforces this:** the `migration-drift` job in `.github/workflows/test.yml` applies the history to an
+  empty database and fails when it no longer matches `schema.prisma`.
+- History state: a single baseline `20261017190000_init` was generated from `schema.prisma` on 2026-10-17
+  (#129) after the history had drifted (the `UserRoles` enum had never been migrated). The dev database was
+  rebuilt from it; the BOKU production database is rebuilt from it at the maintenance appointment (#122).
 
 ## Auth
 
