@@ -12,7 +12,8 @@
     "test": "vitest run",
     "prepare": "git config core.hooksPath .githooks || true",
     "check:hooks": "node scripts/check-hooks.mjs",
-    "create-user": "tsx scripts/create-user.ts"
+    "create-user": "tsx scripts/create-user.ts",
+    "seed:demo": "tsx scripts/seed-demo.ts"
   },
   "dependencies": {
     "@next-auth/prisma-adapter": "^1.0.7",

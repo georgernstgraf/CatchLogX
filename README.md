@@ -61,8 +61,9 @@ npx prisma generate
 # 4. Schema in die Datenbank übernehmen
 npx prisma db push
 
-# 5. Admin-Benutzer anlegen (nur Dev: admin/admin)
-npm run create-user
+# 5. Dev-Benutzer + Demo-Datensatz (Arten, Standorte, Befischungen, Fänge,
+#    Vorlagedateien) anlegen — idempotent, mehrfach ausführbar
+npm run seed:demo
 
 # 6. Entwicklungsserver starten
 npm run dev
@@ -158,8 +159,8 @@ npm test
 # Prüfen, ob der Pre-push Hook aktiv ist
 npm run check:hooks
 
-# Admin-Benutzer erstellen
-npm run create-user
+# Vollständigen Demo-Datensatz anlegen (idempotent)
+npm run seed:demo
 ```
 
 ## 🤝 Mitarbeit (Trunk-Based)
