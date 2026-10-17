@@ -791,27 +791,29 @@ jobs:
           echo "Checkout updated to $(git rev-parse --short HEAD); no db push in the compose file."
 
       # Step 6: bring up the new code (it applies migrations, now a no-op) and
-      # health-check it. The app builds inside the container on first start, so
-      # allow up to ~10 minutes; fail fast if the container exits.
+      # health-check it. The app builds inside the container on first start
+      # (npm ci + next build on a desktop machine), so allow up to ~20 minutes.
+      # Only an EXITED container is a fail-fast condition - a container that is
+      # briefly "created" while compose starts it must not abort the job.
       - name: Bring up the new stack and health-check it
         run: |
           set -euo pipefail
           cd /opt/CatchLogX
           docker compose up -d --build
-          for attempt in $(seq 1 60); do
-            if docker inspect -f '{{.State.Running}}' "$APP_CONTAINER" 2>/dev/null | grep -q true; then
-              if curl -fsS -o /dev/null http://127.0.0.1:3001/; then
-                echo "New stack is healthy (attempt $attempt)."
-                exit 0
-              fi
-            elif docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+          for attempt in $(seq 1 120); do
+            STATUS="$(docker inspect -f '{{.State.Status}}' "$APP_CONTAINER" 2>/dev/null || echo missing)"
+            if [ "$STATUS" = "exited" ] || [ "$STATUS" = "dead" ]; then
               echo "::error::$APP_CONTAINER exited before becoming healthy"
               docker logs --tail 50 "$APP_CONTAINER" || true
               exit 1
             fi
+            if [ "$STATUS" = "running" ] && curl -fsS -o /dev/null http://127.0.0.1:3001/; then
+              echo "New stack is healthy (attempt $attempt)."
+              exit 0
+            fi
             sleep 10
           done
-          echo "::error::health check timed out after ~10 minutes"
+          echo "::error::health check timed out after ~20 minutes"
           docker logs --tail 100 "$APP_CONTAINER" || true
           exit 1
 
