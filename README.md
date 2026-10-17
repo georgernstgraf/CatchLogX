@@ -170,6 +170,14 @@ Entwickelt von Schülern der HTL Spengergasse als Abschlussprojekt:
 Abteilung für Hydrobiologie
 Institut für Wasserwirtschaft, Hydrologie und konstruktiven Wasserbau
 
+## 🗄️ Datenbestand
+
+Die Befischungsdaten selbst liegen **nicht** in diesem Repository (es ist public), sondern im privaten Schwesterprojekt:
+
+**→ [georgernstgraf/CatchLogX-Data](https://github.com/georgernstgraf/CatchLogX-Data)** — privates Datenrepository, Zugriff nur auf Einladung.
+
+Dort sind die Excel-Lieferungen der BOKU-Hydrobiologie versioniert (Provenienz, Struktur und Namenskonventionen im README des Datenrepos). Dieses Repository enthält ausschließlich den Anwendungscode.
+
 ## 📄 Lizenz
 
 Dieses Projekt wurde für die BOKU Wien entwickelt und dient ausschließlich akademischen und wissenschaftlichen Zwecken.
