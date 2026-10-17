@@ -7,6 +7,13 @@ Next.js 16.0 (App Router), TypeScript (strict), Prisma + PostgreSQL, Tailwind CS
 PostgreSQL 16 and MinIO run via Docker Compose (`docker-compose.yml`).
 - Start: `docker compose up -d db db-shadow-init minio minio-init` (or `docker compose up -d` for full stack)
 
+On the dev instance `catchlogx.graf.priv.at` the app runs as a systemd **user** service under the
+`catchlogx` user: `systemctl --user restart catchlogx.service` is the full deploy+restart
+(pull → migrate deploy → tests → build if changed → start); `systemctl --user start catchlogx-update.service`
+deploys without touching the running server. Units live in `~/.config/systemd/user/`, the deploy script in
+`~/.config/catchlogx/deploy.sh`. Never kill raw PIDs — `next start` leaves an orphaned `next-server` child
+holding port 40873 (see `PITFALLS.md`).
+
 ## Commands
 ```
 npm run dev           # start dev server (needs PostgreSQL + MinIO running)
