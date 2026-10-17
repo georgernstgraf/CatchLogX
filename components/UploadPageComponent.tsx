@@ -104,7 +104,7 @@ const UploadPageComponent = () => {
     TemplateFileRecord[]
   >([]);
   const [uploadStatus, setUploadStatus] = useState<
-    "idle" | "uploading" | "error"
+    "idle" | "uploading" | "success" | "error"
   >("idle");
   const [report, setReport] = useState<FileReport[]>([]);
   const [zipToken, setZipToken] = useState<string | null>(null);
@@ -229,7 +229,7 @@ const UploadPageComponent = () => {
         return;
       }
 
-      setUploadStatus("idle");
+      setUploadStatus("success");
       setReport(outcome.report);
       setSelectedFiles([]);
     } catch (error) {
@@ -270,6 +270,7 @@ const UploadPageComponent = () => {
   };
 
   const uploadFailed = report.some((entry) => entry.status === "failed");
+  const showSuccess = uploadStatus === "success" && report.length > 0;
 
   return (
     <div className="flex flex-row min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -342,7 +343,39 @@ const UploadPageComponent = () => {
           </div>
           {/* Upload Area */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8">
-            {selectedFiles.length === 0 ? (
+            {showSuccess ? (
+              <div className="space-y-6">
+                {/* Success Message */}
+                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                  <p className="text-green-700 dark:text-green-300 font-medium">
+                    {report.length} file{report.length === 1 ? "" : "s"} passed
+                    validation and are waiting for administrator review.
+                  </p>
+                  <div className="mt-2 text-sm text-green-600 dark:text-green-400">
+                    You will be notified once the review is complete.
+                  </div>
+                </div>
+
+                {/* Upload report */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                    Upload report
+                  </h3>
+                  {report.map((entry) => (
+                    <FileReportRow key={entry.fileName} report={entry} />
+                  ))}
+                </div>
+
+                <div className="flex justify-center">
+                  <button
+                    onClick={resetUpload}
+                    className="px-6 py-3 rounded-lg font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    Start new upload
+                  </button>
+                </div>
+              </div>
+            ) : selectedFiles.length === 0 ? (
               <div
                 className={`border-2 border-dashed rounded-lg p-12 text-center transition-all duration-300 ${
                   isDragOver
@@ -537,20 +570,6 @@ const UploadPageComponent = () => {
                         Download failed files (.zip)
                       </button>
                     )}
-                  </div>
-                )}
-
-                {/* Success Message */}
-                {uploadStatus === "idle" && !uploadFailed && report.length > 0 && (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <p className="text-green-700 font-medium">
-                      {report.length} file{report.length === 1 ? "" : "s"}{" "}
-                      passed validation and are waiting for administrator
-                      review.
-                    </p>
-                    <div className="mt-2 text-sm text-green-600">
-                      You will be notified once the review is complete.
-                    </div>
                   </div>
                 )}
 
