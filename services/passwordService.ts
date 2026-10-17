@@ -51,6 +51,12 @@ export async function findUserOrThrow(username: string): Promise<FindUserType> {
   }
 }
 
+/**
+ * Validity of a password-reset link in minutes (spec: max. 10 minutes, #39).
+ * Single source of truth for the token lookup and for every mail text.
+ */
+const RESET_TOKEN_TTL_MINUTES = 10;
+
 export function createResetToken(): string {
   const token = crypto.randomBytes(24).toString("hex");
   return token;
@@ -115,7 +121,7 @@ export function buildResetEmailHtml(username: string, resetLink: string) {
               </p>
               
               <p style="margin: 0 0 8px; font-size: 14px; line-height: 1.6; color: #6b7280;">
-                <strong>Important:</strong> This link will expire in 15 minutes for security reasons.
+                <strong>Important:</strong> This link will expire in ${RESET_TOKEN_TTL_MINUTES} minutes for security reasons.
               </p>
               
               <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #6b7280;">
@@ -207,7 +213,7 @@ export async function initiatePasswordReset(
       to: email,
       subject: "Password Reset Request",
       html: emailHtml,
-      text: `Hello ${username},\n\nWe received a request to reset the password for your CatchLogX account. If you didn't make this request, you can safely ignore this email.\n\nTo reset your password, visit this link:\n${resetLink}\n\nThis link will expire in 24 hours for security reasons.\n\nBest regards,\nThe CatchLogX Team`,
+      text: `Hello ${username},\n\nWe received a request to reset the password for your CatchLogX account. If you didn't make this request, you can safely ignore this email.\n\nTo reset your password, visit this link:\n${resetLink}\n\nThis link will expire in ${RESET_TOKEN_TTL_MINUTES} minutes for security reasons.\n\nBest regards,\nThe CatchLogX Team`,
     });
 
     console.info(
@@ -228,7 +234,7 @@ export async function validateResetToken(token: string) {
       token: token,
       state: "REQUESTED",
       timestamp: {
-        gte: new Date(Date.now() - 1000 * 60 * 15),
+        gte: new Date(Date.now() - 1000 * 60 * RESET_TOKEN_TTL_MINUTES),
       },
     },
   });

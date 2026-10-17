@@ -77,6 +77,12 @@ describe("buildResetLink / buildResetEmailHtml", () => {
     expect(html).toContain('href="https://link"');
     expect(html).toContain(`© ${NOW.getFullYear()} CatchLogX`);
   });
+
+  it("states the 10-minute validity of the link", () => {
+    expect(buildResetEmailHtml("alice", "https://link")).toContain(
+      "expire in 10 minutes",
+    );
+  });
 });
 
 describe("findUserOrThrow", () => {
@@ -131,6 +137,14 @@ describe("initiatePasswordReset", () => {
     expect(mail.text).toContain(buildResetLink(token));
   });
 
+  it("states the same 10-minute validity in the plain-text mail", async () => {
+    await initiatePasswordReset("alice", timestamp, "a@x.at");
+
+    const mail = sendMail.mock.calls[0][0];
+    expect(mail.text).toContain("expire in 10 minutes");
+    expect(mail.text).not.toContain("24 hours");
+  });
+
   it("expires older resets of the same user", async () => {
     vi.mocked(prisma.passwordResets.findMany).mockResolvedValue([
       { id: 1 },
@@ -170,14 +184,14 @@ describe("validateResetToken", () => {
     expect(prisma.passwordResets.update).not.toHaveBeenCalled();
   });
 
-  it("only accepts REQUESTED tokens from the last 15 minutes", async () => {
+  it("only accepts REQUESTED tokens from the last 10 minutes", async () => {
     vi.mocked(prisma.passwordResets.findFirst).mockResolvedValue(null);
     await validateResetToken("tok");
     expect(prisma.passwordResets.findFirst).toHaveBeenCalledWith({
       where: {
         token: "tok",
         state: "REQUESTED",
-        timestamp: { gte: new Date("2025-01-15T11:45:00Z") },
+        timestamp: { gte: new Date("2025-01-15T11:50:00Z") },
       },
     });
   });
