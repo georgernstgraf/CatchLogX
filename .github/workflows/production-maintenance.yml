@@ -97,7 +97,7 @@ jobs:
           docker run --rm --network "$NET" -v "$DEST:/backup" \
             -e "MC_HOST_prod=http://${MC_USER}:${MC_PASS}@${MINIO_CONTAINER}:9000" \
             minio/mc:latest \
-            mc mirror --overwrite --quiet "prod/${MINIO_BUCKET}" /backup/minio
+            mirror --overwrite "prod/${MINIO_BUCKET}" /backup/minio
           echo "Exported $(find "$DEST/minio" -type f | wc -l) objects ($(du -sh "$DEST/minio" | cut -f1))."
 
       # The production bucket is expected to hold the 18 uploads and the
@@ -108,9 +108,11 @@ jobs:
           set -euo pipefail
           NET="$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}' "$MINIO_CONTAINER" | head -n1)"
           mc() {
+            # The minio/mc image already uses `mc` as its entrypoint - do not
+            # prefix the arguments with a second `mc`.
             docker run --rm --network "$NET" \
               -e "MC_HOST_prod=http://${MC_USER}:${MC_PASS}@${MINIO_CONTAINER}:9000" \
-              minio/mc:latest mc "$@"
+              minio/mc:latest "$@"
           }
 
           echo "=== buckets visible via mc ==="
