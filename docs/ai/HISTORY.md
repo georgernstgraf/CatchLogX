@@ -22,3 +22,8 @@ Each entry keeps its date, title, origin file, reason, and original text.
 - **Superseded by** (`DECISIONS.md`, 2026-10-17): „SHA-gekeyte Standalone-Releases statt Build-im-Restart (#135, #123)".
 - **Origin**: `docs/ai/DECISIONS.md`, `docs/ai/ARCHITECTURE.md`, `docs/ai/STATE.md`, `docs/ai/PITFALLS.md`, `AGENTS.md`
 - **Reason**: Der HEAD-Vergleich „vor dem Pull / nach dem Pull" lieferte einen **veralteten Build** aus, wenn der Commit lokal bereits existierte (#133: Upload ohne Erfolgsrückmeldung, weil die App den alten Stand servierte), und ein `restart` baute immer mit. Jetzt: Artefakt pro SHA, Restart ohne Build, Rollback per Symlink.
+
+## 2026-10-17: „Deploy to Test Server" (`manual.yml`) und `test.a19.at`-Reste entfernt (#136)
+- **Original**: `.github/workflows/manual.yml` (Anzeigename „Deploy to Test Server") lief bei Push auf `master` auf `ubuntu-latest` und deployte per SSH nach `catchlogx.test.a19.at` (`cd ~/CatchLogX` → `git fetch origin master` → `git reset --hard` → `docker compose down && up -d --build`), gestützt auf die Secrets `TEST_SERVER_SSH_KEY`/`TEST_SERVER_HOST`/`TEST_SERVER_SSH_PORT`/`TEST_SERVER_USER`/`TEST_SERVER_PATH`. Dazu passend `docker-compose.yml`: `NEXTAUTH_URL: https://catchlogx.test.a19.at`. Tabellenzeile in `docs/ai/ARCHITECTURE.md` („Deploy paths").
+- **Origin**: `.github/workflows/manual.yml`, `docker-compose.yml`, `docs/ai/ARCHITECTURE.md`
+- **Reason**: Reste des vorigen Owners (das Repo wechselte den Besitzer, nicht nur den Namen); `catchlogx.test.a19.at` gehört nicht zu diesem Projekt. Entfernt: der Workflow, alle fünf `TEST_SERVER_*`-Repo-Secrets (darunter der **einzige SSH-Private-Key** im Secret Store), und `NEXTAUTH_URL` zeigt jetzt auf `http://localhost:3001` (lokale Compose-Dev-Instanz).

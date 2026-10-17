@@ -29,10 +29,9 @@ Infrastructure: PostgreSQL 16 via Docker Compose. File bytes (uploads + template
 | Workflow | Trigger | Runs on | What it does |
 |---|---|---|---|
 | `test.yml` | push/PR to `dev`, `master` (+ manual dispatch) | GitHub-hosted; `deploy` job on `[self-hosted, vps]` | lint + typecheck + test (the correctness gate) + `migration-drift`; on push to `dev` (or manual dispatch on `dev`) the `deploy` job builds a standalone release, publishes `~/releases/<sha>`, runs `prisma migrate deploy`, restarts `catchlogx.service` and health-checks it |
-| `production-deploy.yml` | push to `master` | `[self-hosted, linux, x64]` | `cd /opt/CatchLogX`, `git reset --hard origin/master`, `docker compose down && up -d --build` |
-| `manual.yml` | push to `master` (despite the name) | GitHub-hosted | SSH deploy to `catchlogx.test.a19.at` using the `TEST_SERVER_*` secrets |
+| `production-deploy.yml` | push to `master` | `[self-hosted, boku]` | `cd /opt/CatchLogX`, `git reset --hard origin/master`, `docker compose down && up -d --build` |
 
-Two repo-level self-hosted runners exist: `catchlogx-server` (Linux, online — the leftover runner from the previous diploma team, on the BOKU production machine; to be confirmed on site, #122) and `catchlogx-vps` (label `vps`, this machine, #123/#135). Because every self-hosted runner automatically carries `self-hosted`/`Linux`/`X64`, a job naming only those labels is eligible on **both** — `production-deploy.yml` still does, so it can land on this VPS, where `/opt/CatchLogX` does not exist. Pin each runner with a distinct custom label — see `PITFALLS.md`; runner *groups* are unavailable on a user-owned repo.
+Two repo-level self-hosted runners exist, each pinned with a custom label: `catchlogx-vps` (label `vps`, this machine, #123/#135 — builds `dev`) and `catchlogx-server` (label `boku`, the leftover runner from the previous diploma team on the BOKU production machine, #122 — builds `master`). Because every self-hosted runner automatically carries `self-hosted`/`Linux`/`X64`, a job naming only those labels is eligible on **both**; that is why every machine-specific job names its custom label. Branch separation comes from combining the branch trigger/`if` guard with the label — GitHub has **no** branch-based runner routing, and runner *groups* are unavailable on a user-owned repo. (`manual.yml`, the old owner's SSH deploy to `catchlogx.test.a19.at`, was removed in #136.)
 
 ## Directory Map
 ```
