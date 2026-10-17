@@ -16,3 +16,9 @@ Each entry keeps its date, title, origin file, reason, and original text.
 - **Superceded by**: `DECISIONS.md` 2026-10-17 „PostgreSQL-Blobs statt MinIO (#131)".
 - **Origin**: `docs/ai/DECISIONS.md`, `docs/ai/ARCHITECTURE.md`, `AGENTS.md`, `README.md`
 - **Reason**: MinIO bot keine gemeinsame Transaktion mit der DB; der atomare Bulk-Import (#88) braucht Blobs in der Datenbank. `lib/minio.ts`, die Compose-Services `minio`/`minio-init`, die `minio`-Dependency und (auf der Dev-Instanz) `minio.service`/`mc` entfallen.
+
+## 2026-10-17: Deploy mit integriertem Build im Restart (`catchlogx-update`) (#135)
+- **Original** (`DECISIONS.md`, 2026-10-17, „Deploy-Dienst als systemd-User-Units mit integriertem Deploy"): Dev-Instanz als User-Unit `catchlogx.service` (`npm start`, Port 40873); jeder (Re)Start löste über `Wants`/`After` die Oneshot-Unit `catchlogx-update.service` aus, die `~/.config/catchlogx/deploy.sh` ausführte: `git pull --ff-only origin dev` → `npm ci` (nur bei geändertem `package-lock.json`) → `npx prisma migrate deploy` → `npm test` (Fehler nur als Warnung) → `npm run build` nur wenn sich HEAD verschoben hat. Dazu die passenden Abschnitte in `ARCHITECTURE.md` (Deployment Topology, Deploy-Paths) und `AGENTS.md` („`systemctl --user restart` ist der volle Deploy+Restart").
+- **Superseded by** (`DECISIONS.md`, 2026-10-17): „SHA-gekeyte Standalone-Releases statt Build-im-Restart (#135, #123)".
+- **Origin**: `docs/ai/DECISIONS.md`, `docs/ai/ARCHITECTURE.md`, `docs/ai/STATE.md`, `docs/ai/PITFALLS.md`, `AGENTS.md`
+- **Reason**: Der HEAD-Vergleich „vor dem Pull / nach dem Pull" lieferte einen **veralteten Build** aus, wenn der Commit lokal bereits existierte (#133: Upload ohne Erfolgsrückmeldung, weil die App den alten Stand servierte), und ein `restart` baute immer mit. Jetzt: Artefakt pro SHA, Restart ohne Build, Rollback per Symlink.

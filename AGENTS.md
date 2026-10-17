@@ -10,11 +10,17 @@ is involved (see `docs/ai/DECISIONS.md`, 2026-10-17).
 - Start: `docker compose up -d db db-shadow-init` (or `docker compose up -d` for full stack)
 
 On the dev instance `catchlogx.graf.priv.at` the app runs as a systemd **user** service under the
-`catchlogx` user: `systemctl --user restart catchlogx.service` is the full deploy+restart
-(pull → migrate deploy → tests → build if changed → start); `systemctl --user start catchlogx-update.service`
-deploys without touching the running server. Units live in `~/.config/systemd/user/`, the deploy script in
-`~/.config/catchlogx/deploy.sh`. Never kill raw PIDs — `next start` leaves an orphaned `next-server` child
-holding port 40873 (see `PITFALLS.md`).
+`catchlogx` user and serves an **immutable release**: `catchlogx.service` runs
+`node ~/current/server.js`, where `~/current` → `~/releases/<sha>/` (Next.js `output: "standalone"`).
+
+Deploys are **push-driven**: the `deploy` job in `.github/workflows/test.yml` (gated by
+`needs: [test, migration-drift]`) builds on the self-hosted runner
+`actions.runner.catchlogx-vps.service` (label `vps`, running under the same `catchlogx` user
+manager), publishes the release with `scripts/publish-release.sh`, applies `prisma migrate deploy`,
+restarts `catchlogx.service` and health-checks `127.0.0.1:40873`. So
+`systemctl --user restart catchlogx.service` is a plain ~2 s restart with **no build**, and a
+rollback is "point `~/current` at the previous release and restart". Units live in
+`~/.config/systemd/user/`. Never kill raw PIDs (see `PITFALLS.md`).
 
 ## Commands
 ```
