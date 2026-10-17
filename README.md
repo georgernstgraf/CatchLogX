@@ -18,25 +18,55 @@ Die Anwendung ermöglicht es Mitarbeitern der BOKU Wien, Befischungsdaten zu erf
 
 ### Frontend
 
-- **Next.js 15.2.2** - React Framework mit App Router
+- **Next.js 16.0** - React Framework mit App Router
 - **React 19** - UI Library
-- **TypeScript** - Type-Safe JavaScript
+- **TypeScript** (strict) - Type-Safe JavaScript
 - **Tailwind CSS 4** - Utility-First CSS Framework
 - **Lucide React** - Icon Library
+- **Leaflet / React Leaflet** - Kartenansicht der Befischungsstellen
 
 ### Backend
 
-- **Next.js API Routes** - Server-Side Logic
-- **Prisma** - Database ORM und Migration Tool
-- **SQLite** - Entwicklungsdatenbank
+- **Next.js API Routes** - dünne HTTP-Schicht, Logik liegt in `services/`
+- **PostgreSQL 16** - Datenbank (Docker)
+- **Prisma 6** - ORM (Client wird nach `app/generated/prisma` generiert)
+- **MinIO** - S3-kompatibler Dateispeicher für Uploads (Docker, Bucket `catchlogx-files`)
+- **Eigenes Cookie-Session-System** - `session-token`-Cookie → `Session`-Tabelle
 - **bcrypt** - Passwort-Hashing
-- **NextAuth.js** - Authentifizierung
+- **Nodemailer** - E-Mails für Passwort-Reset
+- **ExcelJS / xlsx** - Einlesen der Excel-Uploads
+
+> NextAuth.js ist konfiguriert (`lib/auth.ts`), wird von der Oberfläche aber **nicht** verwendet.
 
 ### Development Tools
 
 - **ESLint** - Code Linting
-- **TypeScript** - Static Type Checking
-- **Prisma Studio** - Database GUI
+- **TypeScript** (`tsc --noEmit`) - Static Type Checking
+- **Vitest** - Unit-Tests
+- **Docker Compose** - PostgreSQL + MinIO (+ App)
+
+## 🚀 Lokales Setup
+
+Voraussetzungen: Node.js 20, Docker.
+
+```bash
+# 1. PostgreSQL + MinIO starten
+docker compose up -d db minio minio-init
+
+# 2. .env anlegen: DATABASE_URL, MINIO_* und NODEMAILER_* setzen
+
+# 3. Prisma-Client generieren (nach jeder Schema-Änderung wiederholen)
+npx prisma generate
+
+# 4. Schema in die Datenbank übernehmen
+npx prisma db push
+
+# 5. Admin-Benutzer anlegen (nur Dev: admin/admin)
+npm run create-user
+
+# 6. Entwicklungsserver starten
+npm run dev
+```
 
 ## 🏗️ Datenbank-Schema
 
@@ -57,30 +87,51 @@ Das Projekt verwendet ein relationales Datenbankschema für Befischungsdaten:
 
 ```
 CatchLogX/
-├── app/                    # Next.js App Router
-│   ├── api/               # API Routes
-│   │   ├── auth/          # Authentifizierung
-│   │   └── query/         # SQL-Abfragen
-│   ├── login/             # Login-Seite
-│   ├── upload/            # Upload-Seite
-│   └── forgot-password/   # Passwort-Reset
-├── components/            # React Komponenten
-│   ├── AuthProvider.tsx   # Authentifizierung Context
-│   ├── DashboardComponent.tsx
-│   ├── LoginForm.jsx
-│   ├── SqlQueryComponent.tsx
-│   └── UploadPageComponent.tsx
-├── lib/                   # Utility Functions
-│   ├── auth.ts           # Auth-Konfiguration
-│   ├── prisma.ts         # Prisma Client
-│   └── session.ts        # Session Management
-├── prisma/               # Datenbank
-│   ├── schema.prisma     # DB Schema
-│   └── migrations/       # DB Migrationen
-├── scripts/              # Utility Scripts
-│   ├── create-user.ts    # Benutzer erstellen
-│   └── insert-*.ts      # Daten-Import Scripts
-└── samples/              # Beispieldaten
+├── app/                      # Next.js App Router (Seiten + API Routes)
+│   ├── api/
+│   │   ├── auth/             # Sign-in, Session, Logout, Initial-Passwort
+│   │   ├── admin/            # Benutzer-, Upload- und Dateiverwaltung
+│   │   ├── query/            # SQL-Abfragen ausführen/speichern
+│   │   ├── upload/           # Excel-Upload
+│   │   ├── forgot-password/  # Passwort vergessen
+│   │   └── reset-password/   # Passwort zurücksetzen
+│   ├── admin/                # Admin Panel
+│   ├── upload/               # Upload-Seite
+│   ├── my-uploads/           # Eigene Uploads
+│   ├── about/                # Über / Kontakt
+│   ├── login/                # Login-Seite
+│   ├── first-login/          # Passwortwechsel beim ersten Login
+│   ├── forgot-password/      # Passwort vergessen
+│   ├── reset-password/       # Passwort-Reset
+│   └── generated/prisma/     # Generierter Prisma-Client (gitignored)
+├── components/               # React-Komponenten (alle client-seitig)
+│   ├── AuthProvider.tsx      # Auth-Context + useAuth()
+│   ├── ProtectedRoute.tsx    # Route Guard
+│   ├── SqlQueryComponent.tsx # SQL-Abfrage-UI + Karte
+│   ├── UploadPageComponent.tsx
+│   ├── AdminPageComponent.tsx
+│   └── ...
+├── services/                 # Business-Logik (API Routes delegieren hierher)
+│   ├── authService.ts
+│   ├── adminService.ts
+│   ├── passwordService.ts
+│   ├── queryService.ts
+│   └── uploadService.ts
+├── lib/                      # Server-Utilities
+│   ├── prisma.ts             # Prisma-Singleton
+│   ├── session.ts            # Session-Validierung
+│   ├── auth-middleware.ts    # requireAuth()
+│   ├── admin-middleware.ts   # requireAdminAuth()
+│   ├── minio.ts              # MinIO-Client
+│   ├── mailer.ts             # Nodemailer
+│   └── csv.ts                # CSV-Export-Escaping
+├── prisma/
+│   └── schema.prisma         # DB-Schema (Änderungen via `prisma db push`)
+├── scripts/                  # create-user, Seed- und Wipe-Scripts
+├── docs/ai/                  # Projektwissen (Architektur, Entscheidungen, ...)
+├── samples/                  # Beispieldaten
+├── middleware.ts             # Edge-Cookie-Check für /api/admin/*
+└── docker-compose.yml        # PostgreSQL 16 + MinIO + App
 ```
 
 ## 🔧 Verfügbare Scripts
@@ -97,6 +148,15 @@ npm run start
 
 # Code linting
 npm run lint
+
+# Typecheck
+npm run typecheck
+
+# Unit-Tests (Vitest)
+npm test
+
+# Prüfen, ob der Pre-push Hook aktiv ist
+npm run check:hooks
 
 # Admin-Benutzer erstellen
 npm run create-user
@@ -157,12 +217,28 @@ Alternative Kontrolle: `npm run check:hooks`
 
 ## 🎓 Diplomprojekt-Team
 
-Entwickelt von Schülern der HTL Spengergasse als Abschlussprojekt:
+Entwickelt von Schülern der HTL Spengergasse als Abschlussprojekt.
+
+### Aktuelles Team (seit 2026-09)
+
+- Dominik (Backend Lead & Projekt-/Dokumentationskoordination)
+- Rodion (Datenbank)
+- Armin (Frontend Developer)
+- Alex (Frontend Developer)
+- Jakob (Testing)
+
+### Erstes Team
 
 - Arman (Team Lead & Backend Developer)
 - Maxima (Vice Team Lead & Software Security Engineer)
 - Burak (Database Designer)
 - Tadeas (Frontend Developer & UI/UX)
+
+### Betreuung & Ansprechpersonen
+
+- Georg Graf (Betreuer, HTL Spengergasse)
+- Lena (BOKU Hydrobiologie, fachliche Ansprechperson)
+- Martin Seebacher (BOKU Hydrobiologie, Institut-IT / Produktionsserver)
 
 ## 🤝 Auftraggeber
 
