@@ -385,7 +385,7 @@ jobs:
           ORDER BY 1 \gexec
           SQL
           }
-          counts "$SCRATCH_DB" | sed 's/^public\.DummyFiles/public.TemplateFiles/' | grep -v _prisma_migrations > counts-before.txt
+          counts "$SCRATCH_DB" | sed 's/^public\.DummyFiles/public.TemplateFiles/' | grep -v _prisma_migrations | sort > counts-before.txt
           cat counts-before.txt
 
       - name: Rehearsal (dry run)
@@ -442,7 +442,7 @@ jobs:
       - name: Row counts after
         run: |
           set -euo pipefail
-          docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$SCRATCH_DB" -A -t -F'|' <<'SQL' | grep -v _prisma_migrations | grep -v "^public.FileBlob|" > counts-after.txt
+          docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$SCRATCH_DB" -A -t -F'|' <<'SQL' | grep -v _prisma_migrations | grep -v "^public.FileBlob|" | sort > counts-after.txt
           SELECT format('SELECT %L, count(*) FROM %I.%I;', n.nspname||'.'||c.relname, n.nspname, c.relname)
           FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
           WHERE c.relkind = 'r' AND n.nspname = 'public'
