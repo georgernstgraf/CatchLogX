@@ -22,7 +22,7 @@ type UploadState =
 
 type UploadItem = {
   id: string;
-  link: string;
+  fileName: string;
   state: string;
   note: string | null;
   createdAt: string;
@@ -50,9 +50,10 @@ function normalizeUploadEntry(value: unknown): UploadItem | null {
       ? candidate.id
       : `local-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
-  const link =
-    typeof candidate.link === "string" && candidate.link.trim().length > 0
-      ? candidate.link
+  const fileName =
+    typeof candidate.fileName === "string" &&
+    candidate.fileName.trim().length > 0
+      ? candidate.fileName
       : "Unknown file";
 
   const state =
@@ -76,7 +77,7 @@ function normalizeUploadEntry(value: unknown): UploadItem | null {
 
   return {
     id,
-    link,
+    fileName,
     state,
     note,
     createdAt,
@@ -368,7 +369,7 @@ const MyUploadsPageComponent = () => {
                       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                         <div className="min-w-0">
                           <p className="text-base font-semibold text-gray-900 dark:text-gray-100 break-all">
-                            {upload.link}
+                            {upload.fileName}
                           </p>
                           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 break-all">
                             Upload ID: {upload.id}

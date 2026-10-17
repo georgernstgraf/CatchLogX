@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcrypt";
 import * as XLSX from "xlsx";
 import { Uploads, UserRoles } from "@/app/generated/prisma";
-import { downloadUploadFile } from "@/lib/minio";
+import { blobToBuffer } from "@/lib/fileBlobs";
 import { createMailerTransporter } from "@/lib/mailer";
 
 const adminRoles = new Set<UserRoles>(["ADMIN", "SUPER_ADMIN"]);
@@ -19,20 +19,26 @@ export async function fetchAllData() {
       createdAt: true,
     },
   });
-  const uploads = await prisma.uploads.findMany({
+  const uploadRows = await prisma.uploads.findMany({
     select: {
       id: true,
-      link: true,
       state: true,
       uploaded_by: true,
       note: true,
       createdAt: true,
       updatedAt: true,
+      blob: { select: { fileName: true } },
     },
     orderBy: {
       createdAt: "desc",
     },
   });
+
+  // Flatten the blob so API clients keep a single `fileName` field (#131).
+  const uploads = uploadRows.map(({ blob, ...upload }) => ({
+    ...upload,
+    fileName: blob.fileName,
+  }));
 
   return { uploads, users };
 }
@@ -41,9 +47,21 @@ export function getContentType(): string {
   return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 }
 
-export async function downloadFile(filename: string) {
-  const { fileBuffer } = await downloadUploadFile(filename);
-  return fileBuffer;
+/** Loads the stored file of an upload by its id, for the admin download. */
+export async function downloadFile(uploadId: string) {
+  const upload = await prisma.uploads.findUnique({
+    where: { id: uploadId },
+    select: { blob: { select: { fileName: true, data: true } } },
+  });
+
+  if (!upload) {
+    return null;
+  }
+
+  return {
+    fileName: upload.blob.fileName,
+    fileBuffer: blobToBuffer(upload.blob.data),
+  };
 }
 
 // Excel cell parsers used when pushing an accepted upload into the DB.
@@ -219,13 +237,21 @@ async function sendRejectEmail(upload: Uploads) {
 }
 
 async function acceptUploadAndPushToDb(upload: Uploads) {
-  const objectName = upload.link.replace(/^\.\//, "");
-
   let rows: Record<string, any>[];
+  let fileName = upload.blobId;
 
   try {
-    const { fileBuffer } = await downloadUploadFile(objectName);
-    const workbook = XLSX.read(fileBuffer, { type: "buffer" });
+    const blob = await prisma.fileBlob.findUnique({
+      where: { id: upload.blobId },
+      select: { fileName: true, data: true },
+    });
+
+    if (!blob) {
+      throw new Error("Stored file blob is missing.");
+    }
+
+    fileName = blob.fileName;
+    const workbook = XLSX.read(blobToBuffer(blob.data), { type: "buffer" });
     const sheetName = workbook.Sheets["DATA"] ? "DATA" : workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
     const allRows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, {
@@ -258,7 +284,7 @@ async function acceptUploadAndPushToDb(upload: Uploads) {
   }
 
   console.log(
-    `[acceptUploadAndPushToDb] Processing ${rows.length} rows from ${objectName}`,
+    `[acceptUploadAndPushToDb] Processing ${rows.length} rows from ${fileName}`,
   );
 
   const errors: string[] = [];
@@ -639,7 +665,7 @@ export async function updateUpload(
 ): Promise<{ upload: Uploads; emailError?: boolean } | null> {
   const upload = await prisma.uploads.findUnique({
     where: { id },
-    select: { id: true, link: true, state: true },
+    select: { id: true, blobId: true, state: true },
   });
 
   if (!upload) {

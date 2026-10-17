@@ -14,7 +14,7 @@ Follow these without question. Do not deviate unless explicitly told.
 
 ## Architecture Pattern
 - API routes are thin — delegate to `services/*.ts` for all business logic
-- `lib/` contains shared utilities (prisma, session, minio, mailer, middleware helpers)
+- `lib/` contains shared utilities (prisma, session, fileBlobs, mailer, middleware helpers)
 - `components/` are all client-side React components
 
 ## Auth Pattern
@@ -47,5 +47,4 @@ Follow these without question. Do not deviate unless explicitly told.
 
 ## Environment Variables
 Required: `DATABASE_URL` (PostgreSQL connection string).
-MinIO vars: `MINIO_ENDPOINT`, `MINIO_PORT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`, `MINIO_ROOT_PREFIX`.
 Mailer vars: `NODEMAILER_HOST`, `NODEMAILER_PORT`, `NODEMAILER_USER`, `NODEMAILER_PASSWORD`, `NODEMAILER_SECURE`.

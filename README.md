@@ -30,7 +30,7 @@ Die Anwendung ermöglicht es Mitarbeitern der BOKU Wien, Befischungsdaten zu erf
 - **Next.js API Routes** - dünne HTTP-Schicht, Logik liegt in `services/`
 - **PostgreSQL 16** - Datenbank (Docker)
 - **Prisma 6** - ORM (Client wird nach `app/generated/prisma` generiert)
-- **MinIO** - S3-kompatibler Dateispeicher für Uploads (Docker, Bucket `catchlogx-files`)
+- **PostgreSQL-Blobs** - Uploads und Vorlagen liegen als `FileBlob` (`bytea`) direkt in der Datenbank
 - **Eigenes Cookie-Session-System** - `session-token`-Cookie → `Session`-Tabelle
 - **bcrypt** - Passwort-Hashing
 - **Nodemailer** - E-Mails für Passwort-Reset
@@ -43,17 +43,17 @@ Die Anwendung ermöglicht es Mitarbeitern der BOKU Wien, Befischungsdaten zu erf
 - **ESLint** - Code Linting
 - **TypeScript** (`tsc --noEmit`) - Static Type Checking
 - **Vitest** - Unit-Tests
-- **Docker Compose** - PostgreSQL + MinIO (+ App)
+- **Docker Compose** - PostgreSQL 16 (+ App)
 
 ## 🚀 Lokales Setup
 
 Voraussetzungen: Node.js 20, Docker.
 
 ```bash
-# 1. PostgreSQL + MinIO starten (db-shadow-init legt die Schatten-DB für `migrate dev` an)
-docker compose up -d db db-shadow-init minio minio-init
+# 1. PostgreSQL starten (db-shadow-init legt die Schatten-DB für `migrate dev` an)
+docker compose up -d db db-shadow-init
 
-# 2. .env anlegen: DATABASE_URL, SHADOW_DATABASE_URL (clx_shadow), MINIO_* und NODEMAILER_* setzen
+# 2. .env anlegen: DATABASE_URL, SHADOW_DATABASE_URL (clx_shadow) und NODEMAILER_* setzen
 
 # 3. Prisma-Client generieren (nach jeder Schema-Änderung wiederholen)
 npx prisma generate
@@ -123,7 +123,7 @@ CatchLogX/
 │   ├── session.ts            # Session-Validierung
 │   ├── auth-middleware.ts    # requireAuth()
 │   ├── admin-middleware.ts   # requireAdminAuth()
-│   ├── minio.ts              # MinIO-Client
+│   ├── fileBlobs.ts          # FileBlob-Helfer (Bytes in PostgreSQL)
 │   ├── mailer.ts             # Nodemailer
 │   └── csv.ts                # CSV-Export-Escaping
 ├── prisma/
@@ -132,7 +132,7 @@ CatchLogX/
 ├── docs/ai/                  # Projektwissen (Architektur, Entscheidungen, ...)
 ├── samples/                  # Beispieldaten
 ├── middleware.ts             # Edge-Cookie-Check für /api/admin/*
-└── docker-compose.yml        # PostgreSQL 16 + MinIO + App
+└── docker-compose.yml        # PostgreSQL 16 + App
 ```
 
 ## 🔧 Verfügbare Scripts

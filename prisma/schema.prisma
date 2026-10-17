@@ -51,12 +51,30 @@ model UserQueries {
 model TemplateFiles {
     id                  String    @id @default(uuid())
     fileName            String
-    filePath            String
+    blobId              String
     uploadedByUserId    String
     createdAt           DateTime    @default(now())
     isVisible           Boolean     @default(true)
     isDeleted           Boolean?
     deletedAt           DateTime?
+
+    // relations
+    blob                FileBlob  @relation(fields: [blobId], references: [id])
+}
+
+// File contents live in PostgreSQL instead of MinIO (#131). A blob is written
+// together with the row that references it, inside one transaction.
+model FileBlob {
+    id          String   @id @default(cuid())
+    fileName    String
+    mimeType    String
+    sizeBytes   Int
+    data        Bytes
+    createdAt   DateTime @default(now())
+
+    // relations
+    uploads         Uploads[]
+    templateFiles   TemplateFiles[]
 }
 
 model PasswordResets {
@@ -71,13 +89,15 @@ model PasswordResets {
 model Uploads {
     id              String      @id @default(cuid())
     uploaded_by     String
-    link            String
+    blobId          String
     state           UploadStates
     note            String?     
     createdAt       DateTime    @default(now())
     updatedAt       DateTime    @updatedAt
 
+    // relations
     user            User        @relation(fields: [uploaded_by], references: [id])
+    blob            FileBlob    @relation(fields: [blobId], references: [id])
 }
 
 enum UploadStates {

@@ -1,7 +1,6 @@
 export type TemplateFileRecord = {
   id: string;
   fileName: string;
-  filePath: string;
   uploadedByUserId: string;
   createdAt: string;
   isVisible: boolean;
@@ -18,7 +17,6 @@ export function normalizeTemplateFile(value: unknown): TemplateFileRecord | null
   if (
     typeof candidate.id !== "string" ||
     typeof candidate.fileName !== "string" ||
-    typeof candidate.filePath !== "string" ||
     typeof candidate.uploadedByUserId !== "string" ||
     typeof candidate.createdAt !== "string" ||
     typeof candidate.isVisible !== "boolean"
@@ -29,7 +27,6 @@ export function normalizeTemplateFile(value: unknown): TemplateFileRecord | null
   return {
     id: candidate.id,
     fileName: candidate.fileName,
-    filePath: candidate.filePath,
     uploadedByUserId: candidate.uploadedByUserId,
     createdAt: candidate.createdAt,
     isVisible: candidate.isVisible,

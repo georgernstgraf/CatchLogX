@@ -1,11 +1,10 @@
 import { prisma } from "@/lib/prisma";
-import { downloadTemplateFileByObjectKey, uploadTemplateFile } from "@/lib/minio";
+import { blobToBuffer, buildFileBlobData } from "@/lib/fileBlobs";
 
 /** Columns of a template file that are exposed to API clients. */
 const templateFileSelect = {
   id: true,
   fileName: true,
-  filePath: true,
   uploadedByUserId: true,
   createdAt: true,
   isVisible: true,
@@ -44,7 +43,8 @@ export async function listTemplateFiles(includeHidden: boolean) {
 }
 
 /**
- * Stores the file in MinIO and registers it as a visible template file.
+ * Stores the file and registers it as a visible template file. The bytes and
+ * the row are written in a single nested create (#131), so they cannot drift.
  *
  * @returns The created database record.
  */
@@ -54,15 +54,19 @@ export async function createTemplateFile({
   contentType,
   uploadedByUserId,
 }: CreateTemplateFileInput) {
-  const stored = await uploadTemplateFile(fileBuffer, filename, contentType);
-
   return prisma.templateFiles.create({
     data: {
-      fileName: stored.filename,
-      filePath: stored.objectKey,
+      fileName: filename,
       uploadedByUserId,
       isVisible: true,
       isDeleted: false,
+      blob: {
+        create: buildFileBlobData({
+          fileName: filename,
+          mimeType: contentType,
+          data: fileBuffer,
+        }),
+      },
     },
     select: templateFileSelect,
   });
@@ -77,7 +81,7 @@ export async function setTemplateFileVisibility(id: string, isVisible: boolean) 
   });
 }
 
-/** Soft-deletes a template file; the MinIO object is kept. */
+/** Soft-deletes a template file; the blob is kept. */
 export async function softDeleteTemplateFile(id: string): Promise<void> {
   await prisma.templateFiles.update({
     where: { id },
@@ -89,7 +93,7 @@ export async function softDeleteTemplateFile(id: string): Promise<void> {
 }
 
 /**
- * Loads a template file from MinIO for download.
+ * Loads a template file for download.
  *
  * @param id - Template file id.
  * @param canSeeHidden - Whether the requester may access hidden files (admins).
@@ -103,9 +107,9 @@ export async function getTemplateFileForDownload(
     where: { id },
     select: {
       fileName: true,
-      filePath: true,
       isVisible: true,
       isDeleted: true,
+      blob: { select: { data: true } },
     },
   });
 
@@ -117,7 +121,8 @@ export async function getTemplateFileForDownload(
     return null;
   }
 
-  const { fileBuffer } = await downloadTemplateFileByObjectKey(templateFile.filePath);
-
-  return { fileName: templateFile.fileName, fileBuffer };
+  return {
+    fileName: templateFile.fileName,
+    fileBuffer: blobToBuffer(templateFile.blob.data),
+  };
 }

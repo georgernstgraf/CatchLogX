@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Tests for the template file service (#96): listing, creation, visibility,
-// soft deletion and download access rules. Prisma and MinIO are mocked.
+// soft deletion and download access rules. Prisma is mocked; file bytes live
+// in the database (#131).
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     templateFiles: {
@@ -12,12 +13,7 @@ vi.mock("@/lib/prisma", () => ({
     },
   },
 }));
-vi.mock("@/lib/minio", () => ({
-  uploadTemplateFile: vi.fn(),
-  downloadTemplateFileByObjectKey: vi.fn(),
-}));
 
-import { downloadTemplateFileByObjectKey, uploadTemplateFile } from "@/lib/minio";
 import { prisma } from "@/lib/prisma";
 import {
   createTemplateFile,
@@ -71,40 +67,30 @@ describe("createTemplateFile", () => {
     uploadedByUserId: "admin-1",
   };
 
-  it("stores the file in MinIO and registers it as visible", async () => {
-    vi.mocked(uploadTemplateFile).mockResolvedValue({
-      objectKey: "root/template_files/ts/sample.xlsx",
-      timestampFolder: "ts",
-      filename: "sample.xlsx",
-    });
+  it("stores the bytes and the row in a single nested create", async () => {
     vi.mocked(prisma.templateFiles.create).mockResolvedValue({ id: "d1" } as any);
 
     const created = await createTemplateFile(input);
 
-    expect(uploadTemplateFile).toHaveBeenCalledWith(
-      input.fileBuffer,
-      "sample.xlsx",
-      "application/vnd.ms-excel",
-    );
     expect(prisma.templateFiles.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: {
           fileName: "sample.xlsx",
-          filePath: "root/template_files/ts/sample.xlsx",
           uploadedByUserId: "admin-1",
           isVisible: true,
           isDeleted: false,
+          blob: {
+            create: {
+              fileName: "sample.xlsx",
+              mimeType: "application/vnd.ms-excel",
+              sizeBytes: 4,
+              data: input.fileBuffer,
+            },
+          },
         },
       }),
     );
     expect(created).toEqual({ id: "d1" });
-  });
-
-  it("does not create a DB record when the MinIO upload fails", async () => {
-    vi.mocked(uploadTemplateFile).mockRejectedValue(new Error("minio down"));
-
-    await expect(createTemplateFile(input)).rejects.toThrow("minio down");
-    expect(prisma.templateFiles.create).not.toHaveBeenCalled();
   });
 });
 
@@ -124,7 +110,7 @@ describe("setTemplateFileVisibility", () => {
 });
 
 describe("softDeleteTemplateFile", () => {
-  it("marks the record as deleted with a timestamp and keeps the object", async () => {
+  it("marks the record as deleted with a timestamp and keeps the blob", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
     try {
@@ -137,31 +123,22 @@ describe("softDeleteTemplateFile", () => {
       where: { id: "d1" },
       data: { isDeleted: true, deletedAt: NOW },
     });
-    expect(downloadTemplateFileByObjectKey).not.toHaveBeenCalled();
   });
 });
 
 describe("getTemplateFileForDownload", () => {
   const record = (overrides: Record<string, unknown> = {}) => ({
     fileName: "sample.xlsx",
-    filePath: "root/template_files/ts/sample.xlsx",
     isVisible: true,
     isDeleted: false,
+    blob: { data: new Uint8Array([98, 121, 116, 101, 115]) }, // "bytes"
     ...overrides,
-  });
-
-  beforeEach(() => {
-    vi.mocked(downloadTemplateFileByObjectKey).mockResolvedValue({
-      objectKey: "root/template_files/ts/sample.xlsx",
-      fileBuffer: Buffer.from("bytes"),
-    });
   });
 
   it("returns null for an unknown id", async () => {
     vi.mocked(prisma.templateFiles.findUnique).mockResolvedValue(null);
 
     expect(await getTemplateFileForDownload("nope", true)).toBeNull();
-    expect(downloadTemplateFileByObjectKey).not.toHaveBeenCalled();
   });
 
   it("returns null for a deleted file, even for admins", async () => {
@@ -170,7 +147,6 @@ describe("getTemplateFileForDownload", () => {
     );
 
     expect(await getTemplateFileForDownload("d1", true)).toBeNull();
-    expect(downloadTemplateFileByObjectKey).not.toHaveBeenCalled();
   });
 
   it("hides hidden files from regular users", async () => {
@@ -179,7 +155,6 @@ describe("getTemplateFileForDownload", () => {
     );
 
     expect(await getTemplateFileForDownload("d1", false)).toBeNull();
-    expect(downloadTemplateFileByObjectKey).not.toHaveBeenCalled();
   });
 
   it("lets admins download hidden files", async () => {
@@ -200,9 +175,7 @@ describe("getTemplateFileForDownload", () => {
 
     const download = await getTemplateFileForDownload("d1", false);
 
-    expect(downloadTemplateFileByObjectKey).toHaveBeenCalledWith(
-      "root/template_files/ts/sample.xlsx",
-    );
     expect(download?.fileName).toBe("sample.xlsx");
+    expect(download?.fileBuffer.toString()).toBe("bytes");
   });
 });

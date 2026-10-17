@@ -61,7 +61,7 @@ async function seedTemplateFiles() {
       uploadedByUserId: admin.id,
     });
 
-    console.log(`✅ ${created.fileName} → ${created.filePath}`);
+    console.log(`✅ ${created.fileName} (id ${created.id})`);
   }
 }
 

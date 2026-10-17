@@ -7,19 +7,18 @@ Overwritten when structural changes occur during a session.
 CatchLogX is a Next.js 16.0 web application for BOKU Wien's hydrobiology department.
 It manages fish catch data via Excel upload, SQL querying, and visualization.
 Stack: Next.js App Router, TypeScript, Prisma ORM + PostgreSQL, Tailwind CSS v4, NextAuth.js v4.
-Infrastructure: PostgreSQL 16 + MinIO via Docker Compose.
+Infrastructure: PostgreSQL 16 via Docker Compose. File bytes (uploads + templates) live in the database as `FileBlob` (`bytea`), so no object store is needed (#131).
 
 ## Repositories
 - **`georgernstgraf/CatchLogX`** (this repo, **public**) — application code only.
 - **`georgernstgraf/CatchLogX-Data`** (**private**) — the Excel deliveries from BOKU hydrobiology (provenance, structure, and naming conventions in its own README and `docs/ai/`); trunk `main`, no Git LFS, append-only. The data itself must never land in this public repo (#125).
 
 ## Deployment Topology
-- **Local development** — `docker compose up -d` (PostgreSQL 16 + MinIO + app container), app on port 3001.
+- **Local development** — `docker compose up -d` (PostgreSQL 16 + app container), app on port 3001.
 - **Production (BOKU)** — desktop-class machine on Martin Seebacher's desk (institute IT, OE-level) inside the BOKUnet, productive since June 2026, so far accredited only informally by email. Maintenance access is deliberately restricted to university-sanctioned paths — see `DECISIONS.md` ("No self-managed maintenance tunnels into the BOKUnet") and #115. No standing tunnel, VPN bridge, or reverse tunnel may be attached to this machine.
 - **Dev instance `catchlogx.graf.priv.at`** — CNAME to `claw.graf.priv.at` (Georg's own VPS). Since 2026-10-17 the students' development copy runs there (#126), entirely under the dedicated system user `catchlogx` with **no root at runtime**:
   - rootless Docker (socket `/run/user/1003/docker.sock`) runs only PostgreSQL 16 from `~/dev-stack/docker-compose.yml`, bound to `127.0.0.1:5432`; volume `clx_pgdata`;
-  - MinIO is a native binary built from source at tag `RELEASE.2025-10-15T17-29-55Z` (`~/minio-bin/minio`, data in `~/minio-data`), started by user unit `minio.service` on `127.0.0.1:9000` (console `:9001`); bucket `catchlogx-files` with prefixes `CatchLogX/uploads` and `CatchLogX/template_files` is initialised with `mc` (Ubuntu package `minio-client`);
-  - the MinIO CLI is the Ubuntu package `minio-client` (the only source: upstream `dl.min.io` release URLs return 410); its binary is `/usr/bin/minio-client` — a Debian rename that avoids the Midnight Commander clash. The catchlogx user reaches it via `~/.local/bin/mc` (only in login shells), so since 2026-10-17 (#130) `/usr/local/bin/mc` symlinks to it system-wide; the catchlogx user also has an `mc` alias `clx` for the local MinIO (credentials from the app `.env`);
+  - file bytes are stored in this PostgreSQL (table `FileBlob`); the former MinIO binary/`minio.service` unit and the `mc` client are obsolete since #131 (upload/download need no second service);
   - the app is a production build (`npm run build`) started by user unit `catchlogx.service` on `127.0.0.1:40873`; repo clone at `~/repos/georgernstgraf/CatchLogX` (branch `dev`). Every (re)start of `catchlogx.service` first triggers the oneshot unit `catchlogx-update.service` (`Wants`/`After`), which runs `~/.config/catchlogx/deploy.sh`: `git pull --ff-only origin dev` → `npm ci` (only when `package-lock.json` changed) → `npx prisma migrate deploy` → `npm test` (failure warns only, never blocks the deploy) → `npm run build` (only when HEAD moved). Pull/ci/migrate/build failures fail the update unit while the running server keeps serving the previous build. So a plain `systemctl --user restart catchlogx.service` is the full deploy+restart; `systemctl --user start catchlogx-update.service` deploys without touching the running server. The superseded unit `clx-app.service` is disabled (its file remains in `~/.config/systemd/user/`);
   - nginx on 443 terminates TLS (Let's Encrypt, certbot) and reverse-proxies to `127.0.0.1:40873`;
   - secrets live only in `~/dev-stack/.env` and the app's `.env` (mode 600, gitignored) — never in this repo or in SVN docs;
@@ -76,7 +75,7 @@ lib/                    Server-side utilities
   auth.ts               NextAuth config (credentials provider, JWT sessions — unused by UI)
   auth-middleware.ts    requireAuth() + withAuth() wrappers for API routes
   admin-middleware.ts   requireAdminAuth() + withAdminAuth() for admin routes
-  minio.ts              MinIO client (file upload/download, bucket management)
+  fileBlobs.ts          FileBlob helpers (bytes in PostgreSQL)
   mailer.ts             Nodemailer SMTP transport (password reset emails)
   template-files.ts      Template file tracking helpers
 services/               Business logic layer (API routes delegate here)
@@ -98,7 +97,7 @@ scripts/                Dev utilities
   wipe-and-seed.ts      Wipe and re-seed all data
   wipe-fish.ts          Wipe fish species only
 middleware.ts           Edge middleware (cookie check on /api/admin/* paths)
-docker-compose.yml      PostgreSQL 16 + MinIO + app stack
+docker-compose.yml      PostgreSQL 16 + app stack
 ```
 
 ## Data Model
@@ -109,7 +108,8 @@ User ──< UserQueries          (saved SQL queries)
 UploadStates: UPLOADED | ACCEPTED | REJECTED | DB_ERROR | SAVED_IN_DB
 PasswordResetStates: REQUESTED | EXPIRED | DONE
 
-TemplateFiles                   (MinIO template upload metadata)
+TemplateFiles ── FileBlob       (template bytes + metadata, #131)
+Uploads ── FileBlob             (uploaded Excel bytes, #131)
 
 RiverSite ──< Sampling ──< FishCatch ── FishSpecies
 FishCatch: added pitDec, pitHex, recapture fields for PIT tag tracking
@@ -145,8 +145,8 @@ Admin API route (server + edge)
 ```
 
 ## Startup Order
-1. `docker compose up -d db minio minio-init` (PostgreSQL + MinIO)
-2. Set `DATABASE_URL` and MinIO env vars in `.env`
+1. `docker compose up -d db` (PostgreSQL 16)
+2. Set `DATABASE_URL` and `SHADOW_DATABASE_URL` in `.env`
 3. `npx prisma generate`
 4. `npx prisma migrate deploy`
 5. `npm run create-user` (optional: + seed scripts)

@@ -4,7 +4,7 @@ import { downloadFile, getContentType } from "@/services/adminService";
 
 export async function GET(
   request: NextRequest,
-  context: { params: Promise<{ filename: string }> },
+  context: { params: Promise<{ id: string }> },
 ) {
   const authResult = await requireAdminAuth(request);
   if (authResult instanceof NextResponse) {
@@ -12,17 +12,19 @@ export async function GET(
   }
 
   try {
-    const { filename } = await context.params;
+    const { id } = await context.params;
 
-    const fileBuffer = await downloadFile(filename);
+    const stored = await downloadFile(id);
 
-    const contentType = getContentType();
+    if (!stored) {
+      return NextResponse.json({ error: "File not found" }, { status: 404 });
+    }
 
-    return new NextResponse(fileBuffer as BodyInit, {
+    return new NextResponse(stored.fileBuffer as BodyInit, {
       headers: {
-        "Content-Type": contentType,
-        "Content-Disposition": `attachment; filename="${filename}"`,
-        "Content-Length": fileBuffer.length.toString(),
+        "Content-Type": getContentType(),
+        "Content-Disposition": `attachment; filename="${stored.fileName}"`,
+        "Content-Length": stored.fileBuffer.length.toString(),
       },
     });
   } catch (error) {

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Tests for the admin service (#112): user management permissions and
 // upload approval (reject mail / Excel import into the DB).
-// Prisma, MinIO, the mailer and bcrypt are mocked — this file is the
+// Prisma, the mailer and bcrypt are mocked — this file is the
 // template for testing I/O-bound services without real infrastructure.
 const sendMail = vi.hoisted(() => vi.fn());
 
@@ -24,13 +24,13 @@ vi.mock("@/lib/prisma", () => ({
       findMany: vi.fn(),
       update: vi.fn(),
     },
+    fileBlob: { findUnique: vi.fn() },
     riverSite: { upsert: vi.fn() },
     sampling: { create: vi.fn() },
     fishSpecies: { findUnique: vi.fn() },
     fishCatch: { findFirst: vi.fn(), create: vi.fn() },
   },
 }));
-vi.mock("@/lib/minio", () => ({ downloadUploadFile: vi.fn() }));
 vi.mock("@/lib/mailer", () => ({
   createMailerTransporter: vi.fn(() => ({ sendMail })),
 }));
@@ -38,7 +38,6 @@ vi.mock("bcrypt", () => ({
   default: { hash: vi.fn(async (pw: string) => `hashed:${pw}`) },
 }));
 
-import { downloadUploadFile } from "@/lib/minio";
 import { prisma } from "@/lib/prisma";
 import {
   buildRejectEmailHtml,
@@ -193,11 +192,13 @@ describe("buildRejectEmailHtml", () => {
 describe("fetchAllData", () => {
   it("returns users and uploads, newest uploads first", async () => {
     vi.mocked(prisma.user.findMany).mockResolvedValue([{ id: "u1" }] as any);
-    vi.mocked(prisma.uploads.findMany).mockResolvedValue([{ id: "up1" }] as any);
+    vi.mocked(prisma.uploads.findMany).mockResolvedValue([
+      { id: "up1", blob: { fileName: "upload_1_u1.xlsx" } },
+    ] as any);
 
     expect(await fetchAllData()).toEqual({
       users: [{ id: "u1" }],
-      uploads: [{ id: "up1" }],
+      uploads: [{ id: "up1", fileName: "upload_1_u1.xlsx" }],
     });
     expect(vi.mocked(prisma.uploads.findMany).mock.calls[0][0]).toMatchObject({
       orderBy: { createdAt: "desc" },
@@ -214,14 +215,24 @@ describe("fetchAllData", () => {
 });
 
 describe("downloadFile", () => {
-  it("returns the buffer from MinIO", async () => {
-    const buffer = Buffer.from("x");
-    vi.mocked(downloadUploadFile).mockResolvedValue({
-      objectKey: "k",
-      fileBuffer: buffer,
+  it("returns the stored blob for an upload id", async () => {
+    vi.mocked(prisma.uploads.findUnique).mockResolvedValue({
+      blob: { fileName: "upload_1_u1.xlsx", data: new Uint8Array([120]) },
+    } as any);
+
+    const stored = await downloadFile("up1");
+
+    expect(stored?.fileName).toBe("upload_1_u1.xlsx");
+    expect(stored?.fileBuffer.toString()).toBe("x");
+    expect(prisma.uploads.findUnique).toHaveBeenCalledWith({
+      where: { id: "up1" },
+      select: { blob: { select: { fileName: true, data: true } } },
     });
-    expect(await downloadFile("file.xlsx")).toBe(buffer);
-    expect(downloadUploadFile).toHaveBeenCalledWith("file.xlsx");
+  });
+
+  it("returns null for an unknown upload", async () => {
+    vi.mocked(prisma.uploads.findUnique).mockResolvedValue(null);
+    expect(await downloadFile("nope")).toBeNull();
   });
 });
 
@@ -469,7 +480,7 @@ describe("deleteUser", () => {
 describe("updateUpload", () => {
   const upload = {
     id: "up1",
-    link: "./upload_1_u1.xlsx",
+    blobId: "blob-1",
     state: "UPLOADED",
     uploaded_by: "u1",
     note: null,
@@ -542,10 +553,10 @@ describe("updateUpload", () => {
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), sheetName);
       const fileBuffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-      vi.mocked(downloadUploadFile).mockResolvedValue({
-        objectKey: "k",
-        fileBuffer,
-      });
+      vi.mocked(prisma.fileBlob.findUnique).mockResolvedValue({
+        fileName: "upload_1_u1.xlsx",
+        data: fileBuffer,
+      } as any);
     }
 
     const newRow = {
@@ -573,14 +584,17 @@ describe("updateUpload", () => {
       vi.mocked(prisma.fishCatch.findFirst).mockResolvedValue(null);
     });
 
-    it("downloads the file without the leading './'", async () => {
+    it("reads the accepted file from its stored blob", async () => {
       givenExcel([newRow]);
       await updateUpload("up1", "accept", undefined);
-      expect(downloadUploadFile).toHaveBeenCalledWith("upload_1_u1.xlsx");
+      expect(prisma.fileBlob.findUnique).toHaveBeenCalledWith({
+        where: { id: "blob-1" },
+        select: { fileName: true, data: true },
+      });
     });
 
-    it("marks the upload DB_ERROR when the file cannot be read", async () => {
-      vi.mocked(downloadUploadFile).mockRejectedValue(new Error("minio down"));
+    it("marks the upload DB_ERROR when the stored file is missing", async () => {
+      vi.mocked(prisma.fileBlob.findUnique).mockResolvedValue(null);
       const result = await updateUpload("up1", "accept", undefined);
       expect(result?.upload.state).toBe("ACCEPTED");
       expect(finalState()).toEqual({

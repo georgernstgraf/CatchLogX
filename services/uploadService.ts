@@ -2,7 +2,7 @@ import * as XLSX from "xlsx";
 import * as ExcelJS from "exceljs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { uploadUploadFile } from "@/lib/minio";
+import { buildFileBlobData, XLSX_MIME_TYPE } from "@/lib/fileBlobs";
 
 // Types
 type CellValue = string | number | boolean | Date | null | undefined;
@@ -489,17 +489,22 @@ export async function processUpload(fileBuffer: Buffer, userId: string) {
       };
     }
 
-    // Datei in MinIO speichern
+    // Persist file bytes and the upload row in one statement (#131): the
+    // nested create is atomic, so a half-written upload cannot exist.
     const filename = `upload_${Date.now()}_${userId}.xlsx`;
-    await uploadUploadFile(fileBuffer, filename);
-
-    // Upload-Eintrag in der Datenbank anlegen
     const upload = await prisma.uploads.create({
       data: {
-        uploaded_by: userId,
-        link: filename,
+        user: { connect: { id: userId } },
         state: "UPLOADED",
+        blob: {
+          create: buildFileBlobData({
+            fileName: filename,
+            mimeType: XLSX_MIME_TYPE,
+            data: fileBuffer,
+          }),
+        },
       },
+      include: { blob: { select: { fileName: true } } },
     });
 
     return {
@@ -508,7 +513,7 @@ export async function processUpload(fileBuffer: Buffer, userId: string) {
         processedRows: rows.length - 1,
         upload: {
           id: upload.id,
-          link: upload.link,
+          fileName: upload.blob.fileName,
           state: upload.state,
           note: upload.note,
           createdAt: upload.createdAt,

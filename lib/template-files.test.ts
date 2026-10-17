@@ -14,7 +14,6 @@ import {
 const validRecord = {
   id: "1",
   fileName: "template.xlsx",
-  filePath: "CatchLogX/template_files/20240101000000/template.xlsx",
   uploadedByUserId: "u1",
   createdAt: "2024-01-01T00:00:00.000Z",
   isVisible: true,

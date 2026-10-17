@@ -4,8 +4,10 @@
 Next.js 16.0 (App Router), TypeScript (strict), Prisma + PostgreSQL, Tailwind CSS v4, NextAuth.js v4.
 
 ## Infrastructure
-PostgreSQL 16 and MinIO run via Docker Compose (`docker-compose.yml`).
-- Start: `docker compose up -d db db-shadow-init minio minio-init` (or `docker compose up -d` for full stack)
+PostgreSQL 16 runs via Docker Compose (`docker-compose.yml`). Uploaded files and
+templates are stored **in the database** (`FileBlob`, `bytea`) — no object store
+is involved (see `docs/ai/DECISIONS.md`, 2026-10-17).
+- Start: `docker compose up -d db db-shadow-init` (or `docker compose up -d` for full stack)
 
 On the dev instance `catchlogx.graf.priv.at` the app runs as a systemd **user** service under the
 `catchlogx` user: `systemctl --user restart catchlogx.service` is the full deploy+restart
@@ -16,11 +18,11 @@ holding port 40873 (see `PITFALLS.md`).
 
 ## Commands
 ```
-npm run dev           # start dev server (needs PostgreSQL + MinIO running)
+npm run dev           # start dev server (needs PostgreSQL running)
 npm run build         # production build
 npm run lint          # ESLint directly (eslint .) — Next 16 removed `next lint`
 npm run typecheck     # tsc --noEmit
-npm test              # Vitest, single run (vitest run) — pure service-logic tests, no DB/MinIO needed
+npm test              # Vitest, single run (vitest run) — pure service-logic tests, no DB needed
 npm run create-user   # create admin user (hardcoded admin/admin, dev only)
 npx prisma generate   # regenerate Prisma client (required after schema changes)
 npx prisma migrate dev --name <name>   # schema change (dev): create + apply a migration
@@ -31,9 +33,9 @@ npx prisma migrate deploy              # apply pending migrations (dev instance,
 
 - Config: `vitest.config.ts` (mirrors the `@/*` alias from `tsconfig.json`), `environment: "node"`
 - Test files live next to the source: `services/*.test.ts`, `lib/*.test.ts`, `middleware.test.ts`
-- Rule: no real DB, MinIO, or SMTP. Replace I/O modules with `vi.mock` (`@/lib/prisma`, `@/lib/minio`,
+- Rule: no real DB or SMTP. Replace I/O modules with `vi.mock` (`@/lib/prisma`,
   `@/lib/mailer`, `bcrypt`; `fetch` via `vi.stubGlobal`) so `npm test` stays fast and runs in the hook/CI.
-- Templates: `services/adminService.test.ts` (mocked prisma/minio/mailer, permission matrix, Excel built
+- Templates: `services/adminService.test.ts` (mocked prisma/mailer, permission matrix, Excel built
   in memory via `XLSX.utils`), `lib/session.test.ts` (fake timers + real `NextRequest`), `services/queryService.test.ts` (pure).
 - To make helpers testable, lift/export them from their module with `// Exported for unit tests (#112).`
   (e.g. `normalize`, `buildSchema`, `parseDate`, `buildRejectEmailHtml`). No behaviour changes.
@@ -108,7 +110,7 @@ API routes delegate to service modules in `services/`. Do NOT put business logic
 
 ## File Storage
 
-Uploaded files are stored in **MinIO** (S3-compatible), managed via `lib/minio.ts`. The bucket is `catchlogx-files` with `uploads/` and `template_files/` prefixes. MinIO must be running for upload/download to work.
+Uploaded files and template files are stored as **PostgreSQL blobs** (`FileBlob`, `bytea`), written together with their metadata row in a single (nested) create so file bytes and upload record cannot drift. Helpers: `lib/fileBlobs.ts`. Downloads stream the bytes back out of the database.
 
 ## Conventions
 
@@ -130,7 +132,7 @@ Uploaded files are stored in **MinIO** (S3-compatible), managed via `lib/minio.t
 | Session validation (server) | `lib/session.ts` |
 | API auth middleware (server) | `lib/auth-middleware.ts` |
 | Admin auth middleware (server) | `lib/admin-middleware.ts` |
-| MinIO client | `lib/minio.ts` |
+| File blob helpers | `lib/fileBlobs.ts` |
 | Email sender (nodemailer) | `lib/mailer.ts` |
 | Admin panel page | `app/admin/page.tsx` |
 | User creation (dev seed) | `scripts/create-user.ts` |

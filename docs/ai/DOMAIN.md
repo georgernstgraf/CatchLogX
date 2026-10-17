@@ -8,7 +8,7 @@ Business rules and domain relationships not obvious from code.
 - **FishCatch**: An individual fish caught during a Sampling, linked to a FishSpecies with measurements (length in mm, total weight in grams). Contains PIT tag data (pitDec, pitHex) and recapture flag
 - **FishSpecies**: A fish species identified by unique speciesName, with optional German name, Latin name, and family classification
 - **Uploads**: Tracks Excel file uploads through a state machine: UPLOADED → ACCEPTED/REJECTED/DB_ERROR → SAVED_IN_DB
-- **TemplateFiles**: A template file (German: **Vorlage**) provided by an admin — an Excel/CSV users download, fill in, and re-upload. Replaces the misleading "dummy file" term and the legacy "Eingabemaske" concept. Visibility is admin-controlled; soft deletes keep the MinIO object.
+- **TemplateFiles**: A template file (German: **Vorlage**) provided by an admin — an Excel/CSV users download, fill in, and re-upload. Replaces the misleading "dummy file" term and the legacy "Eingabemaske" concept. Visibility is admin-controlled; soft deletes keep the underlying `FileBlob`.
 - **UserQueries**: Saved SQL queries per user, with optional names for the query list
 
 ## Parties & Roles (infrastructure, non-obvious from code)

@@ -7,8 +7,7 @@ Read this file carefully before making changes in affected areas.
 - After ANY schema change, run `npx prisma generate` — Next.js does not auto-regenerate the Prisma client
 - Schema changes go through the migration history: `npx prisma migrate dev --name <name>` locally, `npx prisma migrate deploy` on the dev instance/production. **Never `prisma db push`** — it bypasses the history and drops/recreates tables on renames (that is how the history drifted before #129). Needs `SHADOW_DATABASE_URL` (`clx_shadow`) for local `migrate dev`
 - `middleware.ts` runs in Edge Runtime — Prisma cannot be imported there. Keep it to lightweight cookie checks only
-- MinIO must be running for any upload or download to work (`docker compose up -d minio minio-init`)
-- PostgreSQL must be running for any app to work (`docker compose up -d db`)
+- PostgreSQL must be running for any app to work (`docker compose up -d db`). File uploads and downloads need no extra service — bytes live in the DB (`FileBlob`, #131)
 - `lib/mailer.ts` throws if nodemailer env vars are missing — password reset routes will fail without configured SMTP
 - `scripts/create-user.ts` hardcodes `admin`/`admin` credentials — dev-only script, NOT for production
 - Docker Compose `app` service runs `npx prisma migrate deploy` on every startup — it applies pending migrations only, never schema drift silently. The `db-shadow-init` service creates `clx_shadow` for `migrate dev` (#129)

@@ -3,16 +3,14 @@ import * as XLSX from "xlsx";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Tests for the Excel-upload validation (#112).
-// Prisma and MinIO are mocked: workbooks are built in memory, nothing is stored.
+// Prisma is mocked: workbooks are built in memory, nothing is stored.
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     fishCatch: { findFirst: vi.fn() },
     uploads: { create: vi.fn() },
   },
 }));
-vi.mock("@/lib/minio", () => ({ uploadUploadFile: vi.fn() }));
 
-import { uploadUploadFile } from "@/lib/minio";
 import { prisma } from "@/lib/prisma";
 import {
   buildSchema,
@@ -87,11 +85,11 @@ beforeEach(() => {
     data,
   }: any) => ({
     id: "up1",
-    link: data.link,
     state: data.state,
     note: null,
     createdAt: new Date(),
     updatedAt: new Date(),
+    blob: { fileName: data.blob.create.fileName },
   })) as any);
 });
 
@@ -281,16 +279,33 @@ describe("processUpload", () => {
 
   it("stores a valid file and creates an upload entry", async () => {
     const buffer = dataFile([validRow, { ...validRow, site_name: "Site B" }]);
+    vi.mocked(prisma.uploads.create).mockResolvedValue({
+      id: "up1",
+      state: "UPLOADED",
+      note: null,
+      createdAt: new Date("2025-01-01T00:00:00Z"),
+      updatedAt: new Date("2025-01-01T00:00:00Z"),
+      blob: { fileName: "upload_1_u1.xlsx" },
+    } as any);
 
     const result = await processUpload(buffer, "u1");
 
     expect(result.success).toBe(true);
     expect(result.data?.processedRows).toBe(2);
-    const [storedBuffer, filename] = vi.mocked(uploadUploadFile).mock.calls[0];
-    expect(storedBuffer).toBe(buffer);
-    expect(filename).toMatch(/^upload_\d+_u1\.xlsx$/);
-    expect(prisma.uploads.create).toHaveBeenCalledWith({
-      data: { uploaded_by: "u1", link: filename, state: "UPLOADED" },
+    expect(result.data?.upload.fileName).toBe("upload_1_u1.xlsx");
+    const createCall = vi.mocked(prisma.uploads.create).mock.calls[0][0]!;
+    expect(createCall.data).toMatchObject({
+      user: { connect: { id: "u1" } },
+      state: "UPLOADED",
+      blob: {
+        create: {
+          fileName: expect.stringMatching(/^upload_\d+_u1\.xlsx$/),
+          mimeType:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          sizeBytes: buffer.length,
+          data: buffer,
+        },
+      },
     });
   });
 
@@ -318,7 +333,7 @@ describe("processUpload", () => {
       excelError: true,
       status: 400,
     });
-    expect(uploadUploadFile).not.toHaveBeenCalled();
+    expect(prisma.uploads.create).not.toHaveBeenCalled();
     expect(await readErrorNotes(result.fileBuffer as ArrayBuffer)).toEqual({
       "3:year": "Year must be between 1990 and 2100",
     });
@@ -334,7 +349,7 @@ describe("processUpload", () => {
     expect(await readErrorNotes(result.fileBuffer as ArrayBuffer)).toEqual({
       "3:river_name": "River name is required",
     });
-    expect(uploadUploadFile).not.toHaveBeenCalled();
+    expect(prisma.uploads.create).not.toHaveBeenCalled();
   });
 
   it("flags a PIT tag used for two different species in one file", async () => {
@@ -381,12 +396,14 @@ describe("processUpload", () => {
     expect(result.success).toBe(true);
   });
 
-  it("reports a 500 when storage fails", async () => {
-    vi.mocked(uploadUploadFile).mockRejectedValueOnce(new Error("minio down"));
+  it("reports a 500 when the upload cannot be stored", async () => {
+    vi.mocked(prisma.uploads.create).mockRejectedValueOnce(
+      new Error("database down"),
+    );
     expect(await processUpload(dataFile([validRow]), "u1")).toMatchObject({
       success: false,
       status: 500,
-      details: "minio down",
+      details: "database down",
     });
   });
 });
