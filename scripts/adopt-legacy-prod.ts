@@ -77,6 +77,13 @@ async function foreignKeyExists(prisma: PrismaClient, table: string, constraint:
   return Number(rows[0].n) > 0;
 }
 
+async function constraintExists(prisma: PrismaClient, constraint: string): Promise<boolean> {
+  const rows = await prisma.$queryRaw<Array<{ n: bigint }>>`
+    SELECT count(*)::bigint AS n FROM information_schema.table_constraints
+    WHERE table_schema = 'public' AND constraint_name = ${constraint}`;
+  return Number(rows[0].n) > 0;
+}
+
 async function readLegacyRows(prisma: PrismaClient, table: string, column: string, hasBlobId: boolean): Promise<LegacyRow[]> {
   const filter = hasBlobId ? `WHERE "blobId" IS NULL` : "";
   const rows = await prisma.$queryRawUnsafe<Array<Record<string, string>>>(
@@ -122,6 +129,7 @@ async function inspect(prisma: PrismaClient) {
     legacyColumnsPresent,
     notNullOn,
     foreignKeysOn,
+    legacyPrimaryKeyOn: await constraintExists(prisma, `${LEGACY_TEMPLATE_TABLE}_pkey`),
     uploads,
     templates,
   };
@@ -130,6 +138,7 @@ async function inspect(prisma: PrismaClient) {
 function describePlan(plan: AdoptionPlan, dryRun: boolean): void {
   const lines: string[] = [];
   if (plan.renameTemplateTable) lines.push(`rename ${LEGACY_TEMPLATE_TABLE} -> ${TEMPLATE_TABLE}`);
+  if (plan.renamePrimaryKey) lines.push(`rename constraint ${LEGACY_TEMPLATE_TABLE}_pkey -> ${TEMPLATE_TABLE}_pkey`);
   if (plan.createBlobTable) lines.push(`create table ${BLOB_TABLE}`);
   for (const table of plan.addBlobIdColumnTo) lines.push(`add nullable blobId to ${table}`);
   lines.push(`write ${plan.blobs.length} blob(s)`);
@@ -156,6 +165,13 @@ const BLOB_DDL = `CREATE TABLE "FileBlob" (
 async function apply(prisma: PrismaClient, plan: AdoptionPlan): Promise<void> {
   if (plan.renameTemplateTable) {
     await prisma.$executeRawUnsafe(`ALTER TABLE "${LEGACY_TEMPLATE_TABLE}" RENAME TO "${TEMPLATE_TABLE}"`);
+  }
+  // PostgreSQL keeps the constraint name across a table rename; the baseline
+  // expects the new name, so migrate diff would report drift forever.
+  if (plan.renamePrimaryKey) {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "${TEMPLATE_TABLE}" RENAME CONSTRAINT "${LEGACY_TEMPLATE_TABLE}_pkey" TO "${TEMPLATE_TABLE}_pkey"`,
+    );
   }
   if (plan.createBlobTable) {
     await prisma.$executeRawUnsafe(BLOB_DDL);

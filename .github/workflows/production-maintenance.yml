@@ -464,15 +464,15 @@ jobs:
             echo ""
             echo "### Row counts (before vs. after)"
             echo '```'
-            cat counts-before.txt 2>/dev/null
+            cat counts-before.txt 2>/dev/null || true
             echo '```'
             echo "### Blobs"
             echo '```'
-            cat blob-report.txt 2>/dev/null
+            cat blob-report.txt 2>/dev/null || true
             echo '```'
             echo "### Remaining schema drift after adoption (must be empty)"
             echo '```sql'
-            cat drift-after.sql 2>/dev/null
+            cat drift-after.sql 2>/dev/null || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 

@@ -82,6 +82,7 @@ const LEGACY_STATE: Omit<PlanInput, "index" | "uploads" | "templates"> = {
   legacyColumnsPresent: { Uploads: true, TemplateFiles: true },
   foreignKeysOn: { Uploads: false, TemplateFiles: false },
   notNullOn: { Uploads: false, TemplateFiles: false },
+  legacyPrimaryKeyOn: true,
 };
 
 const DONE_STATE: Omit<PlanInput, "index" | "uploads" | "templates"> = {
@@ -91,6 +92,7 @@ const DONE_STATE: Omit<PlanInput, "index" | "uploads" | "templates"> = {
   legacyColumnsPresent: { Uploads: false, TemplateFiles: false },
   foreignKeysOn: { Uploads: true, TemplateFiles: true },
   notNullOn: { Uploads: true, TemplateFiles: true },
+  legacyPrimaryKeyOn: false,
 };
 
 describe("planAdoption", () => {
@@ -118,6 +120,8 @@ describe("planAdoption", () => {
     ]);
     expect(plan.setBlobIdNotNullOn).toEqual(["Uploads", "TemplateFiles"]);
     expect(plan.addForeignKeyTo).toEqual(["Uploads", "TemplateFiles"]);
+    // The rename leaves the primary key constraint named after the old table.
+    expect(plan.renamePrimaryKey).toBe(true);
     expect(plan.missingSources).toEqual([]);
   });
 
@@ -136,6 +140,7 @@ describe("planAdoption", () => {
     expect(plan.dropColumns).toEqual([]);
     expect(plan.setBlobIdNotNullOn).toEqual([]);
     expect(plan.addForeignKeyTo).toEqual([]);
+    expect(plan.renamePrimaryKey).toBe(false);
   });
 
   it("keeps only the remaining work when a run was interrupted", () => {

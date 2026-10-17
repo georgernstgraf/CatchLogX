@@ -56,6 +56,8 @@ export interface AdoptionPlan {
   addForeignKeyTo: Array<"Uploads" | "TemplateFiles">;
   /** Referencing tables that must have `blobId` set NOT NULL. */
   setBlobIdNotNullOn: Array<"Uploads" | "TemplateFiles">;
+  /** True when the template table's primary key still carries the legacy name. */
+  renamePrimaryKey: boolean;
   /** Rows whose referenced file could not be found in the export. */
   missingSources: Array<{ table: "Uploads" | "TemplateFiles"; rowId: string; storedPath: string }>;
 }
@@ -72,6 +74,8 @@ export interface PlanInput {
   legacyColumnsPresent: Record<"Uploads" | "TemplateFiles", boolean>;
   foreignKeysOn: Record<"Uploads" | "TemplateFiles", boolean>;
   notNullOn: Record<"Uploads" | "TemplateFiles", boolean>;
+  /** The legacy primary key constraint name is still present. */
+  legacyPrimaryKeyOn: boolean;
   uploads: LegacyRow[];
   templates: LegacyRow[];
   index: SourceIndex;
@@ -186,6 +190,10 @@ export function planAdoption(input: PlanInput): AdoptionPlan {
     dropColumns,
     addForeignKeyTo: (["Uploads", "TemplateFiles"] as const).filter((t) => !input.foreignKeysOn[t]),
     setBlobIdNotNullOn: (["Uploads", "TemplateFiles"] as const).filter((t) => !input.notNullOn[t]),
+    // `ALTER TABLE ... RENAME TO` leaves the primary key constraint named after
+    // the old table, which schema.prisma (and therefore the migration history)
+    // does not expect.
+    renamePrimaryKey: input.legacyPrimaryKeyOn,
     missingSources,
   };
 }
