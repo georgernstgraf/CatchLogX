@@ -16,7 +16,14 @@ Infrastructure: PostgreSQL 16 + MinIO via Docker Compose.
 ## Deployment Topology
 - **Local development** — `docker compose up -d` (PostgreSQL 16 + MinIO + app container), app on port 3001.
 - **Production (BOKU)** — desktop-class machine on Martin Seebacher's desk (institute IT, OE-level) inside the BOKUnet, productive since June 2026, so far accredited only informally by email. Maintenance access is deliberately restricted to university-sanctioned paths — see `DECISIONS.md` ("No self-managed maintenance tunnels into the BOKUnet") and #115. No standing tunnel, VPN bridge, or reverse tunnel may be attached to this machine.
-- **Public instance `catchlogx.graf.priv.at`** — CNAME to `claw.graf.priv.at` (Georg's own VPS). nginx on 443 terminates TLS (Let's Encrypt, renewed by certbot) and reverse-proxies to `127.0.0.1:40873`; the backing Next.js server is not running yet, so the vhost currently answers `502`. The students deploy their copy here, and a second self-hosted GitHub Actions runner is planned on this machine (#123). The nginx vhost and the deploy tree live in the claw deployment tree (SVN), not in this repo.
+- **Dev instance `catchlogx.graf.priv.at`** — CNAME to `claw.graf.priv.at` (Georg's own VPS). Since 2026-10-17 the students' development copy runs there (#126), entirely under the dedicated system user `catchlogx` with **no root at runtime**:
+  - rootless Docker (socket `/run/user/1003/docker.sock`) runs only PostgreSQL 16 from `~/dev-stack/docker-compose.yml`, bound to `127.0.0.1:5432`; volume `clx_pgdata`;
+  - MinIO is a native binary built from source at tag `RELEASE.2025-10-15T17-29-55Z` (`~/minio-bin/minio`, data in `~/minio-data`), started by user unit `minio.service` on `127.0.0.1:9000` (console `:9001`); bucket `catchlogx-files` with prefixes `CatchLogX/uploads` and `CatchLogX/dummy_files` is initialised with `mc` (Ubuntu package `minio-client`);
+  - the app is a production build (`npm run build`) started by user unit `clx-app.service` on `127.0.0.1:40873`; repo clone at `~/repos/georgernstgraf/CatchLogX` (branch `dev`);
+  - nginx on 443 terminates TLS (Let's Encrypt, certbot) and reverse-proxies to `127.0.0.1:40873`;
+  - secrets live only in `~/dev-stack/.env` and the app's `.env` (mode 600, gitignored) — never in this repo or in SVN docs;
+  - the nginx vhost, the systemd user units and the dev-stack compose file are mirrored in the claw deployment tree (SVN), not in this repo.
+  A second self-hosted GitHub Actions runner is planned on this machine (#123).
 
 ### Deploy paths (workflows)
 | Workflow | Trigger | Runs on | What it does |
