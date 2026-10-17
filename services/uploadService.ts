@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { buildFileBlobData, XLSX_MIME_TYPE } from "@/lib/fileBlobs";
 import { buildZip, putArchive } from "@/lib/errorArchive";
 import type { FileErrorGroup, FileReport } from "@/lib/uploadReport";
+import { MAX_ROWS_PER_FILE } from "@/lib/uploadReport";
 
 // Types
 type CellValue = string | number | boolean | Date | null | undefined;
@@ -441,6 +442,20 @@ export function validateWorkbook(
   const errors: ValidationError[] = [];
   const pitDec = new Map<string, { speciesName: string; rowNum: number }>();
   let end = rows.length;
+
+  // Fail fast before the per-row validation loop (#132): a workbook past this
+  // limit is rejected as a structural error instead of costing minutes of CPU
+  // and memory producing thousands of per-row messages.
+  const dataRowCount = rows.length - 1;
+  if (dataRowCount > MAX_ROWS_PER_FILE) {
+    return {
+      ...base,
+      structuralError: {
+        error: "Too many rows",
+        details: `The DATA sheet has ${dataRowCount} data rows; at most ${MAX_ROWS_PER_FILE} are allowed per file.`,
+      },
+    };
+  }
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];

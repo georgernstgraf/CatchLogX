@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth-middleware";
 import { processBulkUpload, type BulkUploadFile } from "@/services/uploadService";
-import { MAX_UPLOAD_FILES, MAX_UPLOAD_TOTAL_BYTES } from "@/lib/uploadReport";
+import { MAX_UPLOAD_FILES, MAX_UPLOAD_TOTAL_BYTES, MAX_UPLOAD_FILE_BYTES } from "@/lib/uploadReport";
 
 const MAX_TOTAL_MB = Math.round(MAX_UPLOAD_TOTAL_BYTES / (1024 * 1024));
+const MAX_FILE_MB = Math.round(MAX_UPLOAD_FILE_BYTES / (1024 * 1024));
 
 /** Reads the uploaded files from either multipart form data or a raw body. */
 async function readUploadedFiles(req: NextRequest): Promise<BulkUploadFile[]> {
@@ -57,6 +58,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error: `Upload too large: at most ${MAX_TOTAL_MB} MiB in total.`,
+        },
+        { status: 400 },
+      );
+    }
+
+    // Reject oversized single files before parsing anything (#132): the whole
+    // workbook is held in memory, so a pathological file must not reach the
+    // validator at all.
+    const oversized = files.find(
+      (file) => file.buffer.length > MAX_UPLOAD_FILE_BYTES,
+    );
+    if (oversized) {
+      return NextResponse.json(
+        {
+          error: `File too large: "${oversized.fileName}" exceeds the ${MAX_FILE_MB} MiB per-file limit.`,
         },
         { status: 400 },
       );

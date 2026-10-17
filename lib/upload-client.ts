@@ -53,6 +53,32 @@ function isFileReport(value: unknown): value is FileReport {
   );
 }
 
+/**
+ * Messages for failures that never reach the app: a reverse proxy answers 413
+ * or 504 with an HTML page, `fetch` resolves normally, and the generic catch in
+ * the UI would otherwise claim a "network error" (#132).
+ *
+ * Exported for unit tests (see lib/upload-client.test.ts, #112).
+ */
+export function describeHttpFailure(status: number): string | null {
+  switch (status) {
+    case 401:
+      return "Your session has expired. Please sign in again and retry the upload.";
+    case 413:
+      return "The web server rejected the upload as too large (HTTP 413). Split the files or upload them one at a time.";
+    case 502:
+      return "The server is not reachable right now (HTTP 502). Please try again in a moment.";
+    case 503:
+      return "The server is temporarily unavailable (HTTP 503). Please try again in a moment.";
+    case 504:
+      return "The server took too long to process the upload (HTTP 504). It may still be running in the background — check your uploads before retrying.";
+    default:
+      return status >= 500
+        ? `The server failed while processing the upload (HTTP ${status}).`
+        : null;
+  }
+}
+
 /** Uploads 1..N files and returns the validation report. */
 export async function uploadFiles(files: File[]): Promise<UploadOutcome> {
   const form = new FormData();
@@ -65,18 +91,32 @@ export async function uploadFiles(files: File[]): Promise<UploadOutcome> {
     body: form,
   });
 
-  const payload = (await response.json()) as {
+  // A proxy error page (413/504) is HTML, so parsing must not throw: that
+  // would turn a diagnosable failure into "files could not be uploaded".
+  const raw = await response.text();
+  let payload: {
     error?: string;
     details?: string;
     report?: unknown;
     zipToken?: string;
     uploads?: UploadedFile[];
-  };
+  } = {};
+
+  if (raw.trim().length > 0) {
+    try {
+      payload = JSON.parse(raw) as typeof payload;
+    } catch {
+      payload = {};
+    }
+  }
 
   if (!response.ok) {
     return {
       ok: false,
-      error: payload.error || "Upload failed.",
+      error:
+        payload.error ||
+        describeHttpFailure(response.status) ||
+        `Upload failed (HTTP ${response.status}).`,
       details: payload.details,
       report: normalizeReports(payload.report),
       zipToken: payload.zipToken,

@@ -11,9 +11,13 @@ import {
 import { downloadErrorArchive, uploadFiles } from "@/lib/upload-client";
 import {
   FileReport,
+  MAX_ROWS_PER_FILE,
   MAX_UPLOAD_FILES,
+  MAX_UPLOAD_FILE_BYTES,
   MAX_UPLOAD_TOTAL_BYTES,
 } from "@/lib/uploadReport";
+
+const MAX_UPLOAD_FILE_MB = Math.round(MAX_UPLOAD_FILE_BYTES / (1024 * 1024));
 
 const formatFileSize = (bytes: number) => {
   if (bytes === 0) return "0 Bytes";
@@ -140,6 +144,17 @@ const UploadPageComponent = () => {
     }
     if (excelFiles.length === 0) return;
 
+    const acceptedFiles = excelFiles.filter(
+      (file) => file.size <= MAX_UPLOAD_FILE_BYTES,
+    );
+
+    if (acceptedFiles.length !== excelFiles.length) {
+      alert(
+        `Each file must be at most ${MAX_UPLOAD_FILE_MB} MiB. Larger files were not added.`,
+      );
+    }
+    if (acceptedFiles.length === 0) return;
+
     setUploadStatus("idle");
     setReport([]);
     setZipToken(null);
@@ -148,7 +163,7 @@ const UploadPageComponent = () => {
     setSelectedFiles((current) => {
       const names = new Set(current.map((file) => file.name));
       const merged = [...current];
-      for (const file of excelFiles) {
+      for (const file of acceptedFiles) {
         if (!names.has(file.name)) {
           merged.push(file);
           names.add(file.name);
@@ -310,9 +325,13 @@ const UploadPageComponent = () => {
                     </li>
                     <li>Data formats are correct (date, numbers, text)</li>
                     <li>No additional or deleted columns</li>
-                    <li>Maximum of 10,000 rows per file</li>
                     <li>
-                      At most {MAX_UPLOAD_FILES} files and{" "}
+                      Maximum of {MAX_ROWS_PER_FILE.toLocaleString("en-US")} rows
+                      per file
+                    </li>
+                    <li>
+                      At most {MAX_UPLOAD_FILES} files,{" "}
+                      {MAX_UPLOAD_FILE_MB} MiB per file and{" "}
                       {Math.round(MAX_UPLOAD_TOTAL_BYTES / (1024 * 1024))} MiB in
                       total per upload
                     </li>
@@ -544,7 +563,9 @@ const UploadPageComponent = () => {
                 {uploadStatus === "error" && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                     <h3 className="text-sm font-medium text-red-800 mb-2">
-                      Upload rejected — no files were submitted
+                      {report.length > 0
+                        ? "Upload rejected — files were not imported"
+                        : "Upload failed"}
                     </h3>
                     <p className="text-sm text-red-700">{errorMessage}</p>
                     {zipToken && (

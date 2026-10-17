@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  describeHttpFailure,
   normalizeErrorGroups,
   normalizeReports,
   uploadFiles,
@@ -21,7 +22,21 @@ const validReport = {
 const fetchMock = vi.fn();
 
 function respond(body: unknown, ok = true) {
-  fetchMock.mockResolvedValueOnce({ ok, json: async () => body });
+  fetchMock.mockResolvedValueOnce({
+    ok,
+    status: ok ? 200 : 400,
+    text: async () => JSON.stringify(body),
+  });
+}
+
+/** A proxy error page: HTML body, not JSON (#132). */
+function respondHtml(status: number) {
+  fetchMock.mockResolvedValueOnce({
+    ok: false,
+    status,
+    text: async () =>
+      `<html><head><title>${status} Gateway Time-out</title></head></html>`,
+  });
 }
 
 beforeEach(() => {
@@ -104,5 +119,60 @@ describe("uploadFiles", () => {
       error: "Too many files: at most 20 per upload.",
       report: [],
     });
+  });
+
+  // A reverse proxy answers oversized/slow uploads with an HTML page, so the
+  // response is not JSON and must not be reported as a network error (#132).
+  it("explains a 504 from the proxy instead of claiming a network error", async () => {
+    respondHtml(504);
+
+    const outcome = await uploadFiles([new File(["x"], "a.xlsx")]);
+
+    expect(outcome).toMatchObject({ ok: false, report: [] });
+    if (outcome.ok) return;
+    expect(outcome.error).toContain("HTTP 504");
+    expect(outcome.error).toContain("check your uploads before retrying");
+  });
+
+  it("explains a 413 from the proxy", async () => {
+    respondHtml(413);
+
+    const outcome = await uploadFiles([new File(["x"], "a.xlsx")]);
+
+    if (outcome.ok) return;
+    expect(outcome.error).toContain("HTTP 413");
+  });
+
+  it("falls back to the status code for an unmapped failure", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 418,
+      text: async () => "",
+    });
+
+    const outcome = await uploadFiles([new File(["x"], "a.xlsx")]);
+
+    if (outcome.ok) return;
+    expect(outcome.error).toBe("Upload failed (HTTP 418).");
+  });
+});
+
+describe("describeHttpFailure", () => {
+  it("maps the proxy statuses that used to look like network errors", () => {
+    expect(describeHttpFailure(401)).toContain("session has expired");
+    expect(describeHttpFailure(413)).toContain("HTTP 413");
+    expect(describeHttpFailure(502)).toContain("HTTP 502");
+    expect(describeHttpFailure(503)).toContain("HTTP 503");
+    expect(describeHttpFailure(504)).toContain("HTTP 504");
+  });
+
+  it("covers unmapped server errors with the status code", () => {
+    expect(describeHttpFailure(500)).toContain("HTTP 500");
+    expect(describeHttpFailure(507)).toContain("HTTP 507");
+  });
+
+  it("returns null for client errors with no generic hint", () => {
+    expect(describeHttpFailure(400)).toBeNull();
+    expect(describeHttpFailure(422)).toBeNull();
   });
 });
