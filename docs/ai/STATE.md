@@ -29,6 +29,7 @@ Kickoff 2026-09-19 (siehe `docs/meetings/2026-09-19-kickoff.md`, Protokoll + Auf
 - [x] Excel upload with validation (schema, PIT tag, cross-file checks)
 - [x] SQL query interface with execution, save/load/delete, CSV export, preset queries
 - [x] Leaflet map component with marker support
+- [x] Bulk-Excel-Upload (#88): 1..N Dateien, **alles-oder-nichts** (eine Transaktion), Upload-Report pro Datei (Spalte/Wert/Meldung), Fehler-ZIP mit den annotierten Dateien (in-memory, nicht persistiert)
 - [x] PostgreSQL-Blobs statt MinIO: Uploads + Vorlagen als `FileBlob` in der DB, MinIO aus Code/Compose/Dev-Instanz entfernt (#131)
 - [x] PostgreSQL migration (from SQLite)
 - [x] Dark mode support

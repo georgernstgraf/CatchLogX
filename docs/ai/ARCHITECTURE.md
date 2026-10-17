@@ -50,7 +50,7 @@ app/                    Next.js App Router pages + API routes
   api/auth/             Sign-in, logout, session, change-initial-password
   api/admin/            Admin CRUD (users, uploads, files)
   api/query/            SQL query execution + save
-  api/upload/           Excel upload (new, my, template-file)
+  api/upload/           Excel upload (new = bulk 1..N files, my, error-report, template-file)
   api/forgot-password/  Forgot password request
   api/reset-password/   Password reset
 components/             React components (all client-side)
@@ -84,7 +84,7 @@ services/               Business logic layer (API routes delegate here)
   adminService.ts       User CRUD, upload approval/rejection, file downloads
   templateFileService.ts  Template file list, upload, visibility, soft delete, download
   queryService.ts       SQL query validation, execution, save/delete
-  uploadService.ts      Excel upload, validation, DB insertion
+  uploadService.ts      Excel bulk upload: validate all files, all-or-nothing store, report (#88)
 prisma/
   schema.prisma         Data model + generator (output: app/generated/prisma)
   migrations/           Migration history — single baseline `*_init` (schema source of truth)

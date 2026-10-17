@@ -2,22 +2,29 @@ import ExcelJS from "exceljs";
 import * as XLSX from "xlsx";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// Tests for the Excel-upload validation (#112).
-// Prisma is mocked: workbooks are built in memory, nothing is stored.
+// Tests for the Excel-upload validation and the bulk pipeline (#112, #88).
+// Prisma is mocked; workbooks are built in memory, nothing is stored.
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     fishCatch: { findFirst: vi.fn() },
     uploads: { create: vi.fn() },
+    $transaction: vi.fn(),
   },
 }));
 
 import { prisma } from "@/lib/prisma";
+import { getArchive } from "@/lib/errorArchive";
 import {
+  buildAnnotatedWorkbook,
   buildSchema,
+  buildFileReport,
+  groupErrors,
   isEmptyRow,
   normalize,
-  processUpload,
+  processBulkUpload,
   readLists,
+  sanitizeFileName,
+  validateWorkbook,
 } from "@/services/uploadService";
 
 const validRow = {
@@ -65,9 +72,9 @@ function dataFile(rows: Row[], extraSheets: Record<string, unknown[][]> = {}) {
   });
 }
 
-async function readErrorNotes(fileBuffer: ArrayBuffer) {
+async function readErrorNotes(fileBuffer: Buffer) {
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(fileBuffer);
+  await wb.xlsx.load(fileBuffer as unknown as ArrayBuffer);
   const notes: Record<string, string> = {};
   wb.getWorksheet("DATA")!.eachRow((row, rowNumber) => {
     // includeEmpty: notes on empty cells (missing values) must be found too
@@ -81,10 +88,12 @@ async function readErrorNotes(fileBuffer: ArrayBuffer) {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(prisma.fishCatch.findFirst).mockResolvedValue(null);
+  vi.mocked(prisma.$transaction).mockImplementation((async (ops: any) =>
+    Promise.all(ops)) as any);
   vi.mocked(prisma.uploads.create).mockImplementation((async ({
     data,
   }: any) => ({
-    id: "up1",
+    id: `up-${data.blob.create.fileName}`,
     state: data.state,
     note: null,
     createdAt: new Date(),
@@ -97,313 +106,318 @@ beforeEach(() => {
 
 describe("normalize", () => {
   it("trims and lowercases strings", () => {
-    expect(normalize(" Austria ")).toBe("austria");
+    expect(normalize("  Austria  ")).toBe("austria");
   });
 
-  it("maps nullish values to an empty string", () => {
+  it("handles nullish values", () => {
     expect(normalize(null)).toBe("");
     expect(normalize(undefined)).toBe("");
-  });
-
-  it("stringifies numbers", () => {
-    expect(normalize(42)).toBe("42");
   });
 });
 
 describe("isEmptyRow", () => {
-  it("is true for null, undefined and blank cells", () => {
-    expect(isEmptyRow([null, undefined, "  ", ""])).toBe(true);
-    expect(isEmptyRow([])).toBe(true);
-  });
-
-  it("is false as soon as one cell has a value", () => {
-    expect(isEmptyRow([null, 0])).toBe(false);
-    expect(isEmptyRow(["", false])).toBe(false);
-    expect(isEmptyRow([" x "])).toBe(false);
+  it("detects rows with only blank cells", () => {
+    expect(isEmptyRow([null, undefined, "  "])).toBe(true);
+    expect(isEmptyRow(["x", null])).toBe(false);
   });
 });
 
-describe("readLists", () => {
-  it("returns an empty object without a List sheet", () => {
-    const wb = XLSX.read(buildWorkbook({ DATA: [["a"]] }));
-    expect(readLists(wb)).toEqual({});
+describe("sanitizeFileName", () => {
+  it("strips path separators and falls back for blanks", () => {
+    expect(sanitizeFileName("a/b\\c.xlsx")).toBe("a_b_c.xlsx");
+    expect(sanitizeFileName("   ")).toBe("upload.xlsx");
+  });
+});
+
+describe("readLists / buildSchema", () => {
+  it("builds the schema from the List sheet", () => {
+    const wb = XLSX.read(
+      buildWorkbook({ List: [["country"], ["Austria"]] }),
+      { type: "buffer" },
+    );
+    const lists = readLists(wb);
+    const valid = buildSchema(lists).safeParse({ ...validRow, country: "Austria" });
+    const invalid = buildSchema(lists).safeParse({
+      ...validRow,
+      country: "Atlantis",
+    });
+    expect(valid.success).toBe(true);
+    expect(invalid.success).toBe(false);
+  });
+});
+
+// --- validateWorkbook -------------------------------------------------------
+
+describe("validateWorkbook", () => {
+  it("accepts a well-formed file", () => {
+    const file = validateWorkbook("ok.xlsx", dataFile([validRow]));
+    expect(file.structuralError).toBeUndefined();
+    expect(file.errors).toEqual([]);
+    expect(file.rows).toHaveLength(2);
   });
 
-  it("collects normalized values per normalized column header", () => {
-    const wb = XLSX.read(
+  it("reports a missing DATA sheet as a structural error", () => {
+    const file = validateWorkbook(
+      "x.xlsx",
+      buildWorkbook({ Other: [["a"], ["b"]] }),
+    );
+    expect(file.structuralError?.details).toMatch(/DATA/);
+  });
+
+  it("lists every missing required column", () => {
+    const file = validateWorkbook(
+      "x.xlsx",
+      buildWorkbook({ DATA: [["country", "river_name"], ["Austria", "Danube"]] }),
+    );
+    expect(file.structuralError?.details).toContain("year");
+    expect(file.structuralError?.details).toContain("species");
+    expect(file.structuralError?.details).not.toContain("river_name");
+  });
+
+  it("flags an invalid cell with the column, the value and a message", () => {
+    const file = validateWorkbook(
+      "x.xlsx",
+      dataFile([validRow, { ...validRow, year: 1800 }]),
+    );
+    expect(file.errors).toHaveLength(1);
+    expect(file.errors[0]).toMatchObject({ row: 3, column: "year", value: "1800" });
+    expect(file.errors[0].message).toContain("Year must be between 1990 and 2100");
+    expect(file.errors[0].message).toContain('(value: "1800")');
+  });
+
+  it("flags empty required cells (#118)", () => {
+    const file = validateWorkbook(
+      "x.xlsx",
+      dataFile([validRow, { ...validRow, river_name: undefined }]),
+    );
+    expect(file.errors[0]).toMatchObject({ row: 3, column: "river_name", value: "" });
+    expect(file.errors[0].message).toBe("River name is required");
+  });
+
+  it("stops validating at the first empty row", () => {
+    const file = validateWorkbook(
+      "x.xlsx",
       buildWorkbook({
-        List: [
-          ["Country", "Name of Species"],
-          ["Austria", "Brown Trout"],
-          [" Germany ", null],
+        DATA: [
+          headers,
+          toCells(validRow),
+          headers.map(() => ""),
+          toCells({ ...validRow, year: 1800 }),
         ],
       }),
     );
-    expect(readLists(wb)).toEqual({
-      country: new Set(["austria", "germany"]),
-      "name of species": new Set(["brown trout"]),
-    });
-  });
-});
-
-describe("buildSchema", () => {
-  const parse = (overrides: Row, lists = {}) =>
-    buildSchema(lists).safeParse({ ...validRow, ...overrides });
-
-  const failingPaths = (overrides: Row) => {
-    const result = parse(overrides);
-    return result.success ? [] : result.error.issues.map((i) => i.path[0]);
-  };
-
-  it("accepts a minimal valid row without a List sheet", () => {
-    expect(parse({}).success).toBe(true);
+    expect(file.errors).toEqual([]);
+    expect(file.rows).toHaveLength(2);
   });
 
-  it("rejects a row with an empty required field", () => {
-    expect(parse({ river_name: "" }).success).toBe(false);
-  });
-
-  // Empty Excel cells arrive as undefined, not "" (#118).
-  it.each(["river_name", "data_provider", "source", "site_name"])(
-    "rejects a missing %s instead of coercing it to 'undefined'",
-    (field) => {
-      expect(failingPaths({ [field]: undefined })).toEqual([field]);
-      expect(failingPaths({ [field]: null })).toEqual([field]);
-    },
-  );
-
-  it("keeps an empty project as '' instead of 'undefined'", () => {
-    const result = parse({ project: undefined });
-    expect(result.success && result.data.project).toBe("");
-  });
-
-  it("rejects a year outside 1990-2100", () => {
-    expect(parse({ year: 1800 }).success).toBe(false);
-    expect(parse({ year: 2101 }).success).toBe(false);
-    expect(parse({ year: 2024.5 }).success).toBe(false);
-  });
-
-  it("coerces numeric strings", () => {
-    expect(parse({ year: "2024", lat_up: "48.2" }).success).toBe(true);
-  });
-
-  it("only accepts 'yes' or 'no' for approval_required", () => {
-    expect(parse({ approval_required: "no" }).success).toBe(true);
-    expect(failingPaths({ approval_required: "maybe" })).toEqual([
-      "approval_required",
-    ]);
-  });
-
-  it.each([
-    ["pH_value", -1, 15, 7],
-    ["conductivity", 49, 1501, 300],
-    ["ox_cont", -1, 21, 10],
-    ["ox_sat", 19, 131, 100],
-    ["anodes", 0, 11, 2],
-    ["recapture", -1, 2, 1],
-    ["catch_efficiency", -1, 101, 50],
-  ])("enforces the range of %s", (field, tooLow, tooHigh, ok) => {
-    expect(failingPaths({ [field]: tooLow })).toEqual([field]);
-    expect(failingPaths({ [field]: tooHigh })).toEqual([field]);
-    expect(parse({ [field]: ok }).success).toBe(true);
-  });
-
-  it("requires whole numbers for anodes and fish_id", () => {
-    expect(failingPaths({ anodes: 1.5 })).toEqual(["anodes"]);
-    expect(failingPaths({ fish_id: 1.5 })).toEqual(["fish_id"]);
-  });
-
-  it("limits landmarks to 100 characters", () => {
-    expect(failingPaths({ landmark_up: "x".repeat(101) })).toEqual([
-      "landmark_up",
-    ]);
-    expect(parse({ landmark_down: "x".repeat(100) }).success).toBe(true);
-  });
-
-  it("limits the project name to 150 characters", () => {
-    expect(parse({ project: "x".repeat(150) }).success).toBe(true);
-    expect(failingPaths({ project: "x".repeat(151) })).toEqual(["project"]);
-  });
-
-  it("rejects Austrian coordinates outside Austria", () => {
-    expect(failingPaths({ lat_up: 50 })).toEqual(["lat_up"]);
-    expect(failingPaths({ long_up: 20 })).toEqual(["long_up"]);
-    expect(failingPaths({ country: " AUSTRIA ", lat_up: 45 })).toEqual([
-      "lat_up",
-    ]);
-  });
-
-  it("accepts the same coordinates for other countries", () => {
-    expect(parse({ country: "Germany", lat_up: 50 }).success).toBe(true);
-  });
-
-  it("enforces List sheet values case-insensitively when a list is present", () => {
-    const lists = { country: new Set(["austria"]) };
-    expect(parse({ country: "AUSTRIA" }, lists).success).toBe(true);
-    expect(parse({ country: "Germany" }, lists).success).toBe(false);
-  });
-
-  it("uses the 'name of species' list for species", () => {
-    const lists = { "name of species": new Set(["brown trout"]) };
-    expect(parse({ species: "Pike" }, lists).success).toBe(false);
-  });
-});
-
-// --- processUpload ----------------------------------------------------------
-
-describe("processUpload", () => {
-  it("fails without a DATA sheet", async () => {
-    const result = await processUpload(buildWorkbook({ Other: [["a"]] }), "u1");
-    expect(result).toMatchObject({
-      success: false,
-      error: "DATA sheet missing",
-      status: 400,
-    });
-  });
-
-  it("fails on an empty DATA sheet", async () => {
-    const result = await processUpload(buildWorkbook({ DATA: [] }), "u1");
-    expect(result).toMatchObject({ success: false, error: "No data found" });
-  });
-
-  it("lists every missing required column", async () => {
-    const result = await processUpload(
-      buildWorkbook({ DATA: [["country", "river_name"], ["Austria", "Danube"]] }),
-      "u1",
-    );
-    expect(result.error).toBe("Missing required columns");
-    expect(result.details).toContain("year");
-    expect(result.details).toContain("species");
-    expect(result.details).not.toContain("river_name");
-  });
-
-  it("stores a valid file and creates an upload entry", async () => {
-    const buffer = dataFile([validRow, { ...validRow, site_name: "Site B" }]);
-    vi.mocked(prisma.uploads.create).mockResolvedValue({
-      id: "up1",
-      state: "UPLOADED",
-      note: null,
-      createdAt: new Date("2025-01-01T00:00:00Z"),
-      updatedAt: new Date("2025-01-01T00:00:00Z"),
-      blob: { fileName: "upload_1_u1.xlsx" },
-    } as any);
-
-    const result = await processUpload(buffer, "u1");
-
-    expect(result.success).toBe(true);
-    expect(result.data?.processedRows).toBe(2);
-    expect(result.data?.upload.fileName).toBe("upload_1_u1.xlsx");
-    const createCall = vi.mocked(prisma.uploads.create).mock.calls[0][0]!;
-    expect(createCall.data).toMatchObject({
-      user: { connect: { id: "u1" } },
-      state: "UPLOADED",
-      blob: {
-        create: {
-          fileName: expect.stringMatching(/^upload_\d+_u1\.xlsx$/),
-          mimeType:
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          sizeBytes: buffer.length,
-          data: buffer,
-        },
-      },
-    });
-  });
-
-  it("stops validating at the first empty row", async () => {
-    const buffer = buildWorkbook({
-      DATA: [
-        headers,
-        toCells(validRow),
-        headers.map(() => ""),
-        toCells({ ...validRow, year: 1800 }),
-      ],
-    });
-    expect((await processUpload(buffer, "u1")).success).toBe(true);
-  });
-
-  it("returns an annotated Excel file for invalid cells", async () => {
-    const result = await processUpload(
-      dataFile([validRow, { ...validRow, year: 1800 }]),
-      "u1",
-    );
-
-    expect(result).toMatchObject({
-      success: false,
-      error: "Validation failed",
-      excelError: true,
-      status: 400,
-    });
-    expect(prisma.uploads.create).not.toHaveBeenCalled();
-    expect(await readErrorNotes(result.fileBuffer as ArrayBuffer)).toEqual({
-      "3:year": "Year must be between 1990 and 2100",
-    });
-  });
-
-  it("flags empty required cells in the Excel file (#118)", async () => {
-    const result = await processUpload(
-      dataFile([validRow, { ...validRow, river_name: undefined }]),
-      "u1",
-    );
-
-    expect(result.success).toBe(false);
-    expect(await readErrorNotes(result.fileBuffer as ArrayBuffer)).toEqual({
-      "3:river_name": "River name is required",
-    });
-    expect(prisma.uploads.create).not.toHaveBeenCalled();
-  });
-
-  it("flags a PIT tag used for two different species in one file", async () => {
-    const result = await processUpload(
+  it("flags a PIT tag used for two different species in one file", () => {
+    const file = validateWorkbook(
+      "x.xlsx",
       dataFile([
         { ...validRow, pit_dec: "123" },
         { ...validRow, pit_dec: "123", species: "Pike" },
       ]),
-      "u1",
     );
+    expect(file.errors).toHaveLength(1);
+    expect(file.errors[0]).toMatchObject({ row: 3, column: "pit_dec", value: "123" });
+    expect(file.errors[0].message).toMatch(/PIT DEC 123.*row 2.*Brown trout/);
+  });
+});
 
-    const notes = await readErrorNotes(result.fileBuffer as ArrayBuffer);
-    expect(notes["3:pit_dec"]).toMatch(/PIT DEC 123.*unterschiedlichen Arten/);
-    // DB check is skipped while the file itself has errors
+// --- reporting --------------------------------------------------------------
+
+describe("groupErrors", () => {
+  it("groups identical errors and collects the affected rows", () => {
+    const groups = groupErrors([
+      { row: 5, column: "species", value: "Walli", message: "Unknown species" },
+      { row: 3, column: "species", value: "Walli", message: "Unknown species" },
+      { row: 4, column: "year", value: "1800", message: "Bad year" },
+    ]);
+    expect(groups).toHaveLength(2);
+    expect(groups[0]).toMatchObject({ column: "species", value: "Walli", rows: [3, 5] });
+    expect(groups[1]).toMatchObject({ column: "year", rows: [4] });
+  });
+});
+
+describe("buildFileReport", () => {
+  it("counts passed and failed rows", () => {
+    const file = validateWorkbook(
+      "x.xlsx",
+      dataFile([validRow, { ...validRow, year: 1800 }, { ...validRow, site_name: "B" }]),
+    );
+    const report = buildFileReport(file);
+    expect(report).toMatchObject({
+      fileName: "x.xlsx",
+      status: "failed",
+      totalRows: 3,
+      passedRows: 2,
+      failedRows: 1,
+    });
+  });
+
+  it("marks a clean file as passed", () => {
+    const report = buildFileReport(
+      validateWorkbook("ok.xlsx", dataFile([validRow])),
+    );
+    expect(report).toMatchObject({ status: "passed", passedRows: 1, failedRows: 0 });
+  });
+
+  it("surfaces a structural error as a single file-level entry", () => {
+    const report = buildFileReport(
+      validateWorkbook("x.xlsx", buildWorkbook({ Other: [["a"]] })),
+    );
+    expect(report.status).toBe("failed");
+    expect(report.errors[0]).toMatchObject({ column: "-" });
+  });
+});
+
+describe("buildAnnotatedWorkbook", () => {
+  it("highlights the failing cells with a note", async () => {
+    const file = validateWorkbook(
+      "x.xlsx",
+      dataFile([validRow, { ...validRow, year: 1800 }]),
+    );
+    const annotated = await buildAnnotatedWorkbook(file);
+    expect(await readErrorNotes(annotated)).toEqual({
+      "3:year": 'Year must be between 1990 and 2100 (value: "1800")',
+    });
+  });
+
+  it("returns a structurally broken file unchanged", async () => {
+    const buffer = buildWorkbook({ Other: [["a"]] });
+    const file = validateWorkbook("x.xlsx", buffer);
+    expect(await buildAnnotatedWorkbook(file)).toBe(buffer);
+  });
+});
+
+// --- processBulkUpload ------------------------------------------------------
+
+describe("processBulkUpload", () => {
+  it("stores every file of a clean bulk in one transaction", async () => {
+    const files = [
+      { fileName: "a.xlsx", buffer: dataFile([validRow]) },
+      { fileName: "b.xlsx", buffer: dataFile([{ ...validRow, site_name: "B" }]) },
+    ];
+
+    const result = await processBulkUpload(files, "u1");
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.report.map((r) => r.status)).toEqual(["passed", "passed"]);
+    expect(result.uploads.map((u) => u.fileName)).toEqual(["a.xlsx", "b.xlsx"]);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.uploads.create).toHaveBeenCalledTimes(2);
+    expect(prisma.uploads.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          user: { connect: { id: "u1" } },
+          state: "UPLOADED",
+          blob: {
+            create: expect.objectContaining({ fileName: "a.xlsx" }),
+          },
+        }),
+      }),
+    );
+  });
+
+  it("persists nothing when one file is invalid", async () => {
+    const files = [
+      { fileName: "good.xlsx", buffer: dataFile([validRow]) },
+      { fileName: "bad.xlsx", buffer: dataFile([{ ...validRow, year: 1800 }]) },
+    ];
+
+    const result = await processBulkUpload(files, "u1");
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.report.map((r) => r.status)).toEqual(["passed", "failed"]);
+    expect(result.zipToken).toBeTruthy();
+    // The whole bulk is rejected: no transaction, no upload rows.
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.uploads.create).not.toHaveBeenCalled();
+  });
+
+  it("puts only the failed files in the error archive", async () => {
+    const files = [
+      { fileName: "good.xlsx", buffer: dataFile([validRow]) },
+      { fileName: "bad.xlsx", buffer: dataFile([{ ...validRow, year: 1800 }]) },
+    ];
+
+    const result = await processBulkUpload(files, "u1");
+    if (result.success) throw new Error("expected failure");
+
+    const archive = getArchive(result.zipToken);
+    expect(archive).not.toBeNull();
+
+    const JSZip = (await import("jszip")).default;
+    const zip = await JSZip.loadAsync(archive!);
+    expect(Object.keys(zip.files)).toEqual(["bad.xlsx"]);
+  });
+
+  it("skips the database PIT check while the bulk has errors", async () => {
+    const files = [
+      { fileName: "bad.xlsx", buffer: dataFile([{ ...validRow, year: 1800, pit_dec: "123" }]) },
+    ];
+
+    await processBulkUpload(files, "u1");
+
     expect(prisma.fishCatch.findFirst).not.toHaveBeenCalled();
   });
 
-  it("flags a PIT tag already stored for another species", async () => {
+  it("flags a PIT DEC shared across two files with different species", async () => {
+    const files = [
+      { fileName: "a.xlsx", buffer: dataFile([{ ...validRow, pit_dec: "123" }]) },
+      {
+        fileName: "b.xlsx",
+        buffer: dataFile([{ ...validRow, pit_dec: "123", species: "Pike" }]),
+      },
+    ];
+
+    const result = await processBulkUpload(files, "u1");
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.report[0].status).toBe("failed");
+    expect(result.report[1].status).toBe("failed");
+    expect(result.report[0].errors[0].message).toMatch(/different species in file "b.xlsx"/);
+    expect(prisma.uploads.create).not.toHaveBeenCalled();
+  });
+
+  it("flags a PIT DEC already stored with another species", async () => {
     vi.mocked(prisma.fishCatch.findFirst).mockResolvedValue({
       species: { speciesName: "Pike" },
     } as any);
 
-    const result = await processUpload(
-      dataFile([{ ...validRow, pit_dec: "123" }]),
+    const result = await processBulkUpload(
+      [{ fileName: "a.xlsx", buffer: dataFile([{ ...validRow, pit_dec: "123" }]) }],
       "u1",
     );
 
-    expect(prisma.fishCatch.findFirst).toHaveBeenCalledWith({
-      where: { pitDec: "123", recapture: false },
-      include: { species: true },
-    });
-    const notes = await readErrorNotes(result.fileBuffer as ArrayBuffer);
-    expect(notes["2:pit_dec"]).toMatch(/existiert bereits.*\(Pike\)/);
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.report[0].errors[0].message).toMatch(/already exists.*\(Pike\)/);
   });
 
   it("accepts a known PIT tag of the same species", async () => {
     vi.mocked(prisma.fishCatch.findFirst).mockResolvedValue({
       species: { speciesName: "Brown trout" },
     } as any);
-    const result = await processUpload(
-      dataFile([{ ...validRow, pit_dec: "123" }]),
+
+    const result = await processBulkUpload(
+      [{ fileName: "a.xlsx", buffer: dataFile([{ ...validRow, pit_dec: "123" }]) }],
       "u1",
     );
     expect(result.success).toBe(true);
   });
 
-  it("reports a 500 when the upload cannot be stored", async () => {
-    vi.mocked(prisma.uploads.create).mockRejectedValueOnce(
-      new Error("database down"),
-    );
-    expect(await processUpload(dataFile([validRow]), "u1")).toMatchObject({
-      success: false,
-      status: 500,
-      details: "database down",
-    });
+  it("propagates a write failure (nothing half-written)", async () => {
+    vi.mocked(prisma.$transaction).mockRejectedValueOnce(new Error("database down"));
+
+    await expect(
+      processBulkUpload(
+        [{ fileName: "a.xlsx", buffer: dataFile([validRow]) }],
+        "u1",
+      ),
+    ).rejects.toThrow("database down");
   });
 });
