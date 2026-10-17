@@ -1,37 +1,260 @@
 name: Deploy CatchLogX
 
-# TEMPORARY: manual-only until the one-time production cutover has run (#137).
+# INTERIM, MANUAL production deploy (#142).
 #
-# Production (Martin's BOKU desktop) still runs the last master push from
-# 2026-09-19 - the MinIO + `prisma db push` era. A push to master would deploy
-# the current compose file, whose app container runs `prisma migrate deploy`
-# against a database with no matching migration bookkeeping: the baseline
-# collides with the existing tables, the container's `&&` chain aborts and
-# production stays down.
+# This is the deploy path for the window between the one-time cutover (#141)
+# and the immutable-release topology (#143) / gated pipeline (#144). It ships a
+# deliberately chosen `master` commit to Martin's BOKU machine through that
+# machine's own self-hosted runner (there is no SSH or tunnel access by
+# decision, #115). It is DELETED together with this workflow once #143 and
+# #144 have landed.
 #
-# Do NOT dispatch this before the cutover job (#141) has put production on the
-# migration-tracked schema. Push-trigger semantics are restored by the gated
-# production deploy pipeline (#144), which replaces this workflow entirely.
+# It is `workflow_dispatch` ONLY. The push trigger is deliberately absent until
+# the gated pipeline (#144) restores it - a push to `master` must not be able to
+# reach production while the topology is still interim. (And because
+# `workflow_dispatch` needs the file on the default branch, this workflow only
+# becomes dispatchable after the `dev` -> `master` merge, see PITFALLS.md.)
+#
+# Safety properties, in order:
+#   * the requested ref must be reachable from `master` - only master commits
+#     may reach production;
+#   * an ADOPTED-SCHEMA GUARD runs as the first thing that touches the machine:
+#     it refuses to deploy while production is still on the legacy
+#     `prisma db push` schema. NEVER dispatch this before the cutover (#141)
+#     has run - `prisma migrate deploy` against the db-push database would take
+#     production down;
+#   * the build happens ONCE in this job, in a one-shot container of the same
+#     image the app uses. Starting the app container never rebuilds - that is
+#     what docker-compose.prod.yml and the shared clx_node_modules volume are
+#     for.
+#
+# Rollback: re-dispatch this same workflow with `ref` set to the previous
+# master commit. The deploy is idempotent and re-runnable:
+#   gh workflow run production-deploy.yml --ref master -f ref=<previous-master-commit>
+# The same recipe is printed in the job summary and documented in
+# docs/ai/ARCHITECTURE.md.
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        description: "master commit/branch/tag to deploy"
+        required: true
+        default: "master"
+        type: string
+
+concurrency:
+  group: prod-deploy
+  cancel-in-progress: false
+
+env:
+  REPO_DIR: /opt/CatchLogX
+  APP_CONTAINER: clx-web
+  PG_CONTAINER: clx-postgres
+  PG_USER: clxadmin
+  PG_DB: clx
 
 jobs:
   deploy:
+    name: Deploy to production (BOKU)
     runs-on: [self-hosted, boku]
 
     steps:
-      - name: Update repository
+      - name: Check out the requested ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      # Only a commit that is reachable from origin/master may reach
+      # production. An older master commit is allowed on purpose - that is the
+      # rollback path.
+      - name: Resolve and verify the deploy commit
+        env:
+          REQUESTED_REF: ${{ inputs.ref }}
         run: |
-          cd /opt/CatchLogX
+          set -euo pipefail
           git fetch origin master
-          git reset --hard origin/master
+          if ! git merge-base --is-ancestor HEAD origin/master; then
+            echo "::error::ref '$REQUESTED_REF' ($(git rev-parse --short HEAD)) is not reachable from origin/master - only master commits may reach production"
+            exit 1
+          fi
+          SHA="$(git rev-parse HEAD)"
+          echo "DEPLOY_SHA=$SHA" >> "$GITHUB_ENV"
+          echo "Deploying commit $SHA (requested ref: $REQUESTED_REF)"
 
-      - name: Deploy with Docker Compose
-        run: |
-          cd /opt/CatchLogX
-          docker compose down
-          docker compose up -d --build
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
 
-      - name: Show running containers
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      # The FIRST thing that touches the machine. Refuse to deploy unless
+      # production is already on the adopted, migration-tracked schema: on the
+      # db-push era database there is no `_prisma_migrations` table and
+      # `prisma migrate deploy` would collide with the existing tables.
+      - name: Adopted-schema guard
+        env:
+          FALLBACK_URL: ${{ secrets.PROD_DATABASE_URL }}
         run: |
-          docker ps
+          set -euo pipefail
+          docker inspect "$PG_CONTAINER" >/dev/null || { echo "::error::$PG_CONTAINER not found - is production running?"; exit 1; }
+
+          # Resolve the production database URL exactly like the maintenance
+          # job: the running app container is the source of truth. Rewrite the
+          # compose service host `db` to the loopback port it is published on.
+          if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+            URL="$(docker exec "$APP_CONTAINER" printenv DATABASE_URL)"
+            URL="${URL/@db:5432/@127.0.0.1:5432}"
+          else
+            URL="$FALLBACK_URL"
+          fi
+          if [ -z "${URL:-}" ]; then
+            echo "::error::could not determine the production database URL"
+            exit 1
+          fi
+          echo "PROD_DATABASE_URL=$URL" >> "$GITHUB_ENV"
+
+          # 1. the Prisma Migrate bookkeeping table must exist. On the db-push
+          #    era database it never does - that is the legacy signal.
+          HAS_TABLE="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc "SELECT to_regclass('public.\"_prisma_migrations\"') IS NOT NULL")"
+          if [ "$HAS_TABLE" != "t" ]; then
+            echo "::error::production is not on the adopted schema yet - run the cutover (#141) first"
+            exit 1
+          fi
+
+          # 2. and the migration history must already be applied, i.e.
+          #    `migrate status` must be clean. On the db-push era database it
+          #    reports the whole history as pending.
+          if ! DATABASE_URL="$URL" npx prisma migrate status | tee migrate-status.txt; then
+            echo "::error::production is not on the adopted schema yet - run the cutover (#141) first"
+            exit 1
+          fi
+          echo "Production is on the adopted, migration-tracked schema."
+
+      # Step a: the container runs FROM the on-machine checkout, so it must be
+      # at the requested commit before anything is built.
+      - name: Update the machine checkout
+        run: |
+          set -euo pipefail
+          cd "$REPO_DIR"
+          git fetch origin master
+          git reset --hard "$DEPLOY_SHA"
+          echo "Checkout at $REPO_DIR is now $(git rev-parse --short HEAD)"
+
+      # The build container below must mount the very volume the app service
+      # mounts. Compose prefixes a volume key with the project name, so the
+      # real Docker volume name is resolved from the merged config rather than
+      # assumed - and the job fails clearly if it cannot be determined, instead
+      # of silently creating a second volume the app will never mount.
+      - name: Resolve the shared node_modules volume
+        run: |
+          set -euo pipefail
+          cd "$REPO_DIR"
+          if ! CFG="$(docker compose -f docker-compose.yml -f docker-compose.prod.yml config)"; then
+            echo "::error::the production compose files do not render - refusing to build"
+            exit 1
+          fi
+          VOL="$(printf '%s\n' "$CFG" | awk '
+            /^volumes:/ { in_volumes = 1; next }
+            in_volumes && /^[^[:space:]]/ { in_volumes = 0 }
+            in_volumes && $1 == "clx_node_modules:" { found_key = 1; next }
+            found_key && /^[[:space:]]+name:/ { print $2; exit }
+          ')"
+          if [ -z "$VOL" ]; then
+            echo "::error::could not determine the clx_node_modules volume name from the compose config"
+            exit 1
+          fi
+          # The app service mounts the compose key `clx_node_modules`, which
+          # resolves to the volume name we just extracted.
+          if ! printf '%s\n' "$CFG" | grep -q 'source: clx_node_modules'; then
+            echo "::error::the app service does not mount clx_node_modules - refusing to build"
+            exit 1
+          fi
+          echo "NODE_MODULES_VOLUME=$VOL" >> "$GITHUB_ENV"
+          echo "Shared node_modules volume: $VOL"
+
+      # Step b: build once, in the job. A one-shot container of the SAME image
+      # and with the SAME mounts the app will have (the bind mount plus the
+      # shared clx_node_modules volume), so nothing is installed twice and
+      # there is no alpine/glibc mismatch. `prisma generate` must run here
+      # because the app container no longer does it; the build needs no
+      # database connection.
+      - name: Build once in the deploy job
+        run: |
+          set -euo pipefail
+          cd "$REPO_DIR"
+          docker run --rm \
+            -v "$REPO_DIR:/app" \
+            -v "$NODE_MODULES_VOLUME:/app/node_modules" \
+            -w /app \
+            node:20-alpine \
+            sh -c 'set -e; npm ci --include=dev || npm install --include=dev; npx prisma generate; npm run build'
+
+      # Step c: apply pending migrations in the job, NOT in the container.
+      - name: Apply pending migrations
+        env:
+          DATABASE_URL: ${{ env.PROD_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          npx prisma migrate deploy
+
+      # Step d: bring the stack up. No `--build` - the build already happened
+      # above and starting the container must not rebuild. The legacy MinIO
+      # containers may survive the cutover as orphans on this machine; they are
+      # intentionally left alone (decommissioning is #122's job), so we
+      # deliberately do NOT pass `--remove-orphans`. Compose may warn about
+      # those orphans - that warning is expected and left visible.
+      - name: Bring the stack up
+        run: |
+          set -euo pipefail
+          cd "$REPO_DIR"
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+      # Step e: health check. The build already happened, so this only waits
+      # for `next start` to bind - a generous budget, but a failed container is
+      # fail-fast.
+      - name: Health check
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            STATUS="$(docker inspect -f '{{.State.Status}}' "$APP_CONTAINER" 2>/dev/null || echo missing)"
+            if [ "$STATUS" = "exited" ] || [ "$STATUS" = "dead" ]; then
+              echo "::error::$APP_CONTAINER exited before becoming healthy"
+              docker logs --tail 50 "$APP_CONTAINER" || true
+              exit 1
+            fi
+            if [ "$STATUS" = "running" ] && curl -fsS -o /dev/null http://127.0.0.1:3001/; then
+              echo "Production is healthy (attempt $attempt)."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::health check failed - $APP_CONTAINER did not respond on 127.0.0.1:3001"
+          docker logs --tail 100 "$APP_CONTAINER" || true
+          exit 1
+
+      # Step f: report the deployed commit and the rollback recipe.
+      - name: Report the deployed commit
+        env:
+          REQUESTED_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Deployed commit"
+            echo ""
+            echo "- \`$DEPLOY_SHA\` (requested ref: \`$REQUESTED_REF\`)"
+            echo "- Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo ""
+            echo "**Rollback:** re-dispatch this workflow with \`ref\` set to the previous master commit -"
+            echo "the deploy is idempotent and re-runnable:"
+            echo ""
+            echo '```'
+            echo "gh workflow run production-deploy.yml --ref master -f ref=<previous-master-commit>"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Deployed commit: $DEPLOY_SHA"

@@ -1,0 +1,32 @@
+# Production compose override (#142) - layer it on the base file:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# It exists for one reason: the app container must never build or migrate.
+#   * the BUILD happens once in the deploy job (production-deploy.yml), inside
+#     a one-shot container of this same image;
+#   * the MIGRATIONS are applied by the deploy job too (`prisma migrate deploy`).
+# The running container only serves the already-built app.
+#
+# Concretely it changes two things:
+#   * the app service's anonymous /app/node_modules volume becomes the NAMED
+#     volume `clx_node_modules`, so the build step and the running container
+#     share the same installed dependencies (nothing is installed twice);
+#   * the base `command` (npm ci + prisma generate + migrate deploy +
+#     insert-fish + next build + next start) is replaced by a plain
+#     `next start`.
+#
+# Everything else (image, ports, environment, depends_on, the ./:/app bind
+# mount, restart policy) is inherited from docker-compose.yml.
+#
+# Nothing here may ever run `prisma db push`.
+#
+# This is INTERIM: it disappears together with production-deploy.yml when the
+# immutable-release topology (#143) and the gated deploy pipeline (#144) land.
+services:
+  app:
+    command: npx next start -p 3001
+    volumes:
+      - clx_node_modules:/app/node_modules
+
+volumes:
+  clx_node_modules:
