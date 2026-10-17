@@ -100,6 +100,47 @@ jobs:
             mc mirror --overwrite --quiet "prod/${MINIO_BUCKET}" /backup/minio
           echo "Exported $(find "$DEST/minio" -type f | wc -l) objects ($(du -sh "$DEST/minio" | cut -f1))."
 
+      # The production bucket is expected to hold the 18 uploads and the
+      # template file referenced by the database. Locate the bytes (or prove
+      # they are gone) before the adoption script (#139) depends on them.
+      - name: Storage diagnostics
+        run: |
+          set -euo pipefail
+          NET="$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}' "$MINIO_CONTAINER" | head -n1)"
+          mc() {
+            docker run --rm --network "$NET" \
+              -e "MC_HOST_prod=http://${MC_USER}:${MC_PASS}@${MINIO_CONTAINER}:9000" \
+              minio/mc:latest mc "$@"
+          }
+
+          echo "=== buckets visible via mc ==="
+          mc ls prod/ || echo "(mc ls failed)"
+
+          echo "=== recursive listing of ${MINIO_BUCKET} (first 20) ==="
+          mc ls --recursive "prod/${MINIO_BUCKET}" 2>&1 | head -n 20 || true
+          echo "object count: $(mc ls --recursive "prod/${MINIO_BUCKET}" 2>/dev/null | wc -l)"
+
+          echo "=== minio container mounts ==="
+          docker inspect -f '{{range .Mounts}}{{.Type}} {{if .Name}}{{.Name}}{{else}}{{.Source}}{{end}} -> {{.Destination}}{{"\n"}}{{end}}' "$MINIO_CONTAINER"
+
+          echo "=== raw contents of every minio volume ==="
+          for v in $(docker volume ls --format '{{.Name}}' | grep -i minio); do
+            echo "--- volume: $v ---"
+            docker run --rm -v "$v:/data:ro" alpine \
+              sh -c 'du -sh /data 2>/dev/null; echo "files: $(find /data -type f | wc -l)"; find /data -type f | head -n 10'
+          done
+
+          echo "=== app container storage configuration ==="
+          docker exec "$APP_CONTAINER" sh -c 'printenv' | grep -iE '^(MINIO|UPLOAD|STORAGE)' | sed 's/\(SECRET\|KEY\)=.*/\1=<redacted>/I' || echo "(none)"
+
+          echo "=== database path shape (no file names) ==="
+          docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -A -t -F'|' <<'SQL'
+          SELECT 'Uploads_links', count(*), coalesce(min(length("link")),0) FROM "Uploads"
+          UNION ALL SELECT 'DummyFiles_paths', count(*), coalesce(min(length("filePath")),0) FROM "DummyFiles";
+          SELECT 'Uploads shape', array_length(string_to_array("link", '/'), 1), split_part("link", '/', 1), split_part("link", '/', 2) FROM "Uploads" LIMIT 3;
+          SELECT 'DummyFiles shape', array_length(string_to_array("filePath", '/'), 1), split_part("filePath", '/', 1), split_part("filePath", '/', 2) FROM "DummyFiles" LIMIT 3;
+          SQL
+
       - name: Prune old backups
         run: |
           set -euo pipefail
