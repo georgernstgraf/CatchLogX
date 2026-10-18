@@ -48,7 +48,7 @@ Zweck: wissenschaftliche Mitarbeiter fahren Statistiken mit **R** direkt gegen d
   con <- dbConnect(RPostgres::Postgres(), host = "<host>", port = 5432,
                    dbname = "clx", user = "clx_readonly",
                    password = "<aus der Handreichung>")
-  dbGetQuery(con, 'SELECT count(*) FROM "FishCatch"')
+  dbGetQuery(con, 'SELECT count(*) FROM "fish_catches"')
   ```
 - **Rotation:** `readonly-role` erneut dispatchen (schreibt neues Passwort in Role + `.env`) — kein Rebuild.
 - ⚠️ **`clxadmin` hat weiterhin das Dev-Default-Passwort** am selben offenen Port → Rotation jetzt dringlich, aber **erst nach** dem Unit-Cutover (#143), weil der laufende `clx-web`-Container es in seiner Compose-Umgebung hat. Rezept danach: `ALTER ROLE clxadmin PASSWORD '…'` + `DATABASE_URL` in `/opt/CatchLogX/.env` anpassen + `systemctl --user restart catchlogx.service`

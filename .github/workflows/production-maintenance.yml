@@ -1672,8 +1672,17 @@ jobs:
             exit 1
           fi
           echo "Wrong password rejected."
-          ext "$READONLY_PW" 'SELECT count(*) FROM "FishCatch";' > /dev/null
-          echo "Password accepted, read allowed (FishCatch)."
+
+          # Read probe on any granted table - picked from the schema, not
+          # hardcoded (several models are @@map'd, e.g. FishCatch -> fish_catches).
+          READ_TABLE="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc \
+            "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('User','Session','PasswordResets') ORDER BY tablename LIMIT 1")"
+          if [ -z "$READ_TABLE" ]; then
+            echo "::error::no granted table to read"
+            exit 1
+          fi
+          ext "$READONLY_PW" "SELECT count(*) FROM \"$READ_TABLE\";" > /dev/null
+          echo "Password accepted, read allowed ($READ_TABLE)."
 
           # Permission checks: loopback is fine - authorisation does not depend
           # on how the connection authenticated.
