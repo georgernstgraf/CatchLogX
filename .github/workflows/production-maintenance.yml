@@ -1592,6 +1592,30 @@ jobs:
               -v role="$ROLE" -v pass="$READONLY_PW" -v db="$PG_DB" "$@"
           }
 
+          # Every expected auth table must exist (drift guard), and we build the
+          # comma-separated identifier lists used below.
+          AUTH_LIST=""
+          for t in User Session PasswordResets; do
+            if [ "$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc "SELECT to_regclass('public.\"$t\"') IS NOT NULL")" != "t" ]; then
+              echo "::error::expected auth table '$t' not found - fix the list in this job before granting access"
+              exit 1
+            fi
+            if [ -n "$AUTH_LIST" ]; then AUTH_LIST="$AUTH_LIST, "; fi
+            AUTH_LIST="$AUTH_LIST\"$t\""
+          done
+
+          # GRANT only the NON-auth tables, positively. The auth tables are never
+          # granted at all, so a failure mid-statement can never leave them
+          # readable (the first dispatch proved the reverse order can).
+          TABLES="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc \
+            "SELECT string_agg(format('%I', tablename), ', ') FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('User','Session','PasswordResets')")"
+          if [ -z "$TABLES" ]; then
+            echo "::error::no readable tables found in schema public"
+            exit 1
+          fi
+          echo "Granting SELECT on: $TABLES"
+          echo "Withholding (auth tables): $AUTH_LIST"
+
           EXISTS="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc "SELECT 1 FROM pg_roles WHERE rolname = '$ROLE'")"
           if [ -z "$EXISTS" ]; then
             pg <<'SQL'
@@ -1607,14 +1631,16 @@ jobs:
             echo "Updated role $ROLE (password rotated)."
           fi
 
-          pg <<'SQL'
+          # The positive grant, then a REVOKE on the auth tables as
+          # belt-and-braces (covers a grant made interactively earlier).
+          pg <<SQL
           GRANT CONNECT ON DATABASE :"db" TO :"role";
           GRANT USAGE ON SCHEMA public TO :"role";
-          GRANT SELECT ON ALL TABLES IN SCHEMA public TO :"role";
+          GRANT SELECT ON TABLE $TABLES TO :"role";
           ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO :"role";
-          REVOKE SELECT ON TABLE "User", "Session", "PasswordReset" FROM :"role";
+          REVOKE SELECT ON TABLE $AUTH_LIST FROM :"role";
           SQL
-          echo "Grants applied: SELECT on all tables except the auth tables."
+          echo "Grants applied: SELECT on the non-auth tables only."
 
       - name: Verify (password on the real path, reads allowed, writes and auth tables denied)
         run: |

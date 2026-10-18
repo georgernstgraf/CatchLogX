@@ -38,7 +38,7 @@ Repo-Code in `dev`/`master` (`1fa3bf5`). Ergebnisse:
 Zweck: wissenschaftliche Mitarbeiter fahren Statistiken mit **R** direkt gegen die Produktions-DB. Der Port 5432 ist bereits auf allen Interfaces offen (Status quo); der Schutz ist die Rolle, nicht der Port.
 
 - [ ] **Dispatch** (kein Vor-Ort-Schritt nötig, läuft über den Runner): `gh workflow run production-maintenance.yml --ref master -f job=readonly-role -f confirm=ADOPT-PRODUCTION`
-  - legt `clx_readonly` an bzw. rotiert sie: SELECT auf alle Tabellen in `public` **außer** `"User"`, `"Session"`, `"PasswordReset"`; kein Schreiben/DDL; `CONNECTION LIMIT 20`
+  - legt `clx_readonly` an bzw. rotiert sie: SELECT auf alle Tabellen in `public` **außer** `"User"`, `"Session"`, `"PasswordResets"`; kein Schreiben/DDL; `CONNECTION LIMIT 20`
   - Passwort: **auf der Maschine** erzeugt (12 Zeichen), **nie** gedruckt, **nie** Repo-Secret; landet als `READONLY_DB_PASSWORD` in `/opt/CatchLogX/.env` (mode 600) für die geplante In-App-Seite (#153)
   - Verifiziert: falsches Passwort abgelehnt, Lesen ok, Schreiben und Auth-Tabellen verweigert, `pg_hba` nicht `trust`
 - [ ] **Weitergabe** an die Forschungsgruppe out-of-band (oder später über #153)
