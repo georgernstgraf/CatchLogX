@@ -30,9 +30,9 @@ npm run lint          # ESLint directly (eslint .) — Next 16 removed `next lin
 npm run typecheck     # tsc --noEmit
 npm test              # Vitest, single run (vitest run) — pure service-logic tests, no DB needed
 npm run create-user   # create admin user (hardcoded admin/admin, dev only)
-npx prisma generate   # regenerate Prisma client (required after schema changes)
-npx prisma migrate dev --name <name>   # schema change (dev): create + apply a migration
-npx prisma migrate deploy              # apply pending migrations (dev instance, production)
+npm run prisma:generate  # regenerate Prisma client (required after schema changes; also runs via postinstall)
+npm run prisma:migrate -- --name <name>  # schema change (dev): create + apply a migration
+npm run prisma:deploy   # apply pending migrations (dev instance, production)
 ```
 
 ## Tests (Vitest, #112)
@@ -68,7 +68,7 @@ npx prisma migrate deploy              # apply pending migrations (dev instance,
 ```ts
 import { PrismaClient } from "../app/generated/prisma";
 ```
-After any schema change, run `npx prisma generate` before `next dev` or `next build`.
+After any schema change, run `npm run prisma:generate` before `next dev` or `next build`.
 
 **Database is PostgreSQL** (migrated from SQLite). Connection via `DATABASE_URL` env var.
 Query logging is disabled (empty `log: []` in `lib/prisma.ts`).
