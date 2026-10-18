@@ -24,18 +24,14 @@ aus #122. Grundlage: `docs/ai/HANDOFF.md`, `docs/ai/STATE.md`, Issue #122, #141,
 
 ## Immutable-Release-Topologie (#143)
 
-Repo-Code (in `dev` implementiert; nach `master` bringen, dann dispatchen):
+Repo-Code in `dev`/`master` (`1fa3bf5`). Ergebnisse:
 
-- [ ] **`machine-report`** (read-only) dispatchten: `gh workflow run production-maintenance.yml --ref master -f job=machine-report -f confirm=machine-report`
-  - prüft: natives Node, `systemctl --user`/Linger für den Runner-User, vorhandene Releases, wer Port 3001 hält, wie der Runner gestartet wird, Disk/RAM, nodejs.org-Erreichbarkeit
-- [ ] **`release-topology`** dispatchten (schreibt): `gh workflow run production-maintenance.yml --ref master -f job=release-topology -f confirm=ADOPT-PRODUCTION`
-  - installiert Node v22.23.3 nach `~/tools` (glibc-Tarball, gepinnt), schreibt `/opt/CatchLogX/.env` (mode 600, Machine-lokal) und die systemd-User-Unit `catchlogx.service` (enabled, **nicht** gestartet — der Release fehlt noch)
-  - wenn der User-Manager/Linger fehlt: on-site `sudo loginctl enable-linger clxadmin`, dann erneut dispatchen
-- [ ] **Release-Deploy** dispatchten: `gh workflow run production-deploy.yml --ref master -f ref=master`
-  - baut einmal im Job (natives glibc-Node 22), `migrate deploy`, `publish-release.sh` (`~/releases/<sha>` + atomarer `~/current`-Swap), retired den Interim-Container `clx-web`, `systemctl --user restart`, Health-Check `127.0.0.1:3001`
-- [ ] **Rollback einmal üben und dokumentieren** (Akzeptanzkriterium): denselben Job mit dem vorherigen `master`-Commit dispatchen → Health-Check → wieder aktuellen Commit dispatchen → Health-Check; beide Runs in `docs/ai/STATE.md` festhalten
-- [ ] Prüfen: genau **eine** Unit hält die App und den Port (`systemctl --user status catchlogx.service`, kein zweiter clx-Unit); kein `clx-web`-Container mehr
-- [ ] Doku nachziehen: `ARCHITECTURE.md` (Topologie + Deploy-Pfade) und `STATE.md`; #143 schließen
+- [x] `machine-report` (Run 39114763871): Ubuntu 26.04, glibc 2.43, genug Platz; **kein natives Node**; nodejs.org erreichbar; Port 3001 hält `clx-web` auf `0.0.0.0:3001` → Unit bindet ebenfalls 0.0.0.0; **der Runner ist ein SYSTEM-Service**, also keine logind-Session und kein `systemctl --user`
+- [x] `release-topology` (Run 39115277532): verweigerte korrekt am User-Manager-Gate, kein Teilzustand. Fix: Jobs exportieren `XDG_RUNTIME_DIR`/`DBUS_SESSION_BUS_ADDRESS` und versuchen `sudo -n loginctl enable-linger` (scheitert — sudo braucht Passwort)
+- [ ] **Vor Ort:** `sudo loginctl enable-linger clxadmin`, dann `release-topology` erneut (richtet Node v22.23.3, `/opt/CatchLogX/.env`, Unit ein — enabled, nicht gestartet)
+- [ ] **Release-Deploy:** `gh workflow run production-deploy.yml --ref master -f ref=master` (Build im Job, Release publizieren, `clx-web` retiren, Unit restart, Health 3001)
+- [ ] **Rollback einmal üben und dokumentieren:** Job mit dem vorherigen `master`-Commit, Health, zurück, Health
+- [ ] Prüfen: genau eine Unit am Port, kein `clx-web` mehr; `ARCHITECTURE.md`/`STATE.md` nachziehen, #143 schließen
 
 ## Härtung aus #122 (vor Ort)
 
@@ -64,7 +60,9 @@ Repo-Code (in `dev` implementiert; nach `master` bringen, dann dispatchen):
 
 - [x] Cutover dispatchen und auswerten — Georg — 2026-10-18 (#141)
 - [x] Interim-Deploy dispatchen — Georg — 2026-10-18 (#142)
-- [ ] #143-Code nach `master`, `machine-report` + `release-topology` + Release-Deploy dispatchen, Rollback üben — Georg — in diesem Fenster (#143)
+- [x] `machine-report` dispatchten und auswerten — Georg — 2026-10-18 (#143)
+- [ ] `sudo loginctl enable-linger clxadmin` vor Ort ausführen — Georg/Martin — in diesem Fenster (#143)
+- [ ] `release-topology` erneut + Release-Deploy dispatchen, Rollback üben — Georg — in diesem Fenster (#143)
 - [ ] Härtungsposten 4–7, 9 abarbeiten — Georg + Martin — vor Ort (#122)
 - [ ] Smoke-Account löschen oder rotieren — Georg — nach dem Fenster (#150)
 - [ ] Ergebnis in `docs/ai/STATE.md` nachziehen, #141/#142/#143 schließen — Georg — nach dem Lauf (#145)
