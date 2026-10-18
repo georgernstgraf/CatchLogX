@@ -33,12 +33,32 @@ Repo-Code in `dev`/`master` (`1fa3bf5`). Ergebnisse:
 - [ ] **Rollback einmal üben und dokumentieren:** Job mit dem vorherigen `master`-Commit, Health, zurück, Health
 - [ ] Prüfen: genau eine Unit am Port, kein `clx-web` mehr; `ARCHITECTURE.md`/`STATE.md` nachziehen, #143 schließen
 
+## Read-Only-Datenbankzugriff für die Forschung (R) — #152
+
+Zweck: wissenschaftliche Mitarbeiter fahren Statistiken mit **R** direkt gegen die Produktions-DB. Der Port 5432 ist bereits auf allen Interfaces offen (Status quo); der Schutz ist die Rolle, nicht der Port.
+
+- [ ] **Dispatch** (kein Vor-Ort-Schritt nötig, läuft über den Runner): `gh workflow run production-maintenance.yml --ref master -f job=readonly-role -f confirm=ADOPT-PRODUCTION`
+  - legt `clx_readonly` an bzw. rotiert sie: SELECT auf alle Tabellen in `public` **außer** `"User"`, `"Session"`, `"PasswordReset"`; kein Schreiben/DDL; `CONNECTION LIMIT 20`
+  - Passwort: **auf der Maschine** erzeugt (12 Zeichen), **nie** gedruckt, **nie** Repo-Secret; landet als `READONLY_DB_PASSWORD` in `/opt/CatchLogX/.env` (mode 600) für die geplante In-App-Seite (#153)
+  - Verifiziert: falsches Passwort abgelehnt, Lesen ok, Schreiben und Auth-Tabellen verweigert, `pg_hba` nicht `trust`
+- [ ] **Weitergabe** an die Forschungsgruppe out-of-band (oder später über #153)
+- **R-Beispiel für die Handreichung:**
+  ```r
+  library(DBI)
+  con <- dbConnect(RPostgres::Postgres(), host = "<host>", port = 5432,
+                   dbname = "clx", user = "clx_readonly",
+                   password = "<aus der Handreichung>")
+  dbGetQuery(con, 'SELECT count(*) FROM "FishCatch"')
+  ```
+- **Rotation:** `readonly-role` erneut dispatchen (schreibt neues Passwort in Role + `.env`) — kein Rebuild.
+- ⚠️ **`clxadmin` hat weiterhin das Dev-Default-Passwort** am selben offenen Port → Rotation jetzt dringlich, aber **erst nach** dem Unit-Cutover (#143), weil der laufende `clx-web`-Container es in seiner Compose-Umgebung hat. Rezept danach: `ALTER ROLE clxadmin PASSWORD '…'` + `DATABASE_URL` in `/opt/CatchLogX/.env` anpassen + `systemctl --user restart catchlogx.service`
+
 ## Härtung aus #122 (vor Ort)
 
 4. [ ] Dokumentierten Wartungszugang sicherstellen (SSH-Key, von der OE gebilligt) statt verstecktem Tunnel
 5. [ ] Backup-Status prüfen (Backup-Sets unter `~/catchlogx-backups/`, verifizierte Dumps)
 6. [ ] **Dev-Defaults rotieren (niedrige Priorität, #122):** `clxadmin` (Postgres), `minioadmin` (MinIO — entfällt nach der Decommission), `NEXTAUTH_SECRET`. Rezept ohne Rebuild: `/opt/CatchLogX/.env` anpassen (Postgres-Passwort zusätzlich im `clx-postgres`-Container setzen) → `systemctl --user restart catchlogx.service`
-7. [ ] Ports 5432/9000/9001 auf localhost/Docker-Netz beschränken
+7. [ ] Ports 9000/9001 beschränken (MinIO — entfällt mit der Decommission); **5432 bleibt bewusst offen** (Read-only-for-Role, #152)
 8. [ ] Veralteten Actions-Runner des Vorgänger-Teams (`catchlogx-server`) **nicht in diesem Fenster ersetzen** — er ist der einzige Prod-Pfad; Entscheidung dokumentiert, Neuanlage als eigener Posten
 9. [ ] Zurückgelassenen MinIO-Container samt Volume entfernen (`catchlogx_clx_miniodata`)
 
@@ -53,7 +73,8 @@ Repo-Code in `dev`/`master` (`1fa3bf5`). Ergebnisse:
 - Den Cutover nur im Vor-Ort-Fenster dispatchen (Produktion bewusst kurz offline); der Job verweigert ohne den exakten Bestätigungstoken `ADOPT-PRODUCTION`
 - Genau **drei** Jobs dürfen auf die Produktion schreiben: `cutover` (#141), `smoke-user` (#150) und `release-topology` (#143) — alle in `production-maintenance.yml`, dispatch-only, ref-guarded auf `master`, mit `confirm=ADOPT-PRODUCTION`. Das ist eine Invariante, keine Zahl zum Erweitern
 - Die Produktion läuft ab #143 als **systemd-User-Unit** (`node ~/current/server.js`) statt als Container; nur die Datenbank bleibt Container. `docker-compose.prod.yml` deaktiviert den `app`-Service per Compose-Profil `interim-container`, damit kein `compose up` die App zurückholt
-- Secret-Rotation ist bewusst niedrig priorisiert und blockiert die Topologie-Umstellung nicht
+- Der Postgres-Port 5432 bleibt **bewusst auf allen Interfaces offen**; der Zugriffsschutz ist die read-only-Rolle `clx_readonly` (#152), nicht der Port. Das geteilte Passwort liegt nur in `/opt/CatchLogX/.env` (mode 600) und geht out-of-band — bzw. später über die In-App-Seite (#153) an alle eingeloggten Nutzer — an die Forschungsgruppe
+- Secret-Rotation: die Smoke-Account-Rotation bleibt niedrig priorisiert; die **`clxadmin`-Rotation wird durch den offenen Port 5432 dringlich**, aber erst nach dem Unit-Cutover (#143) möglich (Container hat das Passwort gebacken)
 - Nach einem fehlgeschlagenen Cutover bleibt die App bewusst gestoppt — kein halblebiger Zustand; Rollback nur über das verifizierte Pre-Cutover-Dump, nie über den alten Container
 
 ## Action Items
@@ -63,6 +84,8 @@ Repo-Code in `dev`/`master` (`1fa3bf5`). Ergebnisse:
 - [x] `machine-report` dispatchten und auswerten — Georg — 2026-10-18 (#143)
 - [ ] `sudo loginctl enable-linger clxadmin` vor Ort ausführen — Georg/Martin — in diesem Fenster (#143)
 - [ ] `release-topology` erneut + Release-Deploy dispatchen, Rollback üben — Georg — in diesem Fenster (#143)
+- [ ] `readonly-role` dispatchen (Read-only-Zugang für R, #152) — Georg — in diesem Fenster (#152)
+- [ ] `clxadmin`-Passwort rotieren (erst nach dem Unit-Cutover) — Georg — in diesem Fenster (#122)
 - [ ] Härtungsposten 4–7, 9 abarbeiten — Georg + Martin — vor Ort (#122)
 - [ ] Smoke-Account löschen oder rotieren — Georg — nach dem Fenster (#150)
 - [ ] Ergebnis in `docs/ai/STATE.md` nachziehen, #141/#142/#143 schließen — Georg — nach dem Lauf (#145)

@@ -19,15 +19,16 @@ name: Production maintenance
 # write access to trigger, and the code it runs is reviewed on dev first
 # (#138).
 #
-# Exactly three jobs in this repository may WRITE to production: `cutover`
+# Exactly four jobs in this repository may WRITE to production: `cutover`
 # (#141), which retires the db-push-era app container, takes a fresh dump +
 # MinIO export, runs the adoption script, verifies the result and brings up the
 # migration-tracked stack; `smoke-user` (#150), which provisions the dedicated
-# account that cutover's sign-in / file-download smoke test uses; and
+# account that cutover's sign-in / file-download smoke test uses;
 # `release-topology` (#143), which provisions the immutable-release runtime
 # (pinned Node under ~/tools, the systemd user unit, the on-machine env file)
-# without disrupting the running app. Every job that mutates production is
-# gated the same three ways:
+# without disrupting the running app; and `readonly-role` (#152), which upserts
+# the shared read-only statistics role and its password in the on-machine env
+# file. Every job that mutates production is gated the same three ways:
 #   - dispatch-only: it can never be reached by a push or a pull request;
 #   - ref-guarded to `master`: it only runs for `--ref master`;
 #   - armed by the typed confirmation input `confirm=ADOPT-PRODUCTION`.
@@ -48,10 +49,11 @@ on:
           - smoke-user
           - cutover
           - release-topology
+          - readonly-role
           - all
         default: audit
       confirm:
-        description: "Type ADOPT-PRODUCTION to arm a job that writes to production (cutover, smoke-user, release-topology; ignored by the read-only jobs)"
+        description: "Type ADOPT-PRODUCTION to arm a job that writes to production (cutover, smoke-user, release-topology, readonly-role; ignored by the read-only jobs)"
         required: true
         default: ""
         type: string
@@ -1430,6 +1432,12 @@ jobs:
             exit 1
           fi
           chmod 600 "$ENV_FILE.tmp"
+          # Preserve machine-local keys that do NOT come from the container
+          # environment - notably READONLY_DB_PASSWORD, written by the
+          # readonly-role job (#152). A re-dispatch here must not drop them.
+          if [ -f "$ENV_FILE" ]; then
+            grep -vE "$ALLOW" "$ENV_FILE" | grep -E '^[A-Za-z_][A-Za-z0-9_]*=' >> "$ENV_FILE.tmp" || true
+          fi
           mv "$ENV_FILE.tmp" "$ENV_FILE"
           echo "Wrote $ENV_FILE (mode 600). Keys present:"
           sed -E 's/=.*/=<set>/' "$ENV_FILE" | sort
@@ -1509,11 +1517,186 @@ jobs:
             echo ""
             echo "- Node runtime: \`$HOME/tools/node-$NODE_VERSION\` (\`~/tools/node\`)"
             echo "- Runtime env file: \`$ENV_FILE\` (mode 600, lives on the machine, not in the repo)"
-            echo "- Unit: \`$UNIT_NAME\` (\`node ~/current/server.js\`, 127.0.0.1:3001)"
+            echo "- Unit: \`$UNIT_NAME\` (\`node ~/current/server.js\`, 0.0.0.0:3001)"
             echo "- Linger: \`$( [ -e "/var/lib/systemd/linger/$(id -un)" ] && echo yes || echo 'no/unknown' )\`"
             echo ""
             echo "Next: dispatch a release deploy. The app container is retired there and the unit starts."
             echo ""
             echo "Secret rotation (deferred, #122): edit \`$ENV_FILE\` (and the PG password), then"
             echo "\`systemctl --user restart $UNIT_NAME\` - no rebuild."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Shared read-only database role for the scientific staff who run statistics
+  # (mainly with R) directly against the production database (#152). The port is
+  # already published on all interfaces; the role is the real access boundary
+  # (a SELECT-only login that cannot reach the auth tables).
+  #
+  # The password is generated ON the machine and never leaves it: it is set on
+  # the role and stored in the on-machine env file as READONLY_DB_PASSWORD (the
+  # future in-app data-access page reads it from there). It is never printed,
+  # never an artifact and never a repository secret. Re-dispatching this job IS
+  # the rotation.
+  #
+  # THIS IS ONE OF THE FOUR JOBS THAT MAY WRITE TO PRODUCTION (with `cutover`,
+  # `smoke-user` and `release-topology`), so it carries the same three gates:
+  # dispatch-only, ref-guarded to `master`, armed by `confirm=ADOPT-PRODUCTION`.
+  readonly-role:
+    name: Provision the read-only statistics role (#152)
+    if: inputs.job == 'readonly-role' && github.ref == 'refs/heads/master'
+    runs-on: [self-hosted, boku]
+
+    env:
+      ENV_FILE: /opt/CatchLogX/.env
+      ROLE: clx_readonly
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require the typed confirmation
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRM" != "ADOPT-PRODUCTION" ]; then
+            echo "::error::refused: re-dispatch with confirm=ADOPT-PRODUCTION"
+            exit 1
+          fi
+          echo "Confirmation accepted."
+
+      - name: Preconditions
+        run: |
+          set -euo pipefail
+          docker inspect "$PG_CONTAINER" >/dev/null || { echo "::error::$PG_CONTAINER not found"; exit 1; }
+          BLOBS="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc "SELECT to_regclass('public.\"FileBlob\"') IS NOT NULL")"
+          if [ "$BLOBS" != "t" ]; then
+            echo "::error::production is not on the adopted schema yet - run the cutover (#141) first"
+            exit 1
+          fi
+
+      # The password is generated here, on the machine, and never echoed. The
+      # `::add-mask::` plus $GITHUB_ENV hand it to later steps without ever
+      # appearing in the log.
+      - name: Generate the password (never printed)
+        run: |
+          set -euo pipefail
+          PW="$(openssl rand -base64 9)"
+          echo "::add-mask::$PW"
+          echo "READONLY_PW=$PW" >> "$GITHUB_ENV"
+          echo "Generated a $(printf %s "$PW" | wc -c)-character password (masked)."
+
+      - name: Upsert the role and its grants
+        run: |
+          set -euo pipefail
+          pg() {
+            docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 \
+              -v role="$ROLE" -v pass="$READONLY_PW" -v db="$PG_DB" "$@"
+          }
+
+          EXISTS="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc "SELECT 1 FROM pg_roles WHERE rolname = '$ROLE'")"
+          if [ -z "$EXISTS" ]; then
+            pg <<'SQL'
+          CREATE ROLE :"role" LOGIN PASSWORD :'pass'
+            NOSUPERUSER NOCREATEDB NOCREATEROLE CONNECTION LIMIT 20;
+          SQL
+            echo "Created role $ROLE."
+          else
+            pg <<'SQL'
+          ALTER ROLE :"role" WITH LOGIN PASSWORD :'pass'
+            NOSUPERUSER NOCREATEDB NOCREATEROLE CONNECTION LIMIT 20;
+          SQL
+            echo "Updated role $ROLE (password rotated)."
+          fi
+
+          pg <<'SQL'
+          GRANT CONNECT ON DATABASE :"db" TO :"role";
+          GRANT USAGE ON SCHEMA public TO :"role";
+          GRANT SELECT ON ALL TABLES IN SCHEMA public TO :"role";
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO :"role";
+          REVOKE SELECT ON TABLE "User", "Session", "PasswordReset" FROM :"role";
+          SQL
+          echo "Grants applied: SELECT on all tables except the auth tables."
+
+      - name: Verify (password on the real path, reads allowed, writes and auth tables denied)
+        run: |
+          set -euo pipefail
+
+          # The container's pg_hba trusts loopback (127.0.0.1/32) and only
+          # enforces scram-sha-256 on non-loopback sources - the path the BOKU
+          # clients actually take. Print those rules and refuse a catch-all
+          # `trust`: with it the read-only password would be meaningless.
+          HBA="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc 'SHOW hba_file')"
+          echo "=== effective pg_hba host rules ($HBA) ==="
+          docker exec "$PG_CONTAINER" cat "$HBA" | grep -vE '^\s*#|^\s*$' | grep -E '^host' || true
+          if docker exec "$PG_CONTAINER" cat "$HBA" | grep -qE '^host[[:space:]]+all[[:space:]]+all[[:space:]]+all[[:space:]]+trust'; then
+            echo "::error::pg_hba trusts external connections - the read-only password is meaningless"
+            exit 1
+          fi
+
+          # Connect from OUTSIDE the container (a separate one on the same
+          # network, using the container IP) so the password is really checked.
+          NET="$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}' "$PG_CONTAINER" | head -n1)"
+          PG_IP="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$PG_CONTAINER" | awk '{print $1}')"
+          ext() {
+            docker run --rm --network "$NET" -e PGPASSWORD="$1" postgres:16-alpine \
+              psql -h "$PG_IP" -U "$ROLE" -d "$PG_DB" -Atc "$2"
+          }
+
+          if ext "definitely-wrong" 'SELECT 1' >/dev/null 2>&1; then
+            echo "::error::the role connected with a wrong password - password auth is not enforced"
+            exit 1
+          fi
+          echo "Wrong password rejected."
+          ext "$READONLY_PW" 'SELECT count(*) FROM "FishCatch";' > /dev/null
+          echo "Password accepted, read allowed (FishCatch)."
+
+          # Permission checks: loopback is fine - authorisation does not depend
+          # on how the connection authenticated.
+          as_role() {
+            docker exec -i -e PGPASSWORD="$READONLY_PW" "$PG_CONTAINER" \
+              psql -U "$ROLE" -h 127.0.0.1 -d "$PG_DB" -v ON_ERROR_STOP=1 "$@"
+          }
+
+          if as_role -Atc 'SELECT 1 FROM "Session" LIMIT 1;' >/dev/null 2>&1; then
+            echo "::error::the read-only role can read Session - the REVOKE did not take effect"
+            exit 1
+          fi
+          echo "Auth tables denied (Session)."
+
+          if as_role -Atc 'CREATE TABLE public._readonly_probe(i int);' >/dev/null 2>&1; then
+            as_role -Atc 'DROP TABLE public._readonly_probe;' >/dev/null 2>&1 || true
+            echo "::error::the read-only role can write to public"
+            exit 1
+          fi
+          echo "Writes denied (CREATE TABLE refused)."
+
+          ATTRS="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc \
+            "SELECT rolsuper||'|'||rolcreatedb||'|'||rolcreaterole||'|'||rolcanlogin||'|'||rolconnlimit FROM pg_roles WHERE rolname='$ROLE'")"
+          echo "pg_roles (super|createdb|createrole|canlogin|connlimit): $ATTRS"
+
+      - name: Record the password in the on-machine env file
+        run: |
+          set -euo pipefail
+          TMP="$(mktemp)"
+          if [ -f "$ENV_FILE" ]; then
+            grep -v '^READONLY_DB_PASSWORD=' "$ENV_FILE" > "$TMP" || true
+          fi
+          printf 'READONLY_DB_PASSWORD=%s\n' "$READONLY_PW" >> "$TMP"
+          chmod 600 "$TMP"
+          mv "$TMP" "$ENV_FILE"
+          echo "$ENV_FILE updated (value not shown). Keys present:"
+          sed -E 's/=.*/=<set>/' "$ENV_FILE" | sort
+
+      - name: Summary
+        if: always()
+        run: |
+          set +e
+          {
+            echo "## Read-only statistics role (#152)"
+            echo ""
+            echo "- Role: \`$ROLE\`"
+            echo "- Password: generated on the machine, stored as \`READONLY_DB_PASSWORD\` in \`$ENV_FILE\`, never printed"
+            echo "- Scope: \`SELECT\` on all tables in \`public\`, except \`User\`, \`Session\`, \`PasswordReset\`; no write, no DDL, connection limit 20"
+            echo "- Re-dispatch this job to rotate the password"
+            echo ""
+            echo "Consumers: scientific staff running statistics in R. The future in-app data-access page (#152) reads \`READONLY_DB_PASSWORD\` from the env file and shows it to logged-in users."
           } >> "$GITHUB_STEP_SUMMARY"
