@@ -97,7 +97,7 @@ jobs:
         run: npm ci
 
       - name: Generate Prisma client
-        run: npx prisma generate
+        run: npm run prisma:generate
 
       # The FIRST thing that touches the machine. Refuse to deploy unless
       # production is already on the adopted, migration-tracked schema: on the
@@ -174,7 +174,7 @@ jobs:
       - name: Apply pending migrations
         env:
           DATABASE_URL: ${{ env.PROD_DATABASE_URL }}
-        run: npx prisma migrate deploy
+        run: npm run prisma:deploy
 
       # Publish the immutable release and atomically repoint ~/current (last
       # step of the script). The previous release stays on disk for a rollback.
