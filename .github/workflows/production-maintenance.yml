@@ -19,18 +19,18 @@ name: Production maintenance
 # write access to trigger, and the code it runs is reviewed on dev first
 # (#138).
 #
-# The `cutover` job (#141) is the ONE place in this repository that is allowed
-# to WRITE to production (and the only workflow that runs on `boku` besides the
-# dispatch-only audit/rehearsal/legacy deploy). It retires the db-push-era app
-# container, takes a fresh dump + MinIO export, runs the adoption script,
-# verifies the result and brings up the migration-tracked stack. Because it
-# mutates production it is gated three ways:
+# Exactly two jobs in this repository may WRITE to production: `cutover` (#141),
+# which retires the db-push-era app container, takes a fresh dump + MinIO
+# export, runs the adoption script, verifies the result and brings up the
+# migration-tracked stack; and `smoke-user` (#150), which provisions the
+# dedicated account that cutover's sign-in / file-download smoke test uses.
+# Every job that mutates production is gated the same three ways:
 #   - dispatch-only: it can never be reached by a push or a pull request;
 #   - ref-guarded to `master`: it only runs for `--ref master`;
 #   - armed by the typed confirmation input `confirm=ADOPT-PRODUCTION`.
-# It must NOT be dispatched before the on-site maintenance appointment (#122)
-# has been agreed with Martin: it stops the live app and takes production down
-# by design, in one ordered run so the db-push-era app can never come back.
+# `cutover` must NOT be dispatched before the on-site maintenance appointment
+# (#122) has been agreed with Martin: it stops the live app and takes production
+# down by design, in one ordered run so the db-push-era app can never come back.
 
 on:
   workflow_dispatch:
@@ -41,11 +41,12 @@ on:
         options:
           - audit
           - rehearse
+          - smoke-user
           - cutover
           - all
         default: audit
       confirm:
-        description: "Type ADOPT-PRODUCTION to arm the cutover job (ignored by audit/rehearse/all)"
+        description: "Type ADOPT-PRODUCTION to arm a job that writes to production (cutover, smoke-user; ignored by audit/rehearse/all)"
         required: true
         default: ""
         type: string
@@ -515,10 +516,199 @@ jobs:
           rm -rf "$HOME/clx-rehearsal-export" || true
           echo "Scratch database and export removed."
 
+  # Provisions the dedicated smoke-test account that the cutover's sign-in +
+  # file-download smoke test signs in with (#141). Production has no credentials
+  # we may hold - its seven users are real people - so this account is
+  # purpose-built, and its password lives ONLY in the PROD_SMOKE_PASSWORD
+  # repository secret: no human ever needs to know the value (#150).
+  #
+  # This is the second of exactly two jobs allowed to WRITE to production, which
+  # is why it carries the same typed confirmation as the cutover. It is additive
+  # and idempotent - an upsert of one dedicated row - so it is safe to re-run,
+  # and re-running is also the way to rotate the password after the on-site
+  # window (#122). It works before AND after the cutover: the adoption (#139)
+  # touches only `Uploads`, `TemplateFiles` and `FileBlob`, never `User`.
+  smoke-user:
+    name: Provision the smoke-test account (#150)
+    if: inputs.job == 'smoke-user' && github.ref == 'refs/heads/master'
+    runs-on: [self-hosted, boku]
+
+    env:
+      SMOKE_EMAIL: smoke-test@catchlogx.invalid
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # bcrypt comes from the repo's own dependencies - the same library and
+      # cost (10) every write path in the app uses.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Require the typed confirmation
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRM" != "ADOPT-PRODUCTION" ]; then
+            echo "::error::refused: re-dispatch with confirm=ADOPT-PRODUCTION"
+            exit 1
+          fi
+          echo "Confirmation accepted."
+
+      # Unlike the cutover's smoke step, this job cannot skip: provisioning the
+      # account IS the job. Both secrets must be set.
+      - name: Require the smoke-test secrets
+        env:
+          SMOKE_USER: ${{ secrets.PROD_SMOKE_USER }}
+          SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SMOKE_USER" ] || [ -z "$SMOKE_PASSWORD" ]; then
+            echo "::error::set the repository secrets PROD_SMOKE_USER and PROD_SMOKE_PASSWORD first"
+            exit 1
+          fi
+          # The username is not secret-grade and later steps need it.
+          echo "SMOKE_USER=$SMOKE_USER" >> "$GITHUB_ENV"
+          echo "Both smoke-test secrets are present (username: $SMOKE_USER)."
+
+      - name: Preconditions
+        run: |
+          set -euo pipefail
+          docker inspect "$PG_CONTAINER" >/dev/null
+          echo "$PG_CONTAINER is running."
+
+      # Refuse to touch an account that is not ours. If the secret names a real
+      # user, the upsert below would reset that person's password AND grant them
+      # ADMIN - never do that, fail instead.
+      - name: Guard against overwriting a foreign account
+        run: |
+          set -euo pipefail
+          FOREIGN="$(docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -A -t \
+            -v uname="$SMOKE_USER" -v mail="$SMOKE_EMAIL" <<'SQL'
+          SELECT count(*) FROM "User" WHERE username = :'uname' AND email <> :'mail';
+          SQL
+          )"
+          if [ "$FOREIGN" != "0" ]; then
+            echo "::error::a user named '$SMOKE_USER' already exists with a different e-mail - refusing to overwrite a real account"
+            exit 1
+          fi
+          EXISTS="$(docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -A -t \
+            -v uname="$SMOKE_USER" <<'SQL'
+          SELECT count(*) FROM "User" WHERE username = :'uname';
+          SQL
+          )"
+          if [ "$EXISTS" = "1" ]; then
+            echo "ACTION=updated" >> "$GITHUB_ENV"
+            echo "The account already exists - this run resets its password to the secret."
+          else
+            echo "ACTION=created" >> "$GITHUB_ENV"
+            echo "The account does not exist yet - this run creates it."
+          fi
+
+      # The hash is computed in the runner workspace (bcrypt via npm ci) with the
+      # secret passed through the environment, so the password never appears on a
+      # command line or in a process argument. Raw SQL on purpose: it behaves
+      # identically on the legacy db-push schema (where `role` is TEXT) and on
+      # the adopted, migration-tracked one - no Prisma enum dependency.
+      - name: Upsert the account
+        env:
+          SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          HASH="$(SMOKE_PASSWORD="$SMOKE_PASSWORD" node -e \
+            'require("bcrypt").hash(process.env.SMOKE_PASSWORD, 10).then(h => process.stdout.write(h))')"
+          if [ -z "$HASH" ]; then
+            echo "::error::could not hash the password"
+            exit 1
+          fi
+          docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 \
+            -v uname="$SMOKE_USER" -v mail="$SMOKE_EMAIL" -v hash="$HASH" <<'SQL'
+          INSERT INTO "User" (id, username, "hashedPassword", name, email, role, "isActive", "isFirstLogin", "createdAt", "updatedAt")
+          VALUES (gen_random_uuid()::text, :'uname', :'hash', 'Deployment smoke test', :'mail', 'ADMIN', true, false, now(), now())
+          ON CONFLICT (username) DO UPDATE
+            SET "hashedPassword" = EXCLUDED."hashedPassword",
+                role             = EXCLUDED.role,
+                "isActive"       = EXCLUDED."isActive",
+                "isFirstLogin"   = EXCLUDED."isFirstLogin",
+                "updatedAt"      = now();
+          SQL
+          echo "Account '$SMOKE_USER' ${ACTION} (role ADMIN, active, not first login)."
+
+      # Prove the exact loop the cutover depends on end to end: secret -> hash in
+      # the database -> bcrypt.compare true. Catches any mangling of the password
+      # before the cutover's sign-in would have to.
+      - name: Verify the round trip
+        env:
+          SMOKE_PASSWORD: ${{ secrets.PROD_SMOKE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          STORED="$(docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -A -t \
+            -v uname="$SMOKE_USER" <<'SQL'
+          SELECT "hashedPassword" FROM "User" WHERE username = :'uname';
+          SQL
+          )"
+          if [ -z "$STORED" ]; then
+            echo "::error::the account was not found after the upsert"
+            exit 1
+          fi
+          SMOKE_PASSWORD="$SMOKE_PASSWORD" STORED="$STORED" node -e '
+          require("bcrypt").compare(process.env.SMOKE_PASSWORD, process.env.STORED).then((ok) => {
+            if (!ok) {
+              console.error("::error::bcrypt round trip failed - the stored hash does not match the secret");
+              process.exit(1);
+            }
+            process.stdout.write("Round trip ok: the secret verifies against the stored hash.\n");
+          });
+          '
+
+      # Nothing to clean up on failure: the upsert is a single statement, and a
+      # failed guard writes nothing at all.
+      - name: Failure - what this means
+        if: failure()
+        run: |
+          {
+            echo "## Smoke-test account provisioning FAILED"
+            echo ""
+            echo "No partial state: the upsert is one statement, and a failed guard writes nothing."
+            echo "Fix the cause and re-dispatch:"
+            echo ""
+            echo '```'
+            echo "gh workflow run production-maintenance.yml --ref master -f job=smoke-user -f confirm=ADOPT-PRODUCTION"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summary
+        if: always()
+        run: |
+          set +e
+          ROW="$(docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -A -t -F'|' \
+            -v uname="${SMOKE_USER:-}" <<'SQL'
+          SELECT username, role, "isActive", "isFirstLogin" FROM "User" WHERE username = :'uname';
+          SQL
+          )"
+          {
+            echo "## Smoke-test account (#150)"
+            echo ""
+            echo "- Username: \`${SMOKE_USER:-<not resolved>}\` — \`${ACTION:-unknown}\`"
+            echo "- Row (username | role | isActive | isFirstLogin): \`${ROW:-<none>}\`"
+            echo "- Password: lives only in the \`PROD_SMOKE_PASSWORD\` repository secret — never printed here"
+            echo ""
+            echo "The cutover (#141) signs in with this account and downloads one upload through"
+            echo "the admin route. After the on-site window (#122), delete the account or rotate"
+            echo "the secret and re-dispatch this job."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Smoke-test account: ${ROW:-<none>} (${ACTION:-unknown})"
+
   # One-time cutover of the production machine from the `prisma db push` era to
-  # the migration-tracked baseline (#141). This is the only job that WRITES to
-  # production, and it does so in a single ordered run so there is never a
-  # window in which the db-push-era app can come back:
+  # the migration-tracked baseline (#141). Together with `smoke-user` (#150) it
+  # is one of exactly two jobs allowed to WRITE to production, and it does so in
+  # a single ordered run so there is never a window in which the db-push-era app
+  # can come back:
   #   1. retire the old app container - nothing on the machine can run `db push`;
   #   2. fresh database dump + MinIO export (the safety net);
   #   3. run the adoption script (#139);
