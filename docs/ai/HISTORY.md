@@ -3,6 +3,12 @@
 Append-only archive of superseded knowledge entries.
 Each entry keeps its date, title, origin file, reason, and original text.
 
+## 2026-10-18: Produktions-Upgrade-Tickets als erledigt geschlossen (Backlog-Triage)
+- **Original**: `docs/ai/STATE.md` „Pending" — der Produktions-Upgrade-Pfad #137–#153 als offene Ticketliste (Audit, Adoptionsskript, Rehearsal, Cutover, Interim-Deploy, Read-only-Rolle …).
+- **Superseded by**: Backlog-Triage am 2026-10-18 — geschlossen als erledigt/überholt: #133 (Fix `11bef36`, auf `dev`), #134 (Fix `3bb558a`, `migration-drift` grün), #137 (dispatch-only-Zustand erreicht), #138 (Audit-Run 39113184455), #139 (`lib/adoption.ts`, Idempotenz im Cutover bewiesen), #140 (Rehearsal-Run 39079039305), #141 (Cutover-Run 39113353435), #142 (Interim-Deploy-Run 39113591513), #152 (`clx_readonly`, Run 39117175848), #84 (überholt durch #115/#122), #105 (einmaliger Backlog-Sync). Belege in den jeweiligen Abschlusskommentaren.
+- **Origin**: `docs/ai/STATE.md`, `docs/ai/HANDOFF.md`
+- **Reason**: Tickets waren implementiert bzw. ihr Zweck erfüllt. Restaufgaben bleiben als eigene Posten offen: #143, #144, #145, #153, Smoke-Account-Restposten (#150), `clxadmin`-Rotation.
+
 ## 2026-10-17: Privates Datenrepo CatchLogX-Data angelegt (#125)
 - Neues privates Schwesterrepo `georgernstgraf/CatchLogX-Data` mit dem Datenbestand aus `Bulk import.zip` (39 Dateien, 282,1 MiB, 9 Commits, inkrementell gepusht).
 - Struktur 1:1 wie geliefert (`Bulk import/`), Scaffolding (`README.md`, `.gitignore`, `AGENTS.md`, `docs/ai/`).
