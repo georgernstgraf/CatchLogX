@@ -37,10 +37,7 @@ Repo-Code in `dev`/`master` (`1fa3bf5`). Ergebnisse:
 
 Zweck: wissenschaftliche Mitarbeiter fahren Statistiken mit **R** direkt gegen die Produktions-DB. Der Port 5432 ist bereits auf allen Interfaces offen (Status quo); der Schutz ist die Rolle, nicht der Port.
 
-- [ ] **Dispatch** (kein Vor-Ort-Schritt nötig, läuft über den Runner): `gh workflow run production-maintenance.yml --ref master -f job=readonly-role -f confirm=ADOPT-PRODUCTION`
-  - legt `clx_readonly` an bzw. rotiert sie: SELECT auf alle Tabellen in `public` **außer** `"User"`, `"Session"`, `"PasswordResets"`; kein Schreiben/DDL; `CONNECTION LIMIT 20`
-  - Passwort: **auf der Maschine** erzeugt (12 Zeichen), **nie** gedruckt, **nie** Repo-Secret; landet als `READONLY_DB_PASSWORD` in `/opt/CatchLogX/.env` (mode 600) für die geplante In-App-Seite (#153)
-  - Verifiziert: falsches Passwort abgelehnt, Lesen ok, Schreiben und Auth-Tabellen verweigert, `pg_hba` nicht `trust`
+- [x] **Dispatch** von `readonly-role` — Run [39117175848](https://github.com/georgernstgraf/CatchLogX/actions/runs/39117175848) grün: `clx_readonly` angelegt (SELECT nur auf Nicht-Auth-Tabellen, `CONNECTION LIMIT 20`), Passwort extern geprüft (falsches Passwort abgelehnt, Lesen ok, Schreiben und Auth-Tabellen verweigert), `READONLY_DB_PASSWORD` in `/opt/CatchLogX/.env`. Zwei Bugs vorab gefunden und gefixt: die Auth-Tabelle heißt `PasswordResets` (nicht `PasswordReset`), und `FishCatch` ist per `@@map` → `fish_catches`
 - [ ] **Weitergabe** an die Forschungsgruppe out-of-band (oder später über #153)
 - **R-Beispiel für die Handreichung:**
   ```r
@@ -84,7 +81,8 @@ Zweck: wissenschaftliche Mitarbeiter fahren Statistiken mit **R** direkt gegen d
 - [x] `machine-report` dispatchten und auswerten — Georg — 2026-10-18 (#143)
 - [ ] `sudo loginctl enable-linger clxadmin` vor Ort ausführen — Georg/Martin — in diesem Fenster (#143)
 - [ ] `release-topology` erneut + Release-Deploy dispatchen, Rollback üben — Georg — in diesem Fenster (#143)
-- [ ] `readonly-role` dispatchen (Read-only-Zugang für R, #152) — Georg — in diesem Fenster (#152)
+- [x] `readonly-role` dispatchen (Read-only-Zugang für R, #152) — Georg — 2026-10-18 (#152)
+- [ ] Passwort `clx_readonly` out-of-band an die Forschungsgruppe weitergeben — Georg/Lena — nach diesem Fenster (#152)
 - [ ] `clxadmin`-Passwort rotieren (erst nach dem Unit-Cutover) — Georg — in diesem Fenster (#122)
 - [ ] Härtungsposten 4–7, 9 abarbeiten — Georg + Martin — vor Ort (#122)
 - [ ] Smoke-Account löschen oder rotieren — Georg — nach dem Fenster (#150)
