@@ -19,12 +19,15 @@ name: Production maintenance
 # write access to trigger, and the code it runs is reviewed on dev first
 # (#138).
 #
-# Exactly two jobs in this repository may WRITE to production: `cutover` (#141),
-# which retires the db-push-era app container, takes a fresh dump + MinIO
-# export, runs the adoption script, verifies the result and brings up the
-# migration-tracked stack; and `smoke-user` (#150), which provisions the
-# dedicated account that cutover's sign-in / file-download smoke test uses.
-# Every job that mutates production is gated the same three ways:
+# Exactly three jobs in this repository may WRITE to production: `cutover`
+# (#141), which retires the db-push-era app container, takes a fresh dump +
+# MinIO export, runs the adoption script, verifies the result and brings up the
+# migration-tracked stack; `smoke-user` (#150), which provisions the dedicated
+# account that cutover's sign-in / file-download smoke test uses; and
+# `release-topology` (#143), which provisions the immutable-release runtime
+# (pinned Node under ~/tools, the systemd user unit, the on-machine env file)
+# without disrupting the running app. Every job that mutates production is
+# gated the same three ways:
 #   - dispatch-only: it can never be reached by a push or a pull request;
 #   - ref-guarded to `master`: it only runs for `--ref master`;
 #   - armed by the typed confirmation input `confirm=ADOPT-PRODUCTION`.
@@ -41,12 +44,14 @@ on:
         options:
           - audit
           - rehearse
+          - machine-report
           - smoke-user
           - cutover
+          - release-topology
           - all
         default: audit
       confirm:
-        description: "Type ADOPT-PRODUCTION to arm a job that writes to production (cutover, smoke-user; ignored by audit/rehearse/all)"
+        description: "Type ADOPT-PRODUCTION to arm a job that writes to production (cutover, smoke-user, release-topology; ignored by the read-only jobs)"
         required: true
         default: ""
         type: string
@@ -515,6 +520,104 @@ jobs:
           docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d postgres -q -c "DROP DATABASE IF EXISTS $SCRATCH_DB;" || true
           rm -rf "$HOME/clx-rehearsal-export" || true
           echo "Scratch database and export removed."
+
+  # Read-only survey of the production machine (#143). It informs the
+  # immutable-release topology BEFORE anything is provisioned: whether a native
+  # Node runtime can run there, whether the runner's user has a systemd user
+  # manager (and linger), where the runner checks out, and what still holds port
+  # 3001. It writes nothing, stops nothing and needs no confirmation token.
+  machine-report:
+    name: Survey the production machine (#143)
+    if: inputs.job == 'machine-report'
+    runs-on: [self-hosted, boku]
+
+    steps:
+      - name: Survey
+        run: |
+          set +e
+          {
+            echo "## Production machine report (#143)"
+            echo ""
+            echo "### Host and user"
+            echo '```'
+            echo "host:   $(hostname)"
+            echo "user:   $(id)"
+            echo "HOME:   ${HOME}"
+            echo "os:     $(. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME")"
+            echo "kernel: $(uname -sr)"
+            echo "glibc:  $(ldd --version 2>&1 | head -n1)"
+            echo "uptime: $(uptime -p 2>/dev/null)"
+            echo "date:   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo '```'
+            echo ""
+            echo "### Runner paths (this job's environment)"
+            echo '```'
+            echo "GITHUB_WORKSPACE:  ${GITHUB_WORKSPACE:-<unset>}"
+            echo "RUNNER_WORKSPACE:  ${RUNNER_WORKSPACE:-<unset>}"
+            echo "RUNNER_TOOL_CACHE: ${RUNNER_TOOL_CACHE:-<unset>}"
+            echo '```'
+            echo ""
+            echo "### Node, npm and curl"
+            echo '```'
+            echo "node: $(command -v node || echo '<none>') $(node --version 2>&1)"
+            echo "npm:  $(command -v npm || echo '<none>') $(npm --version 2>&1)"
+            echo "curl: $(command -v curl || echo '<none>') $(curl --version 2>&1 | head -n1)"
+            echo "~/tools: $(ls -d "$HOME"/tools 2>/dev/null || echo '<none>')"
+            echo '```'
+            echo ""
+            echo "### systemd user manager (the #143 runtime)"
+            echo '```'
+            echo "XDG_RUNTIME_DIR:   ${XDG_RUNTIME_DIR:-<unset>}"
+            echo "DBUS_SESSION_BUS:  ${DBUS_SESSION_BUS_ADDRESS:-<unset>}"
+            echo "is-system-running: $(systemctl --user is-system-running 2>&1)"
+            loginctl show-user "$(id -un)" 2>&1 | grep -iE '^(Linger|State)=' || echo "loginctl: <unavailable>"
+            echo "user unit dir: $(ls -d "$HOME/.config/systemd/user" 2>/dev/null || echo '<none>')"
+            echo "units matching clx/catchlogx:"
+            systemctl --user list-units --all --no-pager 2>/dev/null | grep -iE 'clx|catchlogx' || echo "  (none)"
+            echo '```'
+            echo ""
+            echo "### Releases and current"
+            echo '```'
+            echo "~/releases:  $(ls -1 "$HOME/releases" 2>/dev/null | tr '\n' ' ' || echo '<none>')"
+            echo "~/current -> $(readlink -f "$HOME/current" 2>/dev/null || echo '<none>')"
+            echo '```'
+            echo ""
+            echo "### Containers and port 3001"
+            echo '```'
+            docker ps -a --format '{{.Names}} | {{.Image}} | {{.Status}} | {{.Ports}}' 2>&1
+            echo "-- published ports of $APP_CONTAINER --"
+            docker port "$APP_CONTAINER" 2>&1 || true
+            echo "-- listeners on :3001 --"
+            (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) | grep -E ':3001\b' || echo "(nothing listening on 3001 per ss/netstat)"
+            echo '```'
+            echo ""
+            echo "### How the runner itself is launched"
+            echo '```'
+            ps -eo pid,ppid,user,args 2>/dev/null | grep -iE 'Runner.Listener|actions-runner|run\.sh' | grep -v grep || echo "(no runner process matched)"
+            echo "-- candidate runner dirs --"
+            ls -d "$HOME"/actions-runner* /opt/actions-runner* 2>/dev/null || echo "(none)"
+            echo "-- system-level units mentioning the runner --"
+            systemctl list-units --all --no-pager 2>/dev/null | grep -iE 'actions|runner|catchlogx' || echo "  (none at system level)"
+            echo '```'
+            echo ""
+            echo "### Resources and outbound reachability"
+            echo '```'
+            df -h "$HOME" 2>&1
+            free -h 2>&1 || true
+            echo "-- nodejs.org reachable (for the pinned runtime download)? --"
+            curl -fsSI --max-time 15 https://nodejs.org/dist/ 2>&1 | head -n1 || echo "curl to nodejs.org failed"
+            echo '```'
+          } | tee machine-report.txt
+          cat machine-report.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-machine-report-${{ github.run_id }}
+          path: machine-report.txt
+          retention-days: 30
+          if-no-files-found: warn
 
   # Provisions the dedicated smoke-test account that the cutover's sign-in +
   # file-download smoke test signs in with (#141). Production has no credentials
@@ -1175,3 +1278,202 @@ jobs:
             smoke-result.txt
           retention-days: 30
           if-no-files-found: warn
+
+  # Provisions the immutable-release runtime on the production machine (#143):
+  # a pinned Node under ~/tools, the on-machine runtime env file, and the
+  # systemd USER unit that runs `node ~/current/server.js`. It deliberately does
+  # NOT touch the running app: the interim container keeps serving until the
+  # first release deploy retires it and starts the unit, so downtime stays a
+  # plain restart. Idempotent and re-dispatchable.
+  #
+  # THIS IS ONE OF THE THREE JOBS THAT MAY WRITE TO PRODUCTION (with `cutover`
+  # and `smoke-user`), so it carries the same three gates: dispatch-only,
+  # ref-guarded to `master`, and armed by `confirm=ADOPT-PRODUCTION`.
+  release-topology:
+    name: Provision the immutable-release topology (#143)
+    if: inputs.job == 'release-topology' && github.ref == 'refs/heads/master'
+    runs-on: [self-hosted, boku]
+
+    env:
+      NODE_VERSION: v22.23.3
+      ENV_FILE: /opt/CatchLogX/.env
+      REPO_DIR: /opt/CatchLogX
+      UNIT_NAME: catchlogx.service
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require the typed confirmation
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRM" != "ADOPT-PRODUCTION" ]; then
+            echo "::error::refused: re-dispatch with confirm=ADOPT-PRODUCTION"
+            exit 1
+          fi
+          echo "Confirmation accepted."
+
+      - name: Preconditions
+        run: |
+          set -euo pipefail
+          docker inspect "$PG_CONTAINER" >/dev/null || { echo "::error::$PG_CONTAINER not found"; exit 1; }
+
+          # Post-cutover work only: the database must already be adopted (#141).
+          BLOBS="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc "SELECT to_regclass('public.\"FileBlob\"') IS NOT NULL")"
+          if [ "$BLOBS" != "t" ]; then
+            echo "::error::production is not on the adopted schema yet - run the cutover (#141) first"
+            exit 1
+          fi
+
+          # The runtime needs a reachable systemd user manager. `degraded` is
+          # acceptable (some unrelated unit may have failed); anything else is
+          # not, and enabling the manager/linger needs sudo on-site.
+          STATE="$(systemctl --user is-system-running 2>&1 || true)"
+          case "$STATE" in
+            running|degraded) echo "systemd user manager is $STATE." ;;
+            *)
+              echo "::error::no usable systemd user manager for '$(id -un)' (state: ${STATE:-unknown}). On-site run 'sudo loginctl enable-linger $(id -un)', then re-dispatch."
+              exit 1
+              ;;
+          esac
+
+          if [ ! -w "$REPO_DIR" ]; then
+            echo "::error::$REPO_DIR is not writable by $(id -un) - cannot place the runtime env file"
+            exit 1
+          fi
+          echo "Preconditions ok (adopted schema, user manager, writable $REPO_DIR)."
+
+      - name: Install the pinned Node runtime (~/tools)
+        run: |
+          set -euo pipefail
+          TOOLS="$HOME/tools"
+          DEST="$TOOLS/node-$NODE_VERSION"
+          mkdir -p "$TOOLS"
+          ARCH="linux-x64"
+          if [ -x "$DEST/bin/node" ]; then
+            echo "Node already present: $("$DEST/bin/node" --version) at $DEST"
+          else
+            TMP="$(mktemp -d)"
+            URL="https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-$ARCH.tar.xz"
+            echo "Downloading $URL"
+            curl -fsSL --max-time 600 "$URL" -o "$TMP/node.tar.xz"
+            curl -fsSL --max-time 120 "https://nodejs.org/dist/$NODE_VERSION/SHASUMS256.txt" -o "$TMP/SHASUMS256.txt"
+            ( cd "$TMP" && grep " node-$NODE_VERSION-$ARCH.tar.xz\$" SHASUMS256.txt | sha256sum -c - )
+            tar -xJf "$TMP/node.tar.xz" -C "$TMP"
+            rm -rf "$DEST"
+            mv "$TMP/node-$NODE_VERSION-$ARCH" "$DEST"
+            rm -rf "$TMP"
+            echo "Installed $("$DEST/bin/node" --version) at $DEST"
+          fi
+          ln -sfn "$DEST" "$TOOLS/node"
+          echo "~/tools/node -> $(readlink "$TOOLS/node")"
+          "$TOOLS/node/bin/node" --version
+
+      - name: Write the on-machine runtime env file
+        run: |
+          set -euo pipefail
+          # Derive the runtime environment from the RUNNING app container - the
+          # same source of truth every other job uses - so credentials are not
+          # hand-copied. The only rewrite is the database host: inside the
+          # container it is the compose service `db`, for the host runtime it is
+          # the loopback port the database publishes.
+          ALLOW='^(NODE_ENV|DATABASE_URL|NEXTAUTH_URL|NEXTAUTH_SECRET|NEXT_PUBLIC_APP_URL|NEXT_TELEMETRY_DISABLED|NODEMAILER_HOST|NODEMAILER_PORT|NODEMAILER_USER|NODEMAILER_PASSWORD|NODEMAILER_SECURE)='
+          if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+            docker exec "$APP_CONTAINER" printenv \
+              | grep -E "$ALLOW" \
+              | sed 's#@db:5432#@127.0.0.1:5432#' > "$ENV_FILE.tmp"
+          elif [ -f "$ENV_FILE" ]; then
+            echo "$APP_CONTAINER is gone - keeping the existing $ENV_FILE."
+            cp "$ENV_FILE" "$ENV_FILE.tmp"
+          else
+            echo "::error::cannot determine the runtime environment (no $APP_CONTAINER, no $ENV_FILE)"
+            exit 1
+          fi
+          chmod 600 "$ENV_FILE.tmp"
+          mv "$ENV_FILE.tmp" "$ENV_FILE"
+          echo "Wrote $ENV_FILE (mode 600). Keys present:"
+          sed -E 's/=.*/=<set>/' "$ENV_FILE" | sort
+
+      - name: Write and enable the systemd user unit
+        run: |
+          set -euo pipefail
+          UNIT_DIR="$HOME/.config/systemd/user"
+          mkdir -p "$UNIT_DIR"
+          NODE_BIN="$HOME/tools/node/bin/node"
+          cat > "$UNIT_DIR/$UNIT_NAME" <<UNIT
+          [Unit]
+          Description=CatchLogX production server (immutable standalone release, #143)
+          Documentation=https://github.com/georgernstgraf/CatchLogX
+
+          [Service]
+          # Runs the release published by the deploy job: ~/current points at
+          # ~/releases/<sha>/ and is swapped atomically before the restart. The
+          # running server never builds. PORT/HOSTNAME keep the port the interim
+          # container published, so nothing upstream changes.
+          WorkingDirectory=%h/current
+          EnvironmentFile=$ENV_FILE
+          Environment=NODE_ENV=production
+          Environment=PORT=3001
+          Environment=HOSTNAME=127.0.0.1
+          ExecStart=$NODE_BIN %h/current/server.js
+          Restart=on-failure
+          RestartSec=5
+          KillMode=mixed
+          TimeoutStopSec=30
+
+          [Install]
+          WantedBy=default.target
+          UNIT
+          systemctl --user daemon-reload
+          systemctl --user enable "$UNIT_NAME"
+          if [ -e "$HOME/current/server.js" ]; then
+            systemctl --user restart "$UNIT_NAME"
+            echo "Restarted $UNIT_NAME against the existing release."
+          else
+            echo "No release yet (~/current/server.js missing) - the unit is enabled and starts with the first deploy."
+          fi
+
+      - name: Verify (one unit, no port race, linger)
+        run: |
+          set -euo pipefail
+          echo "=== is-enabled ==="
+          systemctl --user is-enabled "$UNIT_NAME" || true
+          echo "=== unit file ==="
+          systemctl --user cat "$UNIT_NAME"
+          echo "=== status ==="
+          systemctl --user --no-pager status "$UNIT_NAME" || true
+
+          # Exactly one unit may own the app and its port (the dev-instance
+          # lesson: two units racing for a port cause an EADDRINUSE loop).
+          UNIT_DIR="$HOME/.config/systemd/user"
+          COMPETING="$(grep -lE 'server\.js|PORT=3001' "$UNIT_DIR"/*.service 2>/dev/null | grep -v "/$UNIT_NAME\$" || true)"
+          if [ -n "$COMPETING" ]; then
+            echo "::error::another user unit also targets the app or its port: $COMPETING"
+            exit 1
+          fi
+          echo "Exactly one unit ($UNIT_NAME) targets the app and its port."
+
+          if loginctl show-user "$(id -un)" 2>/dev/null | grep -q '^Linger=yes'; then
+            echo "linger is enabled - the unit survives logout and starts on boot."
+          else
+            echo "::warning::linger is NOT enabled - the unit will not survive logout/reboot. On-site: sudo loginctl enable-linger $(id -un)"
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          set +e
+          {
+            echo "## Immutable-release topology provisioned (#143)"
+            echo ""
+            echo "- Node runtime: \`$HOME/tools/node-$NODE_VERSION\` (\`~/tools/node\`)"
+            echo "- Runtime env file: \`$ENV_FILE\` (mode 600, lives on the machine, not in the repo)"
+            echo "- Unit: \`$UNIT_NAME\` (\`node ~/current/server.js\`, 127.0.0.1:3001)"
+            echo "- Linger: \`$(loginctl show-user "$(id -un)" 2>/dev/null | grep -i '^Linger=' || echo '?')\`"
+            echo ""
+            echo "Next: dispatch a release deploy. The app container is retired there and the unit starts."
+            echo ""
+            echo "Secret rotation (deferred, #122): edit \`$ENV_FILE\` (and the PG password), then"
+            echo "\`systemctl --user restart $UNIT_NAME\` - no rebuild."
+          } >> "$GITHUB_STEP_SUMMARY"

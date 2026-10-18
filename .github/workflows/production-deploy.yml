@@ -1,40 +1,38 @@
 name: Deploy CatchLogX
 
-# INTERIM, MANUAL production deploy (#142).
+# INTERIM, MANUAL production deploy (#142 -> #143).
 #
-# This is the deploy path for the window between the one-time cutover (#141)
-# and the immutable-release topology (#143) / gated pipeline (#144). It ships a
-# deliberately chosen `master` commit to Martin's BOKU machine through that
-# machine's own self-hosted runner (there is no SSH or tunnel access by
-# decision, #115). It is DELETED together with this workflow once #143 and
-# #144 have landed.
+# This is the deploy path for the window between the immutable-release topology
+# (#143) and the gated pipeline (#144). It ships a deliberately chosen `master`
+# commit to Martin's BOKU machine through that machine's own self-hosted runner
+# (there is no SSH or tunnel access by decision, #115). It is DELETED together
+# with this workflow once #143 and #144 have landed.
+#
+# Topology on the machine since #143:
+#   * the app is a systemd USER unit (`catchlogx.service` -> `node
+#     ~/current/server.js`), NOT a container - provisioned by the
+#     `release-topology` job of production-maintenance.yml;
+#   * a deploy BUILDS ONCE here (native glibc Node, matching the runtime - never
+#     an alpine container build, whose musl bcrypt/Prisma binaries would not run
+#     on the host's glibc node), publishes `~/releases/<sha>/`, atomically swaps
+#     `~/current`, and restarts the unit. No build happens on restart;
+#   * a rollback re-dispatches this same workflow with the previous `master`
+#     commit; the previous release may still be on disk, but re-publishing is
+#     the deterministic path.
 #
 # It is `workflow_dispatch` ONLY. The push trigger is deliberately absent until
-# the gated pipeline (#144) restores it - a push to `master` must not be able to
-# reach production while the topology is still interim. (And because
-# `workflow_dispatch` needs the file on the default branch, this workflow only
-# becomes dispatchable after the `dev` -> `master` merge, see PITFALLS.md.)
-#
-# Safety properties, in order:
+# #144 restores it. Safety properties, in order:
 #   * the requested ref must be reachable from `master` - only master commits
 #     may reach production;
-#   * an ADOPTED-SCHEMA GUARD runs as the first thing that touches the machine:
-#     it refuses to deploy while production is still on the legacy
-#     `prisma db push` schema. NEVER dispatch this before the cutover (#141)
-#     has run - `prisma migrate deploy` against the db-push database would take
-#     production down;
-#   * the build happens ONCE in this job, in a one-shot container of the same
-#     image the app uses. Starting the app container never rebuilds - that is
-#     what docker-compose.prod.yml and the shared clx_node_modules volume are
-#     for;
-#   * the app is stopped before that build, because the build rewrites the
-#     `node_modules`/`.next` the running container serves from. That is a
-#     deliberate, brief downtime; it disappears with the immutable-release
-#     topology (#143). A failure therefore leaves the app stopped, and the
-#     recovery is the rollback below.
+#   * the ADOPTED-SCHEMA GUARD runs as the first thing that touches the machine:
+#     it refuses to deploy while production is still on the legacy `prisma db
+#     push` schema;
+#   * the runtime env file must exist (created by #143's `release-topology`);
+#   * the interim app container, if it still exists, is retired right before the
+#     unit starts, so exactly one process owns port 3001.
 #
-# Rollback: re-dispatch this same workflow with `ref` set to the previous
-# master commit. The deploy is idempotent and re-runnable:
+# Rollback: re-dispatch this workflow with `ref` set to the previous master
+# commit:
 #   gh workflow run production-deploy.yml --ref master -f ref=<previous-master-commit>
 # The same recipe is printed in the job summary and documented in
 # docs/ai/ARCHITECTURE.md.
@@ -52,11 +50,12 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  REPO_DIR: /opt/CatchLogX
+  ENV_FILE: /opt/CatchLogX/.env
   APP_CONTAINER: clx-web
   PG_CONTAINER: clx-postgres
   PG_USER: clxadmin
   PG_DB: clx
+  UNIT_NAME: catchlogx.service
 
 jobs:
   deploy:
@@ -87,9 +86,11 @@ jobs:
           echo "DEPLOY_SHA=$SHA" >> "$GITHUB_ENV"
           echo "Deploying commit $SHA (requested ref: $REQUESTED_REF)"
 
+      # Same major as the runtime node installed by #143's release-topology
+      # (`~/tools/node-v22...`). Build and runtime MUST share the platform.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -109,13 +110,16 @@ jobs:
           set -euo pipefail
           docker inspect "$PG_CONTAINER" >/dev/null || { echo "::error::$PG_CONTAINER not found - is production running?"; exit 1; }
 
-          # Resolve the production database URL exactly like the maintenance
-          # job: the running app container is the source of truth. Rewrite the
-          # compose service host `db` to the loopback port it is published on.
-          if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+          # The on-machine env file is the source of truth since #143; fall back
+          # to the running container, then to the secret.
+          if [ -f "$ENV_FILE" ]; then
+            URL="$(grep -E '^DATABASE_URL=' "$ENV_FILE" | head -n1 | cut -d= -f2-)"
+          fi
+          if [ -z "${URL:-}" ] && docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
             URL="$(docker exec "$APP_CONTAINER" printenv DATABASE_URL)"
             URL="${URL/@db:5432/@127.0.0.1:5432}"
-          else
+          fi
+          if [ -z "${URL:-}" ]; then
             URL="$FALLBACK_URL"
           fi
           if [ -z "${URL:-}" ]; then
@@ -151,126 +155,68 @@ jobs:
           fi
           echo "Production is on the adopted, migration-tracked schema (baseline recorded)."
 
-      # Step a: the container runs FROM the on-machine checkout, so it must be
-      # at the requested commit before anything is built.
-      - name: Update the machine checkout
+      # `next build` inlines NEXT_PUBLIC_* and needs the app's env, exactly as
+      # the dev-instance deploy does. The env file lives on the machine (#143).
+      - name: Provide the runtime environment to the build
         run: |
           set -euo pipefail
-          cd "$REPO_DIR"
-          git fetch origin master
-          git reset --hard "$DEPLOY_SHA"
-          echo "Checkout at $REPO_DIR is now $(git rev-parse --short HEAD)"
-
-      # The build container below must mount the very volume the app service
-      # mounts. Compose prefixes a volume key with the project name, so the
-      # real Docker volume name is resolved from the merged config rather than
-      # assumed - and the job fails clearly if it cannot be determined, instead
-      # of silently creating a second volume the app will never mount.
-      - name: Resolve the shared node_modules volume
-        run: |
-          set -euo pipefail
-          cd "$REPO_DIR"
-          if ! CFG="$(docker compose -f docker-compose.yml -f docker-compose.prod.yml config)"; then
-            echo "::error::the production compose files do not render - refusing to build"
+          if [ ! -f "$ENV_FILE" ]; then
+            echo "::error::$ENV_FILE is missing - run the release-topology job (#143) first"
             exit 1
           fi
-          VOL="$(printf '%s\n' "$CFG" | awk '
-            /^volumes:/ { in_volumes = 1; next }
-            in_volumes && /^[^[:space:]]/ { in_volumes = 0 }
-            in_volumes && $1 == "clx_node_modules:" { found_key = 1; next }
-            found_key && /^[[:space:]]+name:/ { print $2; exit }
-          ')"
-          if [ -z "$VOL" ]; then
-            echo "::error::could not determine the clx_node_modules volume name from the compose config"
-            exit 1
-          fi
-          # The app service mounts the compose key `clx_node_modules`, which
-          # resolves to the volume name we just extracted.
-          if ! printf '%s\n' "$CFG" | grep -q 'source: clx_node_modules'; then
-            echo "::error::the app service does not mount clx_node_modules - refusing to build"
-            exit 1
-          fi
-          echo "NODE_MODULES_VOLUME=$VOL" >> "$GITHUB_ENV"
-          echo "Shared node_modules volume: $VOL"
+          cp "$ENV_FILE" .env
+          echo "Copied $ENV_FILE into the workspace (mode $(stat -c%a "$ENV_FILE"))."
 
-      # The app is stopped BEFORE the build on purpose. The build (`npm ci`,
-      # `prisma generate`, `next build`) rewrites the very `node_modules` and
-      # `.next` the running container serves from, so building over a live app
-      # would leave it erroring for the whole build. A deliberate, brief
-      # downtime is the honest interim tradeoff; the immutable-release topology
-      # (#143) removes it by building into a new release and only repointing
-      # `current`.
-      - name: Stop the app before building
-        run: |
-          set -euo pipefail
-          if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
-            docker stop "$APP_CONTAINER"
-            echo "$APP_CONTAINER stopped - the build must not race a live app."
-          else
-            echo "$APP_CONTAINER was not running."
-          fi
+      - name: Build (standalone)
+        run: npm run build
 
-      # Step b: build once, in the job. A one-shot container of the SAME image
-      # and with the SAME mounts the app will have (the bind mount plus the
-      # shared clx_node_modules volume), so nothing is installed twice and
-      # there is no alpine/glibc mismatch. `prisma generate` must run here
-      # because the app container no longer does it; the build needs no
-      # database connection.
-      - name: Build once in the deploy job
-        run: |
-          set -euo pipefail
-          cd "$REPO_DIR"
-          docker run --rm \
-            -v "$REPO_DIR:/app" \
-            -v "$NODE_MODULES_VOLUME:/app/node_modules" \
-            -w /app \
-            node:20-alpine \
-            sh -c 'set -e; npm ci --include=dev || npm install --include=dev; npx prisma generate; npm run build'
-
-      # Step c: apply pending migrations in the job, NOT in the container.
+      # Apply pending migrations in the job, NOT in any container.
       - name: Apply pending migrations
         env:
           DATABASE_URL: ${{ env.PROD_DATABASE_URL }}
+        run: npx prisma migrate deploy
+
+      # Publish the immutable release and atomically repoint ~/current (last
+      # step of the script). The previous release stays on disk for a rollback.
+      - name: Publish the release
+        run: ./scripts/publish-release.sh "$DEPLOY_SHA"
+
+      # The systemd unit owns the app and port 3001 from here. The interim
+      # container (present until the first #143 deploy) must not race it.
+      # Idempotent - absent on every deploy after the first.
+      - name: Retire the interim app container
         run: |
           set -euo pipefail
-          npx prisma migrate deploy
+          if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+            docker update --restart=no "$APP_CONTAINER"
+            docker stop "$APP_CONTAINER"
+            docker rm "$APP_CONTAINER"
+            echo "Removed $APP_CONTAINER - the systemd unit owns the app now."
+          else
+            echo "$APP_CONTAINER is already gone."
+          fi
 
-      # Step d: bring the stack up. No `--build` - the build already happened
-      # above and starting the container must not rebuild. The legacy MinIO
-      # containers may survive the cutover as orphans on this machine; they are
-      # intentionally left alone (decommissioning is #122's job), so we
-      # deliberately do NOT pass `--remove-orphans`. Compose may warn about
-      # those orphans - that warning is expected and left visible.
-      - name: Bring the stack up
-        run: |
-          set -euo pipefail
-          cd "$REPO_DIR"
-          docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+      - name: Restart the service
+        run: systemctl --user restart "$UNIT_NAME"
 
-      # Step e: health check. The build already happened, so this only waits
-      # for `next start` to bind - a generous budget, but a failed container is
-      # fail-fast.
+      # The build already happened, so this only waits for `node` to bind. A
+      # generous budget, but a failed unit is fail-fast.
       - name: Health check
         run: |
           set -euo pipefail
           for attempt in $(seq 1 30); do
-            STATUS="$(docker inspect -f '{{.State.Status}}' "$APP_CONTAINER" 2>/dev/null || echo missing)"
-            if [ "$STATUS" = "exited" ] || [ "$STATUS" = "dead" ]; then
-              echo "::error::$APP_CONTAINER exited before becoming healthy"
-              docker logs --tail 50 "$APP_CONTAINER" || true
-              exit 1
-            fi
-            if [ "$STATUS" = "running" ] && curl -fsS -o /dev/null http://127.0.0.1:3001/; then
+            if curl -fsS -o /dev/null http://127.0.0.1:3001/; then
               echo "Production is healthy (attempt $attempt)."
               exit 0
             fi
             sleep 2
           done
-          echo "::error::health check failed - $APP_CONTAINER did not respond on 127.0.0.1:3001"
-          docker logs --tail 100 "$APP_CONTAINER" || true
+          echo "::error::health check failed - $UNIT_NAME did not answer on 127.0.0.1:3001"
+          systemctl --user --no-pager status "$UNIT_NAME" || true
+          journalctl --user -u "$UNIT_NAME" -n 100 --no-pager || true
           exit 1
 
-      # Step f: report the deployed commit and the rollback recipe.
+      # Report the deployed commit and the rollback recipe.
       - name: Report the deployed commit
         env:
           REQUESTED_REF: ${{ inputs.ref }}
@@ -280,6 +226,7 @@ jobs:
             echo "### Deployed commit"
             echo ""
             echo "- \`$DEPLOY_SHA\` (requested ref: \`$REQUESTED_REF\`)"
+            echo "- Release: \`$(readlink -f "$HOME/current" 2>/dev/null || echo '?')\`"
             echo "- Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
             echo ""
             echo "**Rollback:** re-dispatch this workflow with \`ref\` set to the previous master commit -"
@@ -291,18 +238,17 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           echo "Deployed commit: $DEPLOY_SHA"
 
-      # A failure anywhere leaves the app stopped, because it is stopped before
-      # the build and only started again at the end. The recovery is the same
-      # as the rollback: redeploy the previous master commit.
+      # A failure after the restart leaves the unit down; the previous release
+      # is still on disk, but re-publishing is the deterministic recovery.
       - name: Failure - report the state and the recovery
         if: failure()
         run: |
           set +e
-          STATUS="$(docker inspect -f '{{.State.Status}}' "$APP_CONTAINER" 2>/dev/null || echo missing)"
           {
             echo "## Production deploy FAILED"
             echo ""
-            echo "- App container \`$APP_CONTAINER\`: \`$STATUS\` (it is stopped before the build, so a failure normally leaves it down)"
+            echo "- Unit \`$UNIT_NAME\`: \`$(systemctl --user is-active "$UNIT_NAME" 2>/dev/null || echo unknown)\`"
+            echo "- \`~/current\` -> \`$(readlink -f "$HOME/current" 2>/dev/null || echo '<none>')\`"
             echo "- Requested ref: \`${{ inputs.ref }}\`"
             echo ""
             echo "**Recovery:** re-dispatch this workflow with the previous master commit -"
@@ -315,4 +261,4 @@ jobs:
             echo "Do not run the db-push-era code and do not hand-edit the schema: production"
             echo "is migration-tracked since the cutover (#141)."
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "Deploy failed - app status: $STATUS. Recovery: re-dispatch with the previous master commit."
+          echo "Deploy failed - unit state: $(systemctl --user is-active "$UNIT_NAME" 2>/dev/null || echo unknown). Recovery: re-dispatch with the previous master commit."
