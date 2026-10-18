@@ -63,6 +63,25 @@ jobs:
     runs-on: [self-hosted, boku]
 
     steps:
+      # The runner is a SYSTEM service with no logind session: point it at the
+      # user systemd manager (linger is enabled by the release-topology job,
+      # #143) and refuse early if it is not reachable.
+      - name: Point at the user systemd manager
+        run: |
+          set -euo pipefail
+          RUNDIR="/run/user/$(id -u)"
+          echo "XDG_RUNTIME_DIR=$RUNDIR" >> "$GITHUB_ENV"
+          echo "DBUS_SESSION_BUS_ADDRESS=unix:path=$RUNDIR/bus" >> "$GITHUB_ENV"
+          export XDG_RUNTIME_DIR="$RUNDIR"
+          export DBUS_SESSION_BUS_ADDRESS="unix:path=$RUNDIR/bus"
+          case "$(systemctl --user is-system-running 2>/dev/null || true)" in
+            running|degraded) echo "User systemd manager reachable." ;;
+            *)
+              echo "::error::no systemd user manager - run the release-topology job (#143) first (or 'sudo loginctl enable-linger $(id -un)' on-site)"
+              exit 1
+              ;;
+          esac
+
       - name: Check out the requested ref
         uses: actions/checkout@v4
         with:

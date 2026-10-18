@@ -532,6 +532,15 @@ jobs:
     runs-on: [self-hosted, boku]
 
     steps:
+      # The runner is a SYSTEM service and therefore has no logind session: a
+      # user systemd manager only exists with linger enabled, and even then
+      # `systemctl --user` needs these two variables to find it.
+      - name: Point at the user systemd manager
+        run: |
+          set -euo pipefail
+          echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
+          echo "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus" >> "$GITHUB_ENV"
+
       - name: Survey
         run: |
           set +e
@@ -1314,6 +1323,48 @@ jobs:
           fi
           echo "Confirmation accepted."
 
+      # The runner is a SYSTEM service (actions.runner.*.service) with no logind
+      # session, so a `systemd --user` manager only exists once linger is enabled
+      # (`loginctl enable-linger clxadmin`). This step points the job at that
+      # manager and, if it is missing, tries to enable linger non-interactively;
+      # if sudo needs a password it stops with the exact on-site command.
+      - name: Locate the user systemd manager
+        run: |
+          set -euo pipefail
+          RUNDIR="/run/user/$(id -u)"
+          echo "XDG_RUNTIME_DIR=$RUNDIR" >> "$GITHUB_ENV"
+          echo "DBUS_SESSION_BUS_ADDRESS=unix:path=$RUNDIR/bus" >> "$GITHUB_ENV"
+          export XDG_RUNTIME_DIR="$RUNDIR"
+          export DBUS_SESSION_BUS_ADDRESS="unix:path=$RUNDIR/bus"
+
+          reachable() {
+            case "$(systemctl --user is-system-running 2>/dev/null || true)" in
+              running|degraded) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          if reachable; then
+            echo "systemd user manager is reachable ($(systemctl --user is-system-running 2>/dev/null))."
+            exit 0
+          fi
+
+          echo "No user manager yet - trying to enable linger for $(id -un)."
+          if sudo -n loginctl enable-linger "$(id -un)" 2>/dev/null; then
+            echo "Linger enabled."
+          else
+            echo "::warning::could not enable linger non-interactively (sudo needs a password?)"
+          fi
+          for _ in $(seq 1 20); do
+            if reachable; then
+              echo "systemd user manager is up."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::no systemd user manager for '$(id -un)'. On-site run:  sudo loginctl enable-linger $(id -un)   then re-dispatch this job."
+          exit 1
+
       - name: Preconditions
         run: |
           set -euo pipefail
@@ -1325,18 +1376,6 @@ jobs:
             echo "::error::production is not on the adopted schema yet - run the cutover (#141) first"
             exit 1
           fi
-
-          # The runtime needs a reachable systemd user manager. `degraded` is
-          # acceptable (some unrelated unit may have failed); anything else is
-          # not, and enabling the manager/linger needs sudo on-site.
-          STATE="$(systemctl --user is-system-running 2>&1 || true)"
-          case "$STATE" in
-            running|degraded) echo "systemd user manager is $STATE." ;;
-            *)
-              echo "::error::no usable systemd user manager for '$(id -un)' (state: ${STATE:-unknown}). On-site run 'sudo loginctl enable-linger $(id -un)', then re-dispatch."
-              exit 1
-              ;;
-          esac
 
           if [ ! -w "$REPO_DIR" ]; then
             echo "::error::$REPO_DIR is not writable by $(id -un) - cannot place the runtime env file"
@@ -1409,13 +1448,14 @@ jobs:
           [Service]
           # Runs the release published by the deploy job: ~/current points at
           # ~/releases/<sha>/ and is swapped atomically before the restart. The
-          # running server never builds. PORT/HOSTNAME keep the port the interim
-          # container published, so nothing upstream changes.
+          # running server never builds. HOSTNAME=0.0.0.0 keeps the exposure the
+          # interim container had (it published 3001 on all interfaces), so
+          # nothing upstream changes; PORT stays 3001.
           WorkingDirectory=%h/current
           EnvironmentFile=$ENV_FILE
           Environment=NODE_ENV=production
           Environment=PORT=3001
-          Environment=HOSTNAME=127.0.0.1
+          Environment=HOSTNAME=0.0.0.0
           ExecStart=$NODE_BIN %h/current/server.js
           Restart=on-failure
           RestartSec=5
@@ -1454,7 +1494,7 @@ jobs:
           fi
           echo "Exactly one unit ($UNIT_NAME) targets the app and its port."
 
-          if loginctl show-user "$(id -un)" 2>/dev/null | grep -q '^Linger=yes'; then
+          if [ -e "/var/lib/systemd/linger/$(id -un)" ] || [ "$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null)" = "yes" ]; then
             echo "linger is enabled - the unit survives logout and starts on boot."
           else
             echo "::warning::linger is NOT enabled - the unit will not survive logout/reboot. On-site: sudo loginctl enable-linger $(id -un)"
@@ -1470,7 +1510,7 @@ jobs:
             echo "- Node runtime: \`$HOME/tools/node-$NODE_VERSION\` (\`~/tools/node\`)"
             echo "- Runtime env file: \`$ENV_FILE\` (mode 600, lives on the machine, not in the repo)"
             echo "- Unit: \`$UNIT_NAME\` (\`node ~/current/server.js\`, 127.0.0.1:3001)"
-            echo "- Linger: \`$(loginctl show-user "$(id -un)" 2>/dev/null | grep -i '^Linger=' || echo '?')\`"
+            echo "- Linger: \`$( [ -e "/var/lib/systemd/linger/$(id -un)" ] && echo yes || echo 'no/unknown' )\`"
             echo ""
             echo "Next: dispatch a release deploy. The app container is retired there and the unit starts."
             echo ""
