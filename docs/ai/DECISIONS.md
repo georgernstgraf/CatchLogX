@@ -13,7 +13,7 @@ Each entry documents WHAT was decided and WHY.
 - **Choice**: Prisma generator outputs to `../app/generated/prisma` instead of the default `node_modules/.prisma/client`
 - **Reason**: Bundles the generated client with the app code, avoids node_modules resolution quirks in Next.js
 - **Considered**: Default output path
-- **Tradeoff**: Must run `npx prisma generate` manually after schema changes; import path is relative (`"../app/generated/prisma"`) not via `@prisma/client`
+- **Tradeoff**: Must run the client regeneration after schema changes; import path is relative (`"../app/generated/prisma"`) not via `@prisma/client`. Since #151 the regeneration runs automatically on `npm install` (`postinstall`) and is wrapped as `npm run prisma:generate`
 
 ## 2026-04-27: PostgreSQL Over SQLite
 - **Choice**: Migrated database from SQLite to PostgreSQL 16

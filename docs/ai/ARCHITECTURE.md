@@ -148,7 +148,7 @@ Admin API route (server + edge)
 ## Startup Order
 1. `docker compose up -d db` (PostgreSQL 16)
 2. Set `DATABASE_URL` and `SHADOW_DATABASE_URL` in `.env`
-3. `npx prisma generate`
-4. `npx prisma migrate deploy`
+3. `npm run prisma:generate`
+4. `npm run prisma:deploy`
 5. `npm run create-user` (optional: + seed scripts)
 6. `npm run dev`
