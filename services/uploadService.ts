@@ -742,13 +742,8 @@ export async function processBulkUpload(
   });
 
   crossFilePitCheck(validated);
-
-  const hasErrors = validated.some(
-    (file) => file.structuralError || file.errors.length > 0,
-  );
-  if (!hasErrors) {
-    await applyDbPitChecks(validated);
-  }
+  // Runs regardless of other errors so PIT conflicts are reported in the same round (#102).
+  await applyDbPitChecks(validated);
 
   const report = validated.map(buildFileReport);
 

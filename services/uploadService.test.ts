@@ -354,14 +354,25 @@ describe("processBulkUpload", () => {
     expect(Object.keys(zip.files)).toEqual(["bad.xlsx"]);
   });
 
-  it("skips the database PIT check while the bulk has errors", async () => {
+    it("runs the database PIT check even when the bulk has other errors (#102)", async () => {
+    vi.mocked(prisma.fishCatch.findFirst).mockResolvedValue({
+      species: { speciesName: "Pike" },
+    } as any);
+
     const files = [
       { fileName: "bad.xlsx", buffer: dataFile([{ ...validRow, year: 1800, pit_dec: "123" }]) },
     ];
 
-    await processBulkUpload(files, "u1");
+    const result = await processBulkUpload(files, "u1");
 
-    expect(prisma.fishCatch.findFirst).not.toHaveBeenCalled();
+    expect(prisma.fishCatch.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { pitDec: "123", recapture: false } }),
+    );
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(
+      result.report[0].errors.some((e) => /already exists.*\(Pike\)/.test(e.message)),
+    ).toBe(true);
   });
 
   it("flags a PIT DEC shared across two files with different species", async () => {
