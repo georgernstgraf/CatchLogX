@@ -1,0 +1,16 @@
+[
+    {
+        "id": 1,
+        "speciesName": "Abramis brama",
+        "germanName": "Brachse",
+        "latinName": "Abramis brama",
+        "family": "Cyprinidae"
+    },
+    {
+        "id": 2,
+        "speciesName": "Abramis brama hybrid",
+        "germanName": "Brachsen-Hybrid",
+        "latinName": "Abramis brama hybrid",
+        "family": "Cyprinidae"
+    }
+]
