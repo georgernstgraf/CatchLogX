@@ -56,7 +56,11 @@ sind weg (9000/9001 zu, Volume bleibt). Details, Runs und Entscheidungen:
     unter `~/catchlogx-backups/` sind manuell/Job-erzeugt, kein Zeitplan);
     Entscheidung zum Vorgänger-Runner `catchlogx-server` umsetzen (er ist weiter
     der einzige Prod-Pfad).
-13. [ ] See `CatchLogX-Data#2` — Zugriffsrechte der Diplomgruppe (Write akzeptiert,
+13. [ ] **#165 TLS vor Port 80** — seit #164 läuft der öffentliche Verkehr über
+    HTTP; Login-Passwörter sind im BOKUnet im Klartext. Zertifikatsweg mit der OE
+    klären, `:80`→`https` umleiten, `NEXT_PUBLIC_APP_URL` umstellen (Rebuild) und
+    das Session-Cookie auf `secure: true` setzen.
+14. [ ] See `CatchLogX-Data#2` — Zugriffsrechte der Diplomgruppe (Write akzeptiert,
     Decision D007); `README.md` und `docs/ai/STATE.md` im Datenrepo nachziehen.
 
 Kontext: Das Epic #125 bleibt offen, solange `CatchLogX-Data#2` offen ist. Vom
