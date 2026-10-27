@@ -1,0 +1,23 @@
+[Unit]
+Description=CatchLogX production server (immutable standalone release, #143)
+Documentation=https://github.com/georgernstgraf/CatchLogX
+
+[Service]
+# Runs the release published by the deploy job: ~/current points at
+# ~/releases/<sha>/ and is swapped atomically before the restart. The
+# running server never builds. HOSTNAME=127.0.0.1 since #164: the app is no
+# longer reachable from the network - nginx on :80 proxies to it, and the
+# former public URL on port 3001 redirects to :80. PORT stays 3001.
+WorkingDirectory=%h/current
+EnvironmentFile=/opt/CatchLogX/.env
+Environment=NODE_ENV=production
+Environment=PORT=3001
+Environment=HOSTNAME=127.0.0.1
+ExecStart=/home/clxadmin/tools/node/bin/node %h/current/server.js
+Restart=on-failure
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

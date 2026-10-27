@@ -29,6 +29,11 @@ mkdir -p "$REL/.next"
 # Standalone bundle: server.js + traced node_modules + .next server files.
 cp -a "$ROOT/.next/standalone/." "$REL/"
 
+# #162: never ship the runtime env into an immutable release. `next build`
+# copies the workspace .env into .next/standalone/, so it would land here and
+# leave secrets (and a stale DB password after a rotation) in every release.
+rm -f "$REL/.env"
+
 # Static assets are not part of the standalone bundle and must be copied in.
 cp -a "$ROOT/.next/static" "$REL/.next/static"
 if [ -d "$ROOT/public" ]; then

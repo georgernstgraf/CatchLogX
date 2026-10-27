@@ -1,0 +1,43 @@
+# CatchLogX production vhost (#164). The app itself only listens on
+# 127.0.0.1:3001; these two server blocks are the only public entry points:
+#   * :80    -> reverse proxy to the app (the canonical URL)
+#   * :3001  -> 301 to the same host on port 80 (bookmarks from before #164)
+#
+# The :3001 listener is bound to the public address on purpose: the app owns
+# 127.0.0.1:3001, and 0.0.0.0:3001 would collide with it (EADDRINUSE).
+server {
+    listen 141.244.222.191:3001;
+    server_name 141.244.222.191;
+
+    access_log /var/log/nginx/catchlogx-3001.access.log;
+
+    # $host is the request host without the port, so this lands on :80.
+    return 301 http://$host$request_uri;
+}
+
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name 141.244.222.191;
+
+    access_log /var/log/nginx/catchlogx.access.log;
+    error_log  /var/log/nginx/catchlogx.error.log;
+
+    # #132: bulk uploads are allowed up to 500 MiB in the app; nginx must not
+    # reject them first (default is 1m -> 413 before the app ever sees them).
+    client_max_body_size 550m;
+
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        # A 247k-row workbook takes ~30-80 s to parse server-side (#132).
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+}

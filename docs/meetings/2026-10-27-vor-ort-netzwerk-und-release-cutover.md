@@ -1,6 +1,17 @@
 # Vor-Ort-Fenster BOKU-Server — Netzwerk, Upgrades und Release-Cutover — 2026-10-27
 
-Zweites Vor-Ort-Fenster am Produktionsrechner (`catchlogx-server`, 141.244.223.9).
+> **Nachtrag (2026-10-27, nach dem Fenster — #164):** Die in diesem Protokoll
+> genannte Adresse `.9` ist **falsch**. Die zugewiesene Adresse ist
+> **`141.244.222.191`**; `.9` wurde beim statischen Pinnen versehentlich gesetzt
+> und am selben Tag korrigiert (netplan, `/opt/CatchLogX/.env`, Doku). Die
+> Konfigurationswerte unten sind bereits nachgezogen; die Schilderung des
+> DHCP-Vorfalls bleibt historisch. Der Rechner steht seit #164 zusätzlich hinter
+> nginx: die App bindet nur noch `127.0.0.1:3001`, öffentlich ist
+> `http://141.244.222.191` (Port 80), und die alte `:3001`-URL leitet per 301
+> dorthin um. Der DHCP-Ausschluss bei BOKU-IT betrifft jetzt `.191`; `.9` ist
+> wieder frei. Details: `docs/ai/DECISIONS.md` (2026-10-27) und `deploy/prod/`.
+
+Zweites Vor-Ort-Fenster am Produktionsrechner (`catchlogx-server`, 141.244.222.191).
 Zweck: den in #143 blockierten Immutable-Release-Cutover abschließen (Linger fehlte),
 den Rechner reboot-fest machen und die #122-Härtungsposten abarbeiten.
 Grundlage: `docs/ai/HANDOFF.md`, `docs/ai/STATE.md`, #122, #143, #150, Protokoll
@@ -17,8 +28,9 @@ Produktion lief auf `4b04e52` als Container (`clx-web`, `node:20-alpine`); #143 
 am fehlenden systemd-User-Manager hängen geblieben (`sudo loginctl enable-linger`
 braucht vor Ort ein Passwort). Der erste Reboot dieses Fensters deckte einen
 zweiten, schwereren Fehler auf: der Rechner bezog seine Adresse per **DHCP** und
-kam auf **141.244.223.17** statt `.9` zurück — alle Nutzer waren ausgesperrt,
-weil Personal und `NEXT_PUBLIC_APP_URL` auf `.9` zeigen.
+kam auf **141.244.223.17** statt der (damals fälschlich gepinnten) `.9` zurück —
+alle Nutzer waren ausgesperrt, weil Personal und `NEXT_PUBLIC_APP_URL` auf diese
+Adresse zeigen.
 
 ## Ergebnisse
 
@@ -39,7 +51,7 @@ weil Personal und `NEXT_PUBLIC_APP_URL` auf `.9` zeigen.
 ### 2. Netzwerk: kein DHCP mehr, Dienste gepinnt
 
 - Subiquity-Installation schrieb `dhcp4: true`; `/etc/netplan/00-installer-config.yaml`
-  ist jetzt statisch: `141.244.223.9/21`, Gateway `141.244.216.1`,
+  ist jetzt statisch: `141.244.222.191/21`, Gateway `141.244.216.1`,
   DNS `141.244.7.11`/`141.244.7.10`.
 - **Kein DHCP mehr** — auch der zweite NIC (`enp3s0`) ist bewusst unkonfiguriert;
   `ip -4 a` enthält 0 dynamische Adressen. Kabel gehört in `eno1` (onboard,
@@ -90,7 +102,7 @@ weil Personal und `NEXT_PUBLIC_APP_URL` auf `.9` zeigen.
   `~/tools`, `/opt/CatchLogX/.env` (mode 600) aus der laufenden `clx-web` abgeleitet
   (`READONLY_DB_PASSWORD` erhalten), `catchlogx.service` geschrieben und **enabled**,
   nicht gestartet; genau eine Unit, Linger erkannt.
-- Laufzeit-Env ergänzt: `NEXT_PUBLIC_APP_URL=http://141.244.223.9:3001` (fehlte
+- Laufzeit-Env ergänzt: `NEXT_PUBLIC_APP_URL=http://141.244.222.191` (fehlte
   komplett → Passwort-Reset-Links waren `undefined/reset-password?token=…`) und
   `NEXTAUTH_URL` von `http://localhost:3001` auf die echte Adresse korrigiert.
 
@@ -144,11 +156,11 @@ weil Personal und `NEXT_PUBLIC_APP_URL` auf `.9` zeigen.
 ### Stand nach dem Fenster
 
 Release `2546d44`, Unit `active`/`enabled`, 8 User, 18 Uploads, 3 Templates,
-21 Blobs, nur noch `clx-postgres` als Container, Boot 7,4 s, Adresse statisch `.9`.
+21 Blobs, nur noch `clx-postgres` als Container, Boot 7,4 s, Adresse statisch `.191` (korrigiert, siehe Nachtrag).
 
 ## Offene Punkte
 
-- [ ] **DHCP-Pool**: `141.244.223.9` muss für andere Hosts gesperrt werden
+- [ ] **DHCP-Pool**: `141.244.222.191` muss für andere Hosts gesperrt werden (und `.9` ist wieder freigegeben)
       (Ausschluss oder Reservierung auf MAC `c8:ff:bf:05:5e:3e`) — sonst kann ein
       anderes Gerät die Adresse bekommen. Zuständig: Martin / BOKU-IT.
 - [ ] **Mail-/Reset-Konfiguration**: `NODEMAILER_*` fehlt in der Laufzeit-Env →
@@ -182,4 +194,4 @@ Release `2546d44`, Unit `active`/`enabled`, 8 User, 18 Uploads, 3 Templates,
 - [x] #143: Linger, `release-topology`, Release-Deploy, Rollback-Drill — Georg — 2026-10-27
 - [x] Reboot-Rehearsal (Unit kommt ohne Login zurück) — Georg — 2026-10-27
 - [x] `clxadmin`-Passwort rotieren, Smoke-Account löschen, MinIO-Container entfernen — Georg — 2026-10-27
-- [ ] DHCP-Ausschluss `.9` veranlassen — Martin — offen
+- [ ] DHCP-Ausschluss `.191` veranlassen (und `.9` freigeben) — Martin — offen

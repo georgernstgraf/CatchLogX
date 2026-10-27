@@ -189,6 +189,19 @@ jobs:
       - name: Build (standalone)
         run: npm run build
 
+      # #162: the build inlines NEXT_PUBLIC_* but ALSO copies the workspace
+      # .env into .next/standalone/, which publish-release.sh would ship into
+      # every immutable release (secrets, and a stale DB password after a
+      # rotation). The unit only reads EnvironmentFile=/opt/CatchLogX/.env.
+      - name: Keep the runtime env out of the build output
+        run: |
+          set -euo pipefail
+          rm -f .env .next/standalone/.env
+          if [ -e .env ] || [ -e .next/standalone/.env ]; then
+            echo "::error::the runtime env file survived in the build output (#162)"
+            exit 1
+          fi
+
       # Apply pending migrations in the job, NOT in any container.
       - name: Apply pending migrations
         env:

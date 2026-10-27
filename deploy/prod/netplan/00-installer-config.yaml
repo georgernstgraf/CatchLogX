@@ -1,0 +1,41 @@
+# Managed by hand since 2026-10-27 (replaces the subiquity DHCP default).
+#
+# TARGET: no DHCP on this host. The address AND every service the DHCP server
+# used to hand out is pinned here as fixed configuration, so a boot cannot
+# change the address and nothing depends on a lease at boot.
+#
+# Address assigned by BOKU IT (#164). The first run on 2026-10-27 pinned .9 by
+# mistake; the correct value is .191.
+#   address    141.244.222.191/21
+#   gateway    141.244.216.1
+#   DNS        141.244.7.11, 141.244.7.10
+#   time       141.244.7.123, 141.244.3.24, 141.244.3.37  -> /etc/chrony/sources.d/10-boku.sources
+#
+# The DHCP server must NOT hand out 141.244.222.191 to another host: ask BOKU IT
+# to exclude it from the pool (or reserve it for MAC c8:ff:bf:05:5e:3e).
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    eno1:
+      match:
+        macaddress: c8:ff:bf:05:5e:3e
+      set-name: eno1
+      dhcp4: false
+      dhcp6: false
+      accept-ra: false
+      addresses:
+        - 141.244.222.191/21
+      routes:
+        - to: default
+          via: 141.244.216.1
+          metric: 100
+      nameservers:
+        addresses: [141.244.7.11, 141.244.7.10]
+    # Second NIC: present, deliberately unconfigured. A cable moved here means
+    # no connectivity - the cable belongs in eno1 (onboard, MAC ...5e:3e).
+    enp3s0:
+      dhcp4: false
+      dhcp6: false
+      accept-ra: false
+      optional: true

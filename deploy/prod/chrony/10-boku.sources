@@ -1,0 +1,7 @@
+# 2026-10-27 (#122): the DHCP lease advertised the institute's time servers
+# (option 42) but chrony never consumed them. Since the host no longer uses
+# DHCP, they are pinned here as the preferred sources; the Ubuntu NTS pools
+# from /etc/chrony/sources.d/ubuntu-ntp-pools.sources stay as fallback.
+server 141.244.7.123 iburst prefer
+server 141.244.3.24 iburst prefer
+server 141.244.3.37 iburst prefer
