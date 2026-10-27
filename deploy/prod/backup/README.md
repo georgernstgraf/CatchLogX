@@ -66,9 +66,34 @@ systemctl enable --now catchlogx-backup.timer catchlogx-backup-probe.timer
    local byte count. Skipped with a warning when `OFFSITE_URL` is empty.
 5. Prune: newest `KEEP_DAILY` sets, plus the 1st-of-month sets (up to
    `KEEP_MONTHLY`). Hand-made sets (`cutover-…`, `pre-apt-…`) are never removed.
-6. One mail: sizes, counts, off-site result, duration — or nothing but journald
-   when `MAIL_TO` is empty. Failures go through `catchlogx-alert@…` (systemd
-   `OnFailure`), which mails the journal tail of the failing unit.
+6. One report per run. By default it is delivered **locally** into
+   `/var/mail/root` (read with `mail -u root`) — the host's own mailbox, no
+   external account, no SMTP round trip. See "Reports" below. Failures go
+   through `catchlogx-alert@…` (systemd `OnFailure`), which mails the journal
+   tail of the failing unit to the same place.
+
+## Reports: the local mailbox is the default
+
+The operator does not have a mailbox to fetch mail from, so the reports stay on
+the machine:
+
+```
+backup.sh → sendmail → postfix → local(8) → /var/mail/root
+```
+
+- Read them: `mail -u root` (as root; `bsd-mailx` is installed) or
+  `less /var/mail/root`. Navigation: `1` read message 1, `d` delete, `q` quit.
+- A report nobody reads is worthless, so three cheap counterweights exist: the
+  login banner (`/etc/update-motd.d/95-catchlogx-backup`) shows backup age,
+  last probe result and the number of waiting messages; `catchlogx-backup
+  status` shows the same plus the timer state; the mailbox itself keeps the
+  narrative (sizes, counts, off-site result, duration).
+- The authenticated SMTP relay (`../postfix/`) is **not** used for these
+  reports. It exists for mail the app sends to real recipients (#160, password
+  reset). `MAIL_TO` can be pointed at an external address later without
+  touching the script — then the relay carries it.
+- The mailbox grows by a few kilobytes per day. It lives on the same disk as
+  everything else, which is fine: these are notifications, not backups.
 
 ## Monthly restore rehearsal (`catchlogx-backup probe`, 1st at 04:30 UTC)
 

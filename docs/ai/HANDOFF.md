@@ -24,9 +24,11 @@ auf die VPS, monatliche Restore-Probe am 1. um 04:30, Alarme über
 grün (Details in `STATE.md`, Code in `deploy/prod/backup/` und
 `deploy/vps/offsite-backup/`). Zusätzlich läuft ein **lokaler postfix** auf
 `127.0.0.1:25`, der authentifiziert an `mailauth.boku.ac.at:25` relayt — das BOKUnet
-lässt ausgehend nur Port 25 zu BOKUs Mailservern zu. Offen dabei: SMTP-Konto mit
-Passwort (`/root/set-mail-auth.sh`), `MAIL_TO`, und der auth-lose Zweig in
-`lib/mailer.ts` (#160).
+lässt ausgehend nur Port 25 zu BOKUs Mailservern zu (Konto `ihyam_catchlogx`,
+verifiziert). Die Backup-Berichte gehen bewusst **lokal** in `/var/mail/root`
+(`mail -u root`), nicht über den Relay; der ist für App-Mail reserviert. Offen in
+#160 bleibt nur der Code-Teil: auth-loser Zweig für `127.0.0.1:25` plus
+`NODEMAILER_FROM` in `lib/mailer.ts`, dann Reset end-to-end testen.
 
 1. [ ] **DHCP-Pool-Ausschluss für `141.244.222.191`** (Martin / BOKU-IT). Der Host
    konfiguriert sich zwar selbst statisch, aber solange die Adresse im Pool liegt,

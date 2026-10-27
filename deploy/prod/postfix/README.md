@@ -75,6 +75,12 @@ Why the individual lines matter:
 
 ## Credentials (never in this repository)
 
+**Scope:** this relay is for mail the *app* sends to real recipients (#160,
+password reset). Host reports (backups, unit failures) are delivered **locally**
+into `/var/mail/root` and never touch it — see `../backup/README.md`. Keeping
+the two apart means a broken SMTP account cannot silence the backup reports,
+and a mail outage cannot be confused with a backup outage.
+
 `/etc/postfix/sasl_passwd`, mode `600 root:root`, generated file `…​.db` mode
 `640 root:postfix`:
 
@@ -86,8 +92,11 @@ Set them on the machine with `/root/set-mail-auth.sh` (reads the password from
 the terminal, writes the file, runs `postmap`, reloads postfix). The account is
 a BOKU SMTP-auth account and its address is the sender for every message.
 
-`/etc/aliases` must forward the local root mail (cron, unit failures). A
-`No configuration` postfix install does **not** create the file:
+`/etc/aliases` must forward the local root mail (cron, unit failures) **if** it
+should leave the machine. A `No configuration` postfix install does not create
+the file. For the current setup it is deliberately empty (only comments): the
+reports stay in `/var/mail/root` instead of being relayed, because there is no
+external mailbox to read them from.
 
 ```
 root: <boku-address>
@@ -107,8 +116,10 @@ postfix/smtp[…]: Verified TLS connection established to mailauth.boku.ac.at[14
 postfix/smtp[…]: … to=<…@boku.ac.at>, relay=mailauth.boku.ac.at[141.244.187.85]:25, … status=sent (250 ok: Message … accepted)
 ```
 
-`postqueue -p` empty afterwards. The same path carried the first real backup
-report and the `catchlogx-alert@…` test mail.
+`postqueue -p` empty afterwards. The relay carried the first test mails; the
+backup and alert reports then moved to local delivery (`relay=local … delivered
+to mailbox`, `/var/mail/root`), which is the mode that runs in production — the
+external path is proven but not on the critical reporting route.
 
 ## Verify
 

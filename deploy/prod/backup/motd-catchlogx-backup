@@ -1,31 +1,53 @@
 #!/bin/sh
-# Shows the age of the newest production backup at SSH login.
+# Backup status at SSH login.
 #
-# Deliberately ugly-on-purpose: it is the cheapest way to notice "the backup
-# timer has been failing for a week" while the mail chain is still young. With
-# a working MAIL_TO this file is a backup channel, not the primary one.
+# The reports go to the local root mailbox (/var/mail/root) - no external
+# mailbox is involved, so nothing has to be fetched from anywhere. This banner
+# is the counterweight: a report nobody reads is the same as no report, so the
+# login shows (a) how old the newest backup is, (b) when the restore rehearsal
+# last succeeded, and (c) how many messages are waiting in that mailbox.
 #
 # Installed as /etc/update-motd.d/95-catchlogx-backup, mode 755 root:root.
 
 BACKUP_ROOT=/home/clxadmin/catchlogx-backups
+RED='\033[1;31m'
+DIM='\033[2m'
+OFF='\033[0m'
 
-[ -d "$BACKUP_ROOT" ] || exit 0
+[ -d "$BACKUP_ROOT" ] || { echo; echo "  ${RED}CatchLogX: kein Backup-Verzeichnis${OFF}"; echo; exit 0; }
 
 newest=$(find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d -name '20*' \
   -exec test -s '{}/db.dump' \; -printf '%T@ %f\n' 2>/dev/null \
   | sort -rn | head -n1)
 
 if [ -z "$newest" ]; then
-  printf '\n  \033[1;31mCatchLogX: keine Sicherung vorhanden\033[0m (%s)\n\n' "$BACKUP_ROOT"
+  echo
+  echo "  ${RED}CatchLogX: keine Sicherung vorhanden${OFF} ($BACKUP_ROOT)"
+  echo
   exit 0
 fi
 
 stamp=$(echo "$newest" | cut -d' ' -f2-)
 age=$(( ( $(date +%s) - $(echo "$newest" | cut -d' ' -f1 | cut -d. -f1) ) / 3600 ))
 
-if [ "$age" -le 26 ]; then
-  printf '\n  CatchLogX-Backup: %s (%s h alt)\n\n' "$stamp" "$age"
+probe=$(tr -d '\n' < "$BACKUP_ROOT/last-probe.json" 2>/dev/null \
+  | sed -n 's/.*"finishedAt": "\([^"]*\)".*"status": "\([^"]*\)".*/\1 \2/p' | head -n1)
+probe_txt="noch keine Probe"
+[ -n "$probe" ] && probe_txt="Probe $(echo "$probe" | cut -d' ' -f1 | cut -dT -f1) $(echo "$probe" | cut -d' ' -f2)"
+
+if [ -f /var/mail/root ]; then
+  mails=$(grep -c '^From ' /var/mail/root 2>/dev/null || echo 0)
+  mailbox="$mails Meldung(en) in /var/mail/root ${DIM}(lesen: mail -u root)${OFF}"
 else
-  printf '\n  \033[1;31mCatchLogX-Backup: %s ist %s h alt - Timer prüfen\033[0m\n' "$stamp" "$age"
-  printf '  systemctl list-timers catchlogx-backup*\n\n'
+  mailbox="Postfach leer"
 fi
+
+echo
+if [ "$age" -le 26 ] && [ "${probe##* }" != "failed" ]; then
+  echo "  CatchLogX-Backup: $stamp ($age h alt) · $probe_txt · $mailbox"
+else
+  echo "  ${RED}CatchLogX-Backup: $stamp ist $age h alt oder die Probe ist fehlgeschlagen${OFF}"
+  echo "  ${DIM}prüfen: systemctl list-timers 'catchlogx-backup*' · catchlogx-backup status${OFF}"
+  echo "  $mailbox"
+fi
+echo
