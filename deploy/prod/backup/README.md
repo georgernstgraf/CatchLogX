@@ -136,15 +136,32 @@ age -d -i ~/clx-backup-key.txt "$SET/env.age" > /tmp/restored.env   # on YOUR ma
 
 The `age` identity is the recovery key for `env.age` and for every off-site
 archive. It **must not** live on the host: a key on the machine encrypts
-nothing for whoever holds the machine.
+nothing for whoever holds the machine. On the operator's machine it lives in
+`pass` as `boku/age` (the public half, `age1…`, is in `BACKUP_AGE_RECIPIENT`).
 
-1. On your own machine: `age-keygen -o ~/clx-backup-key.txt` → prints
-   `Public key: age1…`. Store the private file in the password manager and on
-   paper; two independent copies, no third on any server.
-2. Put only the public key into `BACKUP_AGE_RECIPIENT` on the host.
-3. After the first run, prove the key works:
-   `scp clxadmin@141.244.222.191:catchlogx-backups/<set>/env.age . && age -d -i ~/clx-backup-key.txt env.age`
-4. Once a year (and after every key change): same command, newest set.
+```sh
+# the identity never touches the host and never gets printed
+pass show boku/age > /tmp/clx-age.key && chmod 600 /tmp/clx-age.key
+```
+
+Rehearsed end to end on **2026-10-27** (newest off-site archive, pulled back
+from the VPS):
+
+```sh
+NAME=20261027T205026Z.tar.zst.age
+ssh claw "sudo cat /srv/backups/catchlogx/$NAME"        > "$NAME"
+ssh claw "sudo cat /srv/backups/catchlogx/$NAME.sha256" > "$NAME.sha256"
+sha256sum -c "$NAME.sha256"                              # → OK
+age -d -i /tmp/clx-age.key "$NAME" | zstd -d > set.tar   # 56 MB tar
+tar -xf set.tar && pg_restore --list 20261027T205026Z/db.dump | wc -l   # 97
+age -d -i /tmp/clx-age.key 20261027T205026Z/env.age      # all 7 keys
+shred -u /tmp/clx-age.key                                 # dump + key gone
+```
+
+That proves the whole chain: upload → storage → checksum → decryption → a dump
+that `pg_restore` can list. Repeat once a year and after every key change; the
+plaintext dump and the key are shredded immediately afterwards, because the dump
+contains production data.
 
 ## Acceptance
 

@@ -21,6 +21,19 @@ umask 077
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
 
+# Load the machine configuration when the script is run by hand. The systemd
+# units inject the same file through EnvironmentFile, so sourcing it here is
+# idempotent - but it matters for `status`: without it a manual run reported the
+# defaults ("off-site not configured", "no mail target") while everything was in
+# fact configured. The diagnostic must not lie.
+BACKUP_ENV_FILE="${BACKUP_ENV_FILE:-/etc/catchlogx-backup.env}"
+if [ -r "$BACKUP_ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090  # path comes from the environment, on purpose
+  . "$BACKUP_ENV_FILE"
+  set +a
+fi
+
 PG_CONTAINER="${PG_CONTAINER:-clx-postgres}"
 PG_USER="${PG_USER:-clxadmin}"
 PG_DB="${PG_DB:-clx}"

@@ -2,8 +2,11 @@
 Description=Daily rotation of off-site CatchLogX backups
 
 [Timer]
-# After the BOKU host has uploaded (02:30 UTC + up to 15 min delay + runtime).
-OnCalendar=*-*-* 03:30:00
+# Explicitly UTC: the BOKU host uploads at 02:30 UTC, and this machine runs in
+# CET. A local-time calendar here would have fired at 03:30 CET = 02:30 UTC -
+# exactly while the upload runs, so the integrity check would have hashed the
+# previous day's archive and the rotation would have raced the transfer.
+OnCalendar=*-*-* 03:30:00 UTC
 RandomizedDelaySec=600
 Persistent=true
 Unit=catchlogx-offsite-prune.service
