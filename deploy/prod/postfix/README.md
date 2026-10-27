@@ -43,6 +43,7 @@ postconf -e \
   "relayhost = [mailauth.boku.ac.at]:25" \
   "smtp_tls_CApath = /etc/ssl/certs" \
   "smtp_tls_security_level = verify" \
+  "smtp_tls_loglevel = 1" \
   "smtp_sasl_auth_enable = yes" \
   "smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd" \
   "smtp_sasl_security_options = noanonymous" \
@@ -85,13 +86,29 @@ Set them on the machine with `/root/set-mail-auth.sh` (reads the password from
 the terminal, writes the file, runs `postmap`, reloads postfix). The account is
 a BOKU SMTP-auth account and its address is the sender for every message.
 
-`/etc/aliases` must forward the local root mail (cron, unit failures):
+`/etc/aliases` must forward the local root mail (cron, unit failures). A
+`No configuration` postfix install does **not** create the file:
 
 ```
 root: <boku-address>
 ```
 
-then `postalias /etc/aliases`.
+then `postalias /etc/aliases`. Verify the rewrite in the log: the delivery line
+shows `orig_to=<root>` next to the external `to=<…>`.
+
+## Verified on 2026-10-27
+
+Account `ihyam_catchlogx` (service account, 10-character password), sender
+`ihyam_catchlogx@boku.ac.at` — accepted, so the sender address must be the
+account's own address:
+
+```
+postfix/smtp[…]: Verified TLS connection established to mailauth.boku.ac.at[141.244.187.85]:25: TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits)
+postfix/smtp[…]: … to=<…@boku.ac.at>, relay=mailauth.boku.ac.at[141.244.187.85]:25, … status=sent (250 ok: Message … accepted)
+```
+
+`postqueue -p` empty afterwards. The same path carried the first real backup
+report and the `catchlogx-alert@…` test mail.
 
 ## Verify
 
