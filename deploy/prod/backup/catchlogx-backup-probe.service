@@ -1,0 +1,16 @@
+[Unit]
+Description=CatchLogX restore rehearsal (restore newest set into a scratch database)
+Documentation=https://github.com/georgernstgraf/CatchLogX/tree/dev/deploy/prod/backup
+After=network-online.target docker.service
+Wants=network-online.target
+OnFailure=catchlogx-alert@%n.service
+
+[Service]
+Type=oneshot
+User=clxadmin
+Group=clxadmin
+EnvironmentFile=/etc/catchlogx-backup.env
+ExecStart=/usr/local/bin/catchlogx-backup probe
+Nice=15
+IOSchedulingClass=best-effort
+TimeoutStartSec=2h

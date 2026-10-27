@@ -1,0 +1,11 @@
+[Unit]
+Description=Monthly CatchLogX restore rehearsal
+
+[Timer]
+# 1st of the month, well after the daily run has produced a fresh set.
+OnCalendar=*-*-01 04:30:00
+Persistent=true
+Unit=catchlogx-backup-probe.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,9 @@
+[Unit]
+Description=Rotate and verify off-site CatchLogX backups
+Documentation=https://github.com/georgernstgraf/CatchLogX/tree/dev/deploy/vps/offsite-backup
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/catchlogx-offsite-prune
+Nice=10
+IOSchedulingClass=best-effort

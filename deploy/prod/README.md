@@ -1,11 +1,16 @@
 # Production host (BOKU) — machine configuration
 
 Versioned copies of the configuration that lives on the production machine
-(`catchlogx-server`, `141.244.222.191`). The host has no SVN checkout and no
-route to the SVN server (no VPN/tunnel into the BOKUnet is allowed, see #115),
-so `EDV/Deployed/<host>` in the SVN knowledge tree cannot hold these files —
-they are kept here instead. **No secrets** belong in this directory: the
-runtime env stays in `/opt/CatchLogX/.env` (mode 600) on the machine.
+(`catchlogx-server`, `141.244.222.191`). There is no VPN/tunnel into the BOKUnet
+(see #115) and the host has no SVN checkout, so `EDV/Deployed/<host>` in the SVN
+knowledge tree cannot hold these files — they are kept here instead. **No
+secrets** belong in this directory: the runtime env stays in
+`/opt/CatchLogX/.env` (mode 600) on the machine, the SMTP credential in
+`/etc/postfix/sasl_passwd`, and the backup secrets in
+`/etc/catchlogx-backup.env`.
+
+Since 2026-10-27 there is direct `root` SSH access with a personal key (#115
+keeps the open question with the OE whether that stays).
 
 Synced by hand on **2026-10-27** during #164 (address correction + nginx in
 front of the app). The files are copies, not a deployment mechanism: they are
@@ -46,6 +51,10 @@ Internet / BOKUnet
 | `nginx/99-catchlogx-address.conf` | `/etc/systemd/system/nginx.service.d/99-catchlogx-address.conf` | `644 root:root` |
 | `systemd/99-any-link.conf` | `/etc/systemd/system/systemd-networkd-wait-online.service.d/99-any-link.conf` | `644 root:root` |
 | `systemd/catchlogx.service` | `~clxadmin/.config/systemd/user/catchlogx.service` | `644 clxadmin:clxadmin` |
+| `postfix/main.cf.nondefault` + `postfix/README.md` | applied by hand (`postconf -e`), see that README | – |
+| `backup/backup.sh` | `/usr/local/bin/catchlogx-backup` | `755 root:root` |
+| `backup/catchlogx-*.service`, `backup/catchlogx-*.timer`, `backup/catchlogx-alert@.service` | `/etc/systemd/system/` | `644 root:root` |
+| `backup/catchlogx-backup.env.example` | `/etc/catchlogx-backup.env` (filled in) | `600 root:root` |
 
 ## Apply / verify
 
@@ -69,3 +78,18 @@ curl -sSI http://141.244.222.191:3001/ | head -3   # 301 -> port 80
 Not managed here: the Actions runner (`actions.runner.AlphaVIE-CatchLogX.catchlogx-server.service`,
 system service, outbound only), `docker`/`clx-postgres`, and the release tree
 under `~clxadmin` (created by `.github/workflows/production-deploy.yml`).
+
+## Mail and backup
+
+Two additions from 2026-10-27 that are not part of the web topology:
+
+- `postfix/` — the host runs a loopback-only postfix (`127.0.0.1:25`) that
+  relays authenticated to the BOKU smarthost. It exists because the BOKUnet
+  blocks every SMTP port except 25 to BOKU's own mail servers; see
+  `postfix/README.md`.
+- `backup/` — daily `pg_dump` + encrypted env + off-site upload, with a monthly
+  restore rehearsal. Runs as `clxadmin` (docker group), config in
+  `/etc/catchlogx-backup.env`; see `backup/README.md`.
+
+The VPS side of the off-site path (nginx PUT endpoint, rotation timer) lives in
+`deploy/vps/offsite-backup/`.

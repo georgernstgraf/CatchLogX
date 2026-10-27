@@ -1,0 +1,8 @@
+[Unit]
+Description=CatchLogX alert for failed unit %i
+
+[Service]
+Type=oneshot
+# Runs as root so it can read any unit's journal.
+EnvironmentFile=/etc/catchlogx-backup.env
+ExecStart=/usr/local/bin/catchlogx-backup notify-failure %i

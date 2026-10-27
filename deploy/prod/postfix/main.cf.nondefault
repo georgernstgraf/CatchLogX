@@ -1,0 +1,22 @@
+# `postconf -n` on catchlogx-server, 2026-10-27 (non-default settings only).
+# Package defaults that are only paths (command_directory, queue_directory, …)
+# are omitted. See README.md for the commands that produce this file.
+alias_database = hash:/etc/aliases
+alias_maps = hash:/etc/aliases
+disable_vrfy_command = yes
+inet_interfaces = loopback-only
+inet_protocols = ipv4
+mydestination = $myhostname, localhost
+mydomain = boku.ac.at
+myhostname = catchlogx-server.boku.ac.at
+mynetworks = 127.0.0.0/8
+myorigin = $myhostname
+relayhost = [mailauth.boku.ac.at]:25
+smtp_sasl_auth_enable = yes
+smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
+smtp_sasl_security_options = noanonymous
+smtp_sasl_tls_security_options = noanonymous
+smtp_tls_CApath = /etc/ssl/certs
+smtp_tls_security_level = verify
+smtpd_helo_required = yes
+smtpd_recipient_restrictions = permit_mynetworks, reject_unauth_destination

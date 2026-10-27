@@ -1,0 +1,20 @@
+[Unit]
+Description=CatchLogX backup (dump, verify, encrypt, off-site)
+Documentation=https://github.com/georgernstgraf/CatchLogX/tree/dev/deploy/prod/backup
+After=network-online.target docker.service
+Wants=network-online.target
+# One place for "something failed": the alert unit sends a mail (or logs to
+# journald when MAIL_TO is empty).
+OnFailure=catchlogx-alert@%n.service
+
+[Service]
+Type=oneshot
+User=clxadmin
+Group=clxadmin
+EnvironmentFile=/etc/catchlogx-backup.env
+ExecStart=/usr/local/bin/catchlogx-backup run
+Nice=10
+IOSchedulingClass=best-effort
+# A 56 MB dump plus a 114 MB database dump cycle is minutes, not hours; the
+# ceiling only exists so a hung docker call cannot block the timer forever.
+TimeoutStartSec=3h

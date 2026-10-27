@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily rotation of off-site CatchLogX backups
+
+[Timer]
+# After the BOKU host has uploaded (02:30 UTC + up to 15 min delay + runtime).
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=600
+Persistent=true
+Unit=catchlogx-offsite-prune.service
+
+[Install]
+WantedBy=timers.target
