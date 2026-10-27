@@ -55,6 +55,7 @@ Internet / BOKUnet
 | `backup/backup.sh` | `/usr/local/bin/catchlogx-backup` | `755 root:root` |
 | `backup/catchlogx-*.service`, `backup/catchlogx-*.timer`, `backup/catchlogx-alert@.service` | `/etc/systemd/system/` | `644 root:root` |
 | `backup/catchlogx-backup.env.example` | `/etc/catchlogx-backup.env` (filled in) | `600 root:root` |
+| `mutt/muttrc` | `/root/.muttrc` | `600 root:root` |
 
 ## Apply / verify
 

@@ -40,6 +40,7 @@ OFFSITE_USER="${OFFSITE_USER:-}"
 OFFSITE_PASSWORD="${OFFSITE_PASSWORD:-}"
 
 MAIL_TO="${MAIL_TO:-}"
+MAIL_COPY_TO="${MAIL_COPY_TO:-}"
 MAIL_FROM="${MAIL_FROM:-catchlogx@boku.ac.at}"
 SENDMAIL="${SENDMAIL:-/usr/sbin/sendmail}"
 
@@ -76,8 +77,15 @@ now_stamp() { date -u +%Y%m%dT%H%M%SZ; }
 
 send_mail() {
   local subject="$1" body="$2"
-  if [ -z "$MAIL_TO" ]; then
-    log "mail: MAIL_TO ist nicht gesetzt - Meldung bleibt im journald"
+  local -a rcpt=()
+  # MAIL_TO is the primary target (the local root mailbox), MAIL_COPY_TO is an
+  # optional second copy that postfix relays out. One message, two recipients:
+  # postfix delivers each one independently, so a broken SMTP account cannot
+  # keep the local report from arriving.
+  [ -n "$MAIL_TO" ] && rcpt+=("$MAIL_TO")
+  [ -n "$MAIL_COPY_TO" ] && rcpt+=("$MAIL_COPY_TO")
+  if [ ${#rcpt[@]} -eq 0 ]; then
+    log "mail: weder MAIL_TO noch MAIL_COPY_TO gesetzt - Meldung bleibt im journald"
     return 0
   fi
   if [ ! -x "$SENDMAIL" ]; then
@@ -85,9 +93,9 @@ send_mail() {
     return 0
   fi
   printf 'From: %s\nTo: %s\nSubject: %s\nDate: %s\nMIME-Version: 1.0\nContent-Type: text/plain; charset=utf-8\n\n%s\n' \
-    "$MAIL_FROM" "$MAIL_TO" "$subject" "$(date -R)" "$body" \
-    | "$SENDMAIL" -oi -f "$MAIL_FROM" "$MAIL_TO" \
-    || log "mail: Versand an $MAIL_TO fehlgeschlagen (siehe /var/log/mail.log)"
+    "$MAIL_FROM" "${rcpt[*]}" "$subject" "$(date -R)" "$body" \
+    | "$SENDMAIL" -oi -f "$MAIL_FROM" "${rcpt[@]}" \
+    || log "mail: Versand an ${rcpt[*]} fehlgeschlagen (siehe /var/log/mail.log)"
 }
 
 # --------------------------------------------------------------- helpers -----

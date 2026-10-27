@@ -88,10 +88,14 @@ backup.sh → sendmail → postfix → local(8) → /var/mail/root
   last probe result and the number of waiting messages; `catchlogx-backup
   status` shows the same plus the timer state; the mailbox itself keeps the
   narrative (sizes, counts, off-site result, duration).
-- The authenticated SMTP relay (`../postfix/`) is **not** used for these
-  reports. It exists for mail the app sends to real recipients (#160, password
-  reset). `MAIL_TO` can be pointed at an external address later without
-  touching the script — then the relay carries it.
+- **A second copy can go out** via `MAIL_COPY_TO` (set to the BOKU mailbox of
+  the service account, `ihyam_catchlogx@boku.ac.at`, since 2026-10-27). One
+  message, two recipients: postfix delivers the local one itself and relays the
+  copy — a broken SMTP account can never silence the local report, and a broken
+  local delivery cannot swallow the copy. Read either with mutt (`../mutt/`):
+  `Ctrl-L` local, `Ctrl-F` INBOX.
+- The authenticated SMTP relay (`../postfix/`) carries only that copy and mail
+  the app sends to real recipients (#160, password reset).
 - The mailbox grows by a few kilobytes per day. It lives on the same disk as
   everything else, which is fine: these are notifications, not backups.
 

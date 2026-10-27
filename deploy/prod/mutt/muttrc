@@ -1,0 +1,60 @@
+# mutt configuration for the CatchLogX production host (root's account).
+#
+# Reads two things:
+#   * the BOKU GroupWise mailbox of the service account (IMAP, imaps:993)
+#   * the local root mailbox /var/mail/root, where catchlogx-backup delivers
+#     its reports
+#
+# Sending needs no SMTP credentials here: /usr/sbin/sendmail hands the message
+# to the local postfix, which already authenticates (STARTTLS + SASL) against
+# mailauth.boku.ac.at. See deploy/prod/postfix/README.md.
+
+# ---- identity --------------------------------------------------------------
+set realname      = "CatchLogX Server"
+set from          = "ihyam_catchlogx@boku.ac.at"
+set use_from      = yes
+set envelope_from = yes
+set hostname      = "catchlogx-server.boku.ac.at"
+
+# ---- sending ---------------------------------------------------------------
+set sendmail = "/usr/sbin/sendmail -oem -oi"
+
+# ---- IMAP (BOKU GroupWise) -------------------------------------------------
+set folder     = "imaps://imap.boku.ac.at:993/"
+set spoolfile  = "+INBOX"
+set record     = "+Sent Items"          # carries \Sent
+set postponed  = "+Work In Progress"    # carries \Drafts
+set trash      = "+Trash"               # carries \Trash
+set imap_user  = "ihyam_catchlogx"
+# The password is not duplicated: it is read from the one place that already
+# holds it (0600 root). Replace this single line when reading another account.
+set imap_pass  = "`sed -n 's/^\[mailauth.boku.ac.at\]:25 [^:]*:\(.*\)$/\1/p' /etc/postfix/sasl_passwd`"
+set ssl_force_tls    = yes
+set ssl_starttls     = no               # 993 is implicit TLS
+set ssl_verify_host  = yes
+set ssl_verify_dates = yes
+set imap_idle     = no                  # GroupWise does not support IDLE
+set mail_check    = 60
+set imap_keepalive = 300
+
+# ---- local mailbox ---------------------------------------------------------
+mailboxes "+INBOX" "+Sent Items" "/var/mail/root"
+set mbox_type = mbox
+
+# ---- jump keys -------------------------------------------------------------
+macro index,pager <C-f> "<change-folder>imaps://imap.boku.ac.at/INBOX<enter>" "BOKU INBOX"
+macro index,pager <C-l> "<change-folder>/var/mail/root<enter>" "lokale Root-Mails"
+macro index,pager <C-s> "<change-folder>=Sent Items<enter>" "Gesendet"
+
+# ---- habits ----------------------------------------------------------------
+set sort        = date
+set sort_aux    = date-received
+set header_cache     = "/root/.cache/mutt/headers"
+set message_cachedir = "/root/.cache/mutt/bodies"
+set editor      = "vim"
+set confirmappend = no
+set quit        = ask-yes
+# GroupWise IMAP cannot MOVE: mutt would copy+delete on every removal. Marking
+# and expunging with $ once in a while is much faster.
+set delete      = no
+unset markers
