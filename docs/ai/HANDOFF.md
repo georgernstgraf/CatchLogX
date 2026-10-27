@@ -30,6 +30,22 @@ verifiziert). Die Backup-Berichte gehen bewusst **lokal** in `/var/mail/root`
 #160 bleibt nur der Code-Teil: auth-loser Zweig für `127.0.0.1:25` plus
 `NODEMAILER_FROM` in `lib/mailer.ts`, dann Reset end-to-end testen.
 
+**Nachtrag 2026-10-27 (Nacht), Postgres-Exposition (#122/#152/#153):** Entscheidung
+in `DECISIONS.md` („Postgres bleibt BOKU-weit offen"): **keine Firewall**, weil 5432
+zwar aus dem BOKUnet (auch per BOKU-VPN), aber **nicht** von einer echten
+Internet-Adresse erreichbar ist — die BOKU-Grenze filtert. Umgesetzt und verifiziert:
+`clxadmin` (Superuser **und** App-Konto) auf einen 48-stelligen Zufallswert gedreht,
+`clx_readonly` auf das gewünschte einfache Passwort (steht künftig im FAQ für
+eingeloggte Nutzer, **aus der Env gelesen**, nie im Repo); beide Logins über TCP
+getestet, altes Dev-Default abgewiesen, Read-only kann nicht schreiben und sieht die
+Auth-Tabellen nicht. Postgres: `log_connections = on`,
+`shared_preload_libraries = auth_delay`, `auth_delay.milliseconds = 1s` (Fehlversuch
+1213 ms statt ~10). **Prometheus entfernt** (`*:9090`, ohne Auth, scrapte nur sich
+selbst, 86 MB). Kein TLS für Postgres (Entscheidung, nicht vergessen). Aufgeschoben:
+**#166 App-Rolle ohne Superuser** — braucht eine eigene Migrationsrolle für
+`prisma migrate deploy` und Ersatz für die heute mitgenutzten reservierten
+Superuser-Slots.
+
 1. [ ] **DHCP-Pool-Ausschluss für `141.244.222.191`** (Martin / BOKU-IT). Der Host
    konfiguriert sich zwar selbst statisch, aber solange die Adresse im Pool liegt,
    kann ein anderes Gerät sie bekommen → Adresskonflikt. Gleichzeitig melden, dass

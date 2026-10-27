@@ -451,7 +451,7 @@ cmd_status() {
   printf '\nKonfiguration\n'
   printf '  Aufbewahrung   %s täglich / %s monatlich\n' "$KEEP_DAILY" "$KEEP_MONTHLY"
   printf '  Off-site       %s\n' "${OFFSITE_URL:-NICHT KONFIGURIERT (nur lokal)}"
-  printf '  age-Recipient  %s\n' "${BACKUP_AGE_RECIPIENT:+gesetzt}${BACKUP_AGE_RECIPIENT:-NICHT GESETZT (env.age entfällt)}"
+  printf '  age-Recipient  %s\n' "${BACKUP_AGE_RECIPIENT:-NICHT GESETZT (env.age entfällt)}"
   printf '  Mailziel       %s\n' "${MAIL_TO:-NICHT GESETZT (nur journald)}"
 
   printf '\nTimer\n'
