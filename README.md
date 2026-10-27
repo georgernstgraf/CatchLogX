@@ -222,11 +222,16 @@ Entwickelt von Schülern der HTL Spengergasse als Abschlussprojekt.
 
 ### Aktuelles Team (seit 2026-09)
 
-- Dominik (Backend Lead & Projekt-/Dokumentationskoordination)
-- Rodion (Datenbank)
-- Armin (Frontend Developer)
-- Alex (Frontend Developer)
-- Jakob (Testing)
+GitHub-Handles sind hier bewusst mitgeführt — bei ähnlich klingenden Namen wird
+sonst falsch zugewiesen (`Zdroba-Fisteag` ist **Armin**, nicht Rodion):
+
+| Name | GitHub | Rolle |
+|---|---|---|
+| Dominik | [@DominicSchmidinger](https://github.com/DominicSchmidinger) | Backend Lead & Projekt-/Dokumentationskoordination |
+| Rodion Bal | [@esquze](https://github.com/esquze) | Datenbank |
+| Armin-Rafael Zdroba-Fisteag | [@Zdroba-Fisteag](https://github.com/Zdroba-Fisteag) | Frontend Developer |
+| Alex | [@evictedI](https://github.com/evictedI) | Frontend Developer |
+| Jakob | [@HJakobTL](https://github.com/HJakobTL) | Testing |
 
 ### Erstes Team
 

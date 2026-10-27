@@ -11,7 +11,7 @@ Drei Stränge laufen parallel:
 
 **Trunk-based development on `dev`** — keine Feature-Branches; `git pull --ff-only origin dev` beim Sessionstart. `master` ist Produktion (1 Approval gefordert, aber `enforce_admins` ist **aus**: der Owner kann `dev` per Fast-Forward direkt auf `master` schieben — so sind #141/#142 gelandet), Merges kommen nur aus `dev`. Der Pre-Push-Gate (`.githooks/pre-push`, Lint + Typecheck + Test) schützt `dev`; **CI (`.github/workflows/test.yml`) ist die Quelle der Wahrheit**.
 
-Kickoff 2026-09-19 (siehe `docs/meetings/2026-09-19-kickoff.md`, Protokoll + Aufgaben in #113). Rollen: Dominik (Backend-Lead), Rodion (Datenbank), Armin + Alex (Frontend), Jakob (Testing). Fachkontakt: Lena (BOKU Hydrobiologie), Technik: Martin Seebacher (`@Fishknut`). Wöchentlicher Zoom am Samstag.
+Kickoff 2026-09-19 (siehe `docs/meetings/2026-09-19-kickoff.md`, Protokoll + Aufgaben in #113). Rollen: Dominik (`@DominicSchmidinger`, Backend-Lead), Rodion Bal (`@esquze`, Datenbank), Armin-Rafael Zdroba-Fisteag (`@Zdroba-Fisteag`) + Alex (`@evictedI`) (Frontend), Jakob (`@HJakobTL`, Testing). **Handle-Falle:** `Zdroba-Fisteag` ist Armin, nicht Rodion — Rodion Bal ist `@esquze` (am 2026-10-27 über die GitHub-Profile verifiziert). Fachkontakt: Lena (BOKU Hydrobiologie), Technik: Martin Seebacher (`@Fishknut`). Wöchentlicher Zoom am Samstag.
 
 ## Production & Infrastructure (BOKU)
 - Produktivserver: Desktop-Klasse auf Martin Seebachers Schreibtisch (Institut-IT, OE-Level) im BOKUnet, produktiv seit Juni 2026, nur informell per Mail akkreditiert (#115)
