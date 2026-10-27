@@ -10,6 +10,16 @@
 > `http://141.244.222.191` (Port 80), und die alte `:3001`-URL leitet per 301
 > dorthin um. Der DHCP-Ausschluss bei BOKU-IT betrifft jetzt `.191`; `.9` ist
 > wieder frei. Details: `docs/ai/DECISIONS.md` (2026-10-27) und `deploy/prod/`.
+>
+> **Ergebnis (2026-10-27, abends):** Adresse und Proxy sind umgesetzt und
+> verifiziert — netplan auf `.191` (180-s-Rollback-Timer armiert und wieder
+> gestoppt), nginx `1.28.3` auf `:80` (Proxy auf `127.0.0.1:3001`) und
+> `141.244.222.191:3001` (301), App-Unit `HOSTNAME=127.0.0.1`,
+> Reboot-Rehearsal grün (`NRestarts=0`, `:80` 200, `:3001` 301). Release
+> `37fbcf7` (Run
+> [40492077483](https://github.com/georgernstgraf/CatchLogX/actions/runs/40492077483))
+> hat `NEXT_PUBLIC_APP_URL=http://141.244.222.191` eingebacken und **keine**
+> `.env` mehr im Release (#162). Maschinen-Configs: `deploy/prod/`.
 
 Zweites Vor-Ort-Fenster am Produktionsrechner (`catchlogx-server`, 141.244.222.191).
 Zweck: den in #143 blockierten Immutable-Release-Cutover abschließen (Linger fehlte),

@@ -3,7 +3,7 @@
 Offene Aufgaben für die nächste Session.
 
 **Stand 2026-10-27:** Das zweite Vor-Ort-Fenster ist gelaufen. #143 ist **erledigt** —
-die Produktion läuft als systemd-User-Unit (Release `2546d44`, `~/current` →
+die Produktion läuft als systemd-User-Unit (Release `37fbcf7`, `~/current` →
 `~/releases/<sha>`), der Rollback wurde in beide Richtungen geübt und ein Reboot
 startet die App ohne Login neu (`NRestarts=0`). Die Maschine ist reboot-fest:
 statische Adresse **`141.244.222.191`** (#164 — die zuerst gepinnte `.9` war falsch),
