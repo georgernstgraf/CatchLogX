@@ -1396,12 +1396,17 @@ jobs:
             echo "Node already present: $("$DEST/bin/node" --version) at $DEST"
           else
             TMP="$(mktemp -d)"
-            URL="https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-$ARCH.tar.xz"
+            # Keep the upstream filename: SHASUMS256.txt lists that name and
+            # `sha256sum -c` resolves it relative to the current directory, so
+            # a renamed download failed the check with "FAILED open or read"
+            # (first real run of this job, 2026-10-27).
+            TARBALL="node-$NODE_VERSION-$ARCH.tar.xz"
+            URL="https://nodejs.org/dist/$NODE_VERSION/$TARBALL"
             echo "Downloading $URL"
-            curl -fsSL --max-time 600 "$URL" -o "$TMP/node.tar.xz"
+            curl -fsSL --max-time 600 "$URL" -o "$TMP/$TARBALL"
             curl -fsSL --max-time 120 "https://nodejs.org/dist/$NODE_VERSION/SHASUMS256.txt" -o "$TMP/SHASUMS256.txt"
-            ( cd "$TMP" && grep " node-$NODE_VERSION-$ARCH.tar.xz\$" SHASUMS256.txt | sha256sum -c - )
-            tar -xJf "$TMP/node.tar.xz" -C "$TMP"
+            ( cd "$TMP" && grep " $TARBALL\$" SHASUMS256.txt | sha256sum -c - )
+            tar -xJf "$TMP/$TARBALL" -C "$TMP"
             rm -rf "$DEST"
             mv "$TMP/node-$NODE_VERSION-$ARCH" "$DEST"
             rm -rf "$TMP"
