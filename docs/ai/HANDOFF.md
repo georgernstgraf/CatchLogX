@@ -2,17 +2,57 @@
 
 Offene Aufgaben für die nächste Session.
 
-**Stand 2026-10-18 (Abend):** Backlog-Triage abgeschlossen. **Geschlossen** (als erledigt/überholt, Belege in den Abschlusskommentaren): #133 (Fix `11bef36`, liegt auf `dev` — kommt mit dem nächsten Deploy auf Produktion), #134 (Fix `3bb558a`, `migration-drift` grün), #137, #138, #139, #140, #141, #142, #152, #84 (überholt durch #115/#122), #105 (einmaliger Backlog-Sync). **Re-gescoped:** #97 (Einstiegsticket für Diplomstudent:innen — Client-Helfer `lib/upload-client.ts`/`lib/template-files.ts` vs. CONVENTIONS-Regel). **Zugewiesen:** #123 (VPS-Runner) an @georgernstgraf. **Offen gelassen:** #87.
+**Stand 2026-10-27:** Das zweite Vor-Ort-Fenster ist gelaufen. #143 ist **erledigt** —
+die Produktion läuft als systemd-User-Unit (Release `2546d44`, `~/current` →
+`~/releases/<sha>`), der Rollback wurde in beide Richtungen geübt und ein Reboot
+startet die App ohne Login neu (`NRestarts=0`). Die Maschine ist reboot-fest:
+statische Adresse `141.244.223.9`, **kein DHCP** mehr, Boot 23,8 s statt 2 min 22 s,
+`resolute-updates` laufen täglich, `docker`/`containerd` nur im Fenster. `clxadmin`
+ist rotiert (das alte Dev-Default aus dem public Repo ist über scram abgewiesen),
+der Smoke-Account `smoke-test` ist gelöscht (#150), die MinIO-Container sind weg
+(9000/9001 zu, Volume bleibt). Details, Runs und Entscheidungen:
+`docs/meetings/2026-10-27-vor-ort-netzwerk-und-release-cutover.md`.
 
-1. [ ] **#143 Immutable-Release-Topologie auf der Produktion dispatchen** (im selben Vor-Ort-Fenster #122). Code ist in `dev`: neuer read-only `machine-report`- und schreibender `release-topology`-Job in `production-maintenance.yml` (drei Gates wie `cutover`), `production-deploy.yml` auf Immutable-Release-Publishing umgestellt, `docker-compose.prod.yml` deaktiviert den `app`-Service per Profil. Ablauf:
-   - `gh workflow run production-maintenance.yml --ref master -f job=machine-report -f confirm=machine-report` — read-only Bestandsaufnahme (Node, `systemctl --user`/Linger, Port-3001-Halter, Runner-Start, nodejs.org)
-   - `gh workflow run production-maintenance.yml --ref master -f job=release-topology -f confirm=ADOPT-PRODUCTION` — Node v22.23.3 nach `~/tools`, `/opt/CatchLogX/.env` (mode 600), `catchlogx.service` (enabled, nicht gestartet)
-   - `gh workflow run production-deploy.yml --ref master -f ref=master` — baut nativ (glibc Node 22), publiziert `~/releases/<sha>` + `~/current`-Swap, retired `clx-web`, restarted die Unit, Health-Check `127.0.0.1:3001`
-   - **Rollback einmal üben** (Akzeptanzkriterium): denselben Job mit dem vorherigen `master`-Commit dispatchen → Health → aktuellen Commit → Health; beide Runs in `STATE.md` festhalten; #143 schließen.
-   - **Vorher** den Code von `dev` nach `master` bringen (workflow_dispatch braucht die Dateien auf `master`). Bei fehlendem User-Manager/Linger: on-site `sudo loginctl enable-linger clxadmin`, dann `release-topology` erneut.
-2. [ ] **Read-only-DB-Zugang (#152) — erledigt und geschlossen am 2026-10-18** (Run 39117175848): die Rolle `clx_readonly` ist angelegt (SELECT nur auf die Nicht-Auth-Tabellen, `CONNECTION LIMIT 20`), das 12-Zeichen-Passwort liegt ausschließlich als `READONLY_DB_PASSWORD` in `/opt/CatchLogX/.env` (mode 600) und wird per **#153** an die wissenschaftlichen Mitarbeiter weitergegeben. Re-Dispatch von `gh workflow run production-maintenance.yml --ref master -f job=readonly-role -f confirm=ADOPT-PRODUCTION` = Rotation. Offen bleibt: **`clxadmin`-Passwort rotieren** (Dev-Default, dringlich wegen des offenen Ports 5432) — erst **nach** dem Unit-Cutover (#143), weil der laufende Container es gebacken hat.
-3. [ ] **Smoke-Test-Account nach dem Vor-Ort-Fenster entfernen oder rotieren** (#150): Der Account `smoke-test` (`ADMIN`) liegt seit 2026-10-18 auf der Produktion (Run 39110044494, bcrypt-Roundtrip ok). Nach dem Fenster entweder löschen (`DELETE FROM "User" WHERE username='smoke-test';`, kaskadiert auf Sessions) oder `PROD_SMOKE_PASSWORD` rotieren und `smoke-user` erneut dispatchen. Das Passwort existiert **nur** im Repo-Secret — nie in Doku, Issue oder Passwortmanager kopieren.
-4. [ ] **#144 Gated Deploy-Pipeline** (nach #143): Prod-Deploy-Job in `test.yml` gated auf `test` + `migration-drift`, `master`-Trigger, eigener Concurrency-Group (`cancel-in-progress: false`), `boku`-Label. Danach `production-deploy.yml` und die einmaligen Maintenance-Jobs entfernen, Push-Trigger für `master` wiederherstellen.
-5. [ ] **Vor-Ort-#122-Restposten** (siehe `docs/meetings/2026-10-18-vor-ort-wartungstermin.md`): dokumentierter SSH-Wartungszugang, Backup-Status, zurückgelassenen MinIO-Container samt Volume (`catchlogx_clx_miniodata`) entfernen, Ports 9000/9001 beschränken (5432 bleibt offen, #152). Der Vorgänger-Runner `catchlogx-server` bleibt vorerst — er ist der einzige Prod-Pfad.
+1. [ ] **DHCP-Pool-Ausschluss für `141.244.223.9`** (Martin / BOKU-IT). Der Host
+   konfiguriert sich zwar selbst statisch, aber solange die Adresse im Pool liegt,
+   kann ein anderes Gerät sie bekommen → Adresskonflikt. Bis dahin: bei
+   Verbindungsproblemen zuerst `ip -br a` auf der Maschine prüfen.
+2. [ ] **#144 Gated Deploy-Pipeline** (nächster Code-Schritt): Prod-Deploy-Job in
+   `test.yml`, gated auf `test` + `migration-drift`, `master`-Trigger, eigene
+   Concurrency-Group (`cancel-in-progress: false`), Label `boku`. Danach
+   `production-deploy.yml` und die einmaligen Maintenance-Jobs entfernen (#137),
+   Push-Trigger für `master` wiederherstellen.
+3. [ ] **#159 Prod-Credentials**: kein Produktionspfad darf ein committetes
+   Passwort nutzen (compose trägt weiterhin `clxadmin:clxadmin` als Dev-Default,
+   auch in `SHADOW_DATABASE_URL`).
+4. [ ] **#160 Passwort-Reset/Mail**: `NODEMAILER_*` fehlt in der Prod-Env →
+   „Passwort vergessen" wirft. `NEXT_PUBLIC_APP_URL` ist seit 2026-10-27 gesetzt.
+5. [ ] **#161 maintenance-Jobs**: `audit`/`rehearse`/`cutover` finden die DB-URL
+   nicht mehr, seit `clx-web` weg ist (kein `PROD_DATABASE_URL`-Secret) — auf
+   `/opt/CatchLogX/.env` umstellen oder mit #144 ausmustern.
+6. [ ] **#162 Deploy legt `.env` in jedes Release** — `rm -f .env` nach dem Build,
+   vor `publish-release.sh`.
+7. [ ] **#163 Rollback-Rezept** überall auf den **vollen** Commit-SHA umstellen
+   (kurze SHAs scheitern in `actions/checkout`).
+8. [ ] **#153 In-App-Data-Access-Seite** (R-Verbindungsdaten + Read-only-Passwort
+   für die Forschungsgruppe) — das Passwort liegt nur als `READONLY_DB_PASSWORD`
+   in `/opt/CatchLogX/.env`; Rotation = `readonly-role` erneut dispatchen.
+9. [ ] **#145 Wissensbasis** nachziehen (Läufe #143/#152 sind jetzt vollständig
+   dokumentiert; offen bleibt die Zusammenfassung im Datenrepo-Kontext).
+10. [ ] **#115 Wartungszugang**: der Zugang existiert jetzt real — `root` per
+    persönlichem SSH-Key (`grafg@spengergasse.at`), **kein** unprivilegierter
+    Account, keine zweite Person. Mit der OE klären und dokumentieren, ob das so
+    bleibt (Alternative: eigener `georg`-Account + sudo).
+11. [ ] **MinIO-Volume** `catchlogx_clx_miniodata` endgültig löschen, sobald das
+    Backup-Set `cutover-20261018T085752Z` (21 Objekte, 54 M) als ausreichend
+    bewertet ist. Container sind bereits entfernt.
+12. [ ] **#122 Restposten**: Backup-Routine definieren (#86 — die vorhandenen Sets
+    unter `~/catchlogx-backups/` sind manuell/Job-erzeugt, kein Zeitplan);
+    Entscheidung zum Vorgänger-Runner `catchlogx-server` umsetzen (er ist weiter
+    der einzige Prod-Pfad).
+13. [ ] See `CatchLogX-Data#2` — Zugriffsrechte der Diplomgruppe (Write akzeptiert,
+    Decision D007); `README.md` und `docs/ai/STATE.md` im Datenrepo nachziehen.
 
-Kontext: Epic #125 (Datenablage getrennt) ist **geschlossen** — die Zugriffsrechte der Diplomgruppe wurden am 2026-10-18 als „Write bewusst akzeptiert" entschieden, weil Read-only bei privaten Repos in User-Besitz technisch nicht möglich ist (`CatchLogX-Data#2`, Decision D007 im Datenrepo). Der Produktions-Upgrade-Pfad ist weitgehend abgeschlossen: #138 (Audit), #139 (Adoptionsskript), #140 (Rehearsal), #141 (Cutover), #142 (Interim-Deploy) und #152 (Read-only-Rolle) sind am 2026-10-18 gelaufen **und geschlossen**; offen sind nur noch #143 (Topologie, Code in `dev`), #144 (gated Pipeline), #145 (Wissensbasis vervollständigen) und #153 (In-App-Data-Access-Seite, nach #143).
+Kontext: Das Epic #125 bleibt offen, solange `CatchLogX-Data#2` offen ist. Vom
+Produktions-Upgrade-Pfad #137–#153 sind #138–#143 und #150/#152 erledigt; offen
+sind #144 (gated Pipeline), #153 (Data-Access-Seite) und #145 (Wissensbasis).
