@@ -60,6 +60,33 @@ npm run prisma:deploy   # apply pending migrations (dev instance, production)
   (e.g. `normalize`, `buildSchema`, `parseDate`, `buildRejectEmailHtml`). No behaviour changes.
 - Not covered: API route handlers, React components (no jsdom), `lib/auth.ts` (NextAuth, unused).
 
+## Test Requirement (strict TDD, #112)
+
+Every implementation that touches code — **feature and bug fix alike** — must come with
+tests in the same unit of work (same commit / same push). Docs- and infra-only changes
+(README, workflows, deploy scripts, `docs/`) are exempt.
+
+Strict red → green:
+
+1. **Bug fix:** write the **regression test first** and watch it fail against the old code
+   (red), then apply the fix (green). The test pins the exact reported scenario.
+2. **Feature:** write the test at the **public seam** of the changed module (service
+   function, lib helper, exported route-level helper) first, then implement just enough
+   to pass it. One slice at a time — no bulk tests written after the fact.
+3. **Seams:** test behaviour through public interfaces, not internals. Do not test
+   private methods or mock internal collaborators of the unit under test.
+4. **Where:** test file lives next to the source (`services/foo.test.ts`, `lib/foo.test.ts`),
+   `environment: "node"`, no real DB/SMTP (mock `@/lib/prisma`, `@/lib/mailer`, `bcrypt`;
+   stub `fetch` via `vi.stubGlobal`).
+5. **Un-exported logic to test?** Export the helper with the marker
+   `// Exported for unit tests (#112).` — no behaviour change.
+6. **Not testable without jsdom?** (React components, route handlers) — say so explicitly
+   in the commit/PR message and name what a test would need; never silently skip.
+7. **Mock-shape fidelity:** if an existing test asserts Prisma call shapes, adjust the
+   assertion when changing a query — never delete the test.
+8. **Gate:** the pre-push hook and CI enforce green tests. A code change without its
+   tests is an incomplete change: it should fail review, not just the build.
+
 ## Git Workflow (Trunk-Based)
 
 - **Trunk = `dev` branch.** All work happens directly on `dev` — **no feature branches**.
