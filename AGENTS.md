@@ -1,5 +1,18 @@
 # AGENTS.md
 
+## Agent Sessions (no sandbox)
+Agents (opencode) are started **on every machine that clones this repo** — a clone can sit
+on live infrastructure, and there is **no sandbox**: the agent's shell shares the host with
+whatever runs there. **At session start, identify the host before touching anything**
+(`hostname`, `whoami`, `systemctl --user list-units | grep -i clx`):
+- On the dev VPS (`claw.graf.priv.at`, served as `catchlogx.graf.priv.at`, user `catchlogx`)
+  the shell shares the machine with `catchlogx.service` (app, port 40873) and
+  `actions.runner.catchlogx-vps.service` (the `vps` deploy runner). Never stop/restart units
+  "just to try", never kill raw PIDs (see `PITFALLS.md`), RAM is ~3.8 GB.
+- On the BOKU production machine only the `boku` runner's jobs run — even more caution.
+- General rule: determine host first, then act; treat every listening port and every user
+  unit as live infrastructure, not as a playground.
+
 ## Stack
 Next.js 16.0 (App Router), TypeScript (strict), Prisma + PostgreSQL, Tailwind CSS v4, NextAuth.js v4.
 
