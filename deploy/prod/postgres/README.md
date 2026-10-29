@@ -373,8 +373,12 @@ the role ceiling is the binding limit by design.
 
 Both knobs are file settings in `99-catchlogx.conf` (**never** `ALTER SYSTEM`,
 see `docs/ai/PITFALLS.md`). `max_connections` is a **postmaster** setting, so
-applying it needs a restart, and that restart **empties `pg_stat_statements`**
-(#169): pull the report first if the measurement window matters.
+applying it needs a restart (~2 s, the app reconnects by itself). A **clean**
+restart does not cost the statistics: `pg_stat_statements.save = on` writes
+them at shutdown and reloads them at start (verified 2026-10-29: 198 shapes and
+an unchanged `stats_reset` after the restart). Only `pg_stat_statements_reset()`
+or an unclean crash throws the window away — measure before and after anyway,
+it costs one command.
 
 ```sh
 cd /root/CatchLogX && git log --oneline -1
