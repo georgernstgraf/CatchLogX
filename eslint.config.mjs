@@ -1,14 +1,8 @@
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import { FlatCompat } from "@eslint/eslintrc";
+import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTypescript from "eslint-config-next/typescript";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
-
+// eslint-config-next 16 ships flat configs directly — the FlatCompat bridge
+// (@eslint/eslintrc) can no longer load it (#109).
 const eslintConfig = [
   {
     ignores: [
@@ -25,10 +19,15 @@ const eslintConfig = [
       "**/query_engine-*.node",
     ],
   },
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  ...nextVitals,
+  ...nextTypescript,
   {
     rules: {
       "@typescript-eslint/no-explicit-any": ["off"],
+      // New in react-hooks v6 (shipped with eslint-config-next 16). These flag
+      // 8 pre-existing call sites; fix them in #173 and drop the downgrade.
+      "react-hooks/set-state-in-effect": ["warn"],
+      "react-hooks/immutability": ["warn"],
     },
   },
 ];
