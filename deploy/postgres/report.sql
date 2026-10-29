@@ -18,9 +18,8 @@
 --                              missing index or a work_mem question.
 --   6. `TABLE SIZES`         - puts the numbers above into perspective.
 --   7. `CONNECTIONS PER CLIENT ADDRESS` - a snapshot of who holds how many
---                              connections (#171). "5 per client address" is an
---                              observed figure, not a limit: PostgreSQL has no
---                              per-IP connection limit.
+--                              connections (#171). PostgreSQL has no per-IP
+--                              limit; this is where a runaway client would show.
 --
 -- Rules of thumb for turning this into schema changes:
 --   * A statement with high `total_ms` AND high `blk_read` per call on a big
@@ -59,15 +58,12 @@ WHERE d.datname = current_database();
 
 \echo ''
 \echo '=== CONNECTIONS PER CLIENT ADDRESS (snapshot, #171) ==='
--- "5 concurrent connections per client address" is the observed ceiling of the
--- read-only workload, NOT a server-side rule: PostgreSQL has no per-IP limit.
--- A `note` is only a prompt to look at the R client's pool settings, not an alarm.
+-- Who holds how many connections right now. PostgreSQL has no per-IP limit, so
+-- this is a diagnosis view (a runaway client, a forgotten session), not a rule.
 SELECT coalesce(host(client_addr), 'local (socket)')            AS source,
        usename                                                   AS role,
        count(*)                                                  AS conns,
        count(*) FILTER (WHERE state <> 'idle')                   AS busy,
-       CASE WHEN usename = 'clx_readonly' AND count(*) > 5
-            THEN 'over the observed 5/address' ELSE '' END       AS note,
        string_agg(DISTINCT coalesce(nullif(application_name, ''), '?'), ', ')
                                                                  AS clients
 FROM pg_stat_activity

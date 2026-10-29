@@ -365,11 +365,10 @@ real client address for the research group (the app is loopback by design).
 | `clx_readonly` | `CONNECTION LIMIT 108` (role-wide, **not** per client address) |
 | `max_connections` | `200`, `superuser_reserved_connections = 5` |
 | `work_mem` | `8MB` — the real cost of a connection is its sorts, not its slot |
-| per client address | ~5 concurrent connections is the **observed** figure, shown in `deploy/postgres/report.sql`; not enforced |
 
 Sizing: 108 read-only + the app's Prisma pool (~2×CPU+1) + backup/runbook
-sessions + 5 superuser slots ≈ 135 of 200. 108 < 50 users × 5 connections —
-the role ceiling is the binding limit by design.
+sessions + 5 superuser slots ≈ 135 of 200. `deploy/postgres/report.sql` shows
+who holds how many connections — a diagnosis view, not a limit.
 
 Both knobs are file settings in `99-catchlogx.conf` (**never** `ALTER SYSTEM`,
 see `docs/ai/PITFALLS.md`). `max_connections` is a **postmaster** setting, so
