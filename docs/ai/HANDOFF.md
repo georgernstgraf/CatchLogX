@@ -106,6 +106,22 @@ Superuser-Slots.
 14. [ ] See `CatchLogX-Data#2` — Zugriffsrechte der Diplomgruppe (Write akzeptiert,
     Decision D007); `README.md` und `docs/ai/STATE.md` im Datenrepo nachziehen.
 
+15. [ ] **#169 Query-Observability auf Prod ausrollen**: Dev ist seit 2026-10-29
+    eingerichtet (`pg_stat_statements`, `auto_explain` ab 500 ms, Slow-Query-Log
+    ab 2 s ohne Bind-Parameter, Logs in `<PGDATA>/log`; Runbook
+    `deploy/postgres/README.md`). Auf Prod fehlt der Rollout: Job
+    **`db-observability`** (`production-maintenance.yml`, drittes Gate
+    `confirm=ADOPT-PRODUCTION`) anwendet `deploy/postgres/observability.sql`,
+    startet `clx-postgres` **einmal** neu (~10 s App-Aussetzer, Rollback der
+    `postgresql.auto.conf` ist eingebaut) und prüft, dass `clx_readonly` die
+    Statistik **nicht** lesen kann. Der Job ist erst nach einem Merge auf
+    `master` dispatchbar. Danach Messfenster: `SELECT
+    pg_stat_statements_reset(); SELECT pg_stat_reset();`, Last laufen lassen,
+    `job=db-report` ziehen (voller Report bleibt in `~/catchlogx-reports/`,
+    nur die textfreie Zusammenfassung wird Artefakt — das Repo ist public).
+    Der alte Dev-Container `clx-postgres` ist seit 2026-10-29 gestoppt mit
+    `restart=no`; Volume `dev-stack_clx_pgdata` bleibt als Rückfallweg.
+
 Kontext: Das Epic #125 bleibt offen, solange `CatchLogX-Data#2` offen ist. Vom
 Produktions-Upgrade-Pfad #137–#153 sind #138–#143 und #150/#152 erledigt; offen
 sind #144 (gated Pipeline), #153 (Data-Access-Seite) und #145 (Wissensbasis).

@@ -19,19 +19,24 @@ name: Production maintenance
 # write access to trigger, and the code it runs is reviewed on dev first
 # (#138).
 #
-# Exactly four jobs in this repository may WRITE to production: `cutover`
+# Exactly five jobs in this repository may WRITE to production: `cutover`
 # (#141), which retires the db-push-era app container, takes a fresh dump +
 # MinIO export, runs the adoption script, verifies the result and brings up the
 # migration-tracked stack; `smoke-user` (#150), which provisions the dedicated
 # account that cutover's sign-in / file-download smoke test uses;
 # `release-topology` (#143), which provisions the immutable-release runtime
 # (pinned Node under ~/tools, the systemd user unit, the on-machine env file)
-# without disrupting the running app; and `readonly-role` (#152), which upserts
+# without disrupting the running app; `readonly-role` (#152), which upserts
 # the shared read-only statistics role and its password in the on-machine env
-# file. Every job that mutates production is gated the same three ways:
+# file; and `db-observability` (#169), which writes PostgreSQL settings for
+# query observability and restarts the database container once. Every job that
+# mutates production is gated the same three ways:
 #   - dispatch-only: it can never be reached by a push or a pull request;
 #   - ref-guarded to `master`: it only runs for `--ref master`;
 #   - armed by the typed confirmation input `confirm=ADOPT-PRODUCTION`.
+# `db-report` (#169) is the read-only counterpart: it only SELECTs from the
+# statistics views, writes no database row, and keeps the report (which
+# contains query texts) on the machine.
 # `cutover` must NOT be dispatched before the on-site maintenance appointment
 # (#122) has been agreed with Martin: it stops the live app and takes production
 # down by design, in one ordered run so the db-push-era app can never come back.
@@ -50,10 +55,12 @@ on:
           - cutover
           - release-topology
           - readonly-role
+          - db-observability
+          - db-report
           - all
         default: audit
       confirm:
-        description: "Type ADOPT-PRODUCTION to arm a job that writes to production (cutover, smoke-user, release-topology, readonly-role; ignored by the read-only jobs)"
+        description: "Type ADOPT-PRODUCTION to arm a job that writes to production (cutover, smoke-user, release-topology, readonly-role, db-observability; ignored by the read-only jobs)"
         required: true
         default: ""
         type: string
@@ -1740,4 +1747,273 @@ jobs:
             echo "- Re-dispatch this job to rotate the password"
             echo ""
             echo "Consumers: scientific staff running statistics in R. The future in-app data-access page (#152) reads \`READONLY_DB_PASSWORD\` from the env file and shows it to logged-in users."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Query observability for index forensics (#169). Writes ALTER SYSTEM
+  # settings (they land in postgresql.auto.conf inside the data volume),
+  # creates pg_stat_statements and restarts the database container once,
+  # because shared_preload_libraries and logging_collector are postmaster
+  # settings. This is the only job that deliberately interrupts the database:
+  # Prisma reconnects, requests in flight fail.
+  db-observability:
+    name: Apply query observability (#169)
+    if: inputs.job == 'db-observability' && github.ref == 'refs/heads/master'
+    runs-on: [self-hosted, boku]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require the typed confirmation
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRM" != "ADOPT-PRODUCTION" ]; then
+            echo "::error::refused: re-dispatch with confirm=ADOPT-PRODUCTION"
+            exit 1
+          fi
+          echo "Confirmation accepted."
+
+      - name: Preconditions
+        run: |
+          set -euo pipefail
+          docker inspect "$PG_CONTAINER" >/dev/null || { echo "::error::$PG_CONTAINER not found"; exit 1; }
+          if [ "$(docker inspect -f '{{.State.Running}}' "$PG_CONTAINER")" != "true" ]; then
+            echo "::error::$PG_CONTAINER is not running"
+            exit 1
+          fi
+          echo "Database container is running."
+
+      - name: Settings before
+        run: |
+          set -euo pipefail
+          docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -c "
+            SELECT name, setting, pending_restart
+            FROM pg_settings
+            WHERE name IN ('shared_preload_libraries', 'logging_collector',
+                           'log_min_duration_statement', 'pg_stat_statements.track',
+                           'auto_explain.log_min_duration')
+            ORDER BY name;"
+
+      - name: Apply (first pass - writes postgresql.auto.conf)
+        run: |
+          set -euo pipefail
+          docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" \
+            -v ON_ERROR_STOP=1 < deploy/postgres/observability.sql
+
+      - name: Prepare the log directory and back up postgresql.auto.conf
+        run: |
+          set -euo pipefail
+          # logging_collector writes into <PGDATA>/log; create it as the
+          # postgres user before the restart so a permission problem cannot
+          # keep the server from starting.
+          docker exec "$PG_CONTAINER" sh -c 'mkdir -p "$PGDATA/log" && chown postgres:postgres "$PGDATA/log"'
+          BACKUP="$RUNNER_TEMP/postgresql.auto.conf.pre-observability"
+          docker cp "$PG_CONTAINER:/var/lib/postgresql/data/postgresql.auto.conf" "$BACKUP"
+          echo "BACKUP=$BACKUP" >> "$GITHUB_ENV"
+
+      - name: Restart the database container
+        run: |
+          set -euo pipefail
+          echo "Restarting $PG_CONTAINER - the app loses its database connections for a few seconds."
+          docker restart "$PG_CONTAINER" >/dev/null
+
+          READY=0
+          for attempt in $(seq 1 30); do
+            if docker exec "$PG_CONTAINER" pg_isready -U "$PG_USER" -d "$PG_DB" -q 2>/dev/null; then
+              READY=1
+              echo "Database is accepting connections (attempt $attempt)."
+              break
+            fi
+            sleep 2
+          done
+
+          if [ "$READY" != "1" ]; then
+            # A bad shared_preload_libraries value is exactly the failure mode
+            # that keeps the server from starting (e.g. one quoted string
+            # instead of a list). Put the previous config back and start again,
+            # so this job can never leave production without a database.
+            echo "::error::database did not come up - restoring the previous postgresql.auto.conf"
+            docker cp "$BACKUP" "$PG_CONTAINER:/var/lib/postgresql/data/postgresql.auto.conf"
+            docker start "$PG_CONTAINER" >/dev/null 2>&1 || docker restart "$PG_CONTAINER" >/dev/null 2>&1 || true
+            for attempt in $(seq 1 30); do
+              if docker exec "$PG_CONTAINER" pg_isready -U "$PG_USER" -d "$PG_DB" -q 2>/dev/null; then
+                echo "Recovered with the previous configuration (attempt $attempt)."
+                break
+              fi
+              sleep 2
+            done
+            exit 1
+          fi
+
+          docker exec "$PG_CONTAINER" pg_isready -U "$PG_USER" -d "$PG_DB"
+
+      - name: Apply (second pass - creates the extension)
+        run: |
+          set -euo pipefail
+          docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" \
+            -v ON_ERROR_STOP=1 < deploy/postgres/observability.sql
+
+      - name: Verify
+        run: |
+          set -euo pipefail
+          echo "=== loaded libraries / extension ==="
+          docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc \
+            'SHOW shared_preload_libraries'
+          docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc \
+            "SELECT 'pg_stat_statements ' || extversion FROM pg_extension WHERE extname = 'pg_stat_statements'"
+          docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc \
+            "SELECT 'tracked shapes: ' || count(*) FROM pg_stat_statements"
+
+          # The published read-only password must not be able to read the query
+          # text of other roles (the extension grants SELECT to PUBLIC).
+          if docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 \
+               -c 'SET ROLE clx_readonly; SELECT count(*) FROM pg_stat_statements;' >/dev/null 2>&1; then
+            echo "::error::clx_readonly can read pg_stat_statements - the REVOKE did not take effect"
+            exit 1
+          fi
+          echo "clx_readonly is denied on pg_stat_statements."
+
+          echo "=== log directory (inside the data volume) ==="
+          docker exec "$PG_CONTAINER" sh -c 'ls -lh "$PGDATA/log" | tail -n 5'
+
+      - name: Health check the app
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 15); do
+            if curl -fsS -o /dev/null http://127.0.0.1:3001/; then
+              echo "App is healthy after the database restart (attempt $attempt)."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::the app did not answer on 127.0.0.1:3001 after the database restart"
+          exit 1
+
+      - name: Summary
+        if: always()
+        run: |
+          set +e
+          {
+            echo "## Query observability (#169)"
+            echo ""
+            echo "- Settings: \`deploy/postgres/observability.sql\` (idempotent, \`ALTER SYSTEM\` inside the data volume)"
+            echo "- Collected: \`pg_stat_statements\` (normalised), \`auto_explain\` above 500 ms, slow-query log above 2 s without bind parameters"
+            echo "- Logs: \`\$PGDATA/log\` inside the volume, one file per weekday, at most 128 MB each"
+            echo "- Next: dispatch \`job=db-report\` to read the statistics"
+            echo ""
+            echo "The database container was restarted once - postmaster settings cannot be applied otherwise."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Read-only counterpart of db-observability (#169): SELECTs from the
+  # statistics views, writes no database row, needs no confirmation token.
+  # The full report contains query texts, so it stays on the machine; only a
+  # text-free summary is uploaded, because this repository is public.
+  db-report:
+    name: Index-forensics report (#169)
+    if: inputs.job == 'db-report'
+    runs-on: [self-hosted, boku]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preconditions
+        run: |
+          set -euo pipefail
+          docker inspect "$PG_CONTAINER" >/dev/null || { echo "::error::$PG_CONTAINER not found"; exit 1; }
+          if [ "$(docker inspect -f '{{.State.Running}}' "$PG_CONTAINER")" != "true" ]; then
+            echo "::error::$PG_CONTAINER is not running"
+            exit 1
+          fi
+          if [ "$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc \
+                  "SELECT count(*) FROM pg_extension WHERE extname = 'pg_stat_statements'")" != "1" ]; then
+            echo "::error::pg_stat_statements is not installed - dispatch job=db-observability first"
+            exit 1
+          fi
+          echo "Database is running and pg_stat_statements is installed."
+
+      - name: Run the full report (stays on the machine)
+        run: |
+          set -euo pipefail
+          STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+          OUT_DIR="$HOME/catchlogx-reports"
+          mkdir -p "$OUT_DIR"
+          OUT="$OUT_DIR/observability-$STAMP.txt"
+          docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" \
+            -v ON_ERROR_STOP=1 < deploy/postgres/report.sql > "$OUT" 2>&1
+          chmod 600 "$OUT"
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+          echo "SUMMARY=$OUT_DIR/summary-$STAMP.txt" >> "$GITHUB_ENV"
+          echo "Full report: $OUT (query texts stay on this machine)."
+
+      - name: Sanitised summary (no query text)
+        run: |
+          set -euo pipefail
+          {
+            echo "=== MEASUREMENT WINDOW ==="
+            docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -c "
+              SELECT current_database() AS database,
+                     now() - COALESCE(d.stats_reset, pg_postmaster_start_time()) AS window,
+                     (SELECT count(*) FROM pg_stat_statements) AS tracked_shapes
+              FROM pg_stat_database d WHERE d.datname = current_database();"
+
+            echo "=== TOP STATEMENTS BY TOTAL TIME (no query text) ==="
+            docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -c "
+              SELECT r.rolname AS role, s.calls,
+                     round(s.total_exec_time::numeric, 1) AS total_ms,
+                     round(s.mean_exec_time::numeric, 1) AS mean_ms,
+                     s.shared_blks_read AS blk_read,
+                     s.temp_blks_written AS temp_blk_written
+              FROM pg_stat_statements s JOIN pg_roles r ON r.oid = s.userid
+              WHERE s.toplevel
+              ORDER BY s.total_exec_time DESC LIMIT 10;"
+
+            echo "=== READ-ONLY ROLE CLX_READONLY (no query text) ==="
+            docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -c "
+              SELECT s.calls,
+                     round(s.total_exec_time::numeric, 1) AS total_ms,
+                     round(s.mean_exec_time::numeric, 1) AS mean_ms,
+                     s.shared_blks_read AS blk_read
+              FROM pg_stat_statements s JOIN pg_roles r ON r.oid = s.userid
+              WHERE r.rolname = 'clx_readonly'
+              ORDER BY s.total_exec_time DESC LIMIT 10;"
+
+            echo "=== SEQUENTIAL SCANS ==="
+            docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -c "
+              SELECT relname, seq_scan, seq_tup_read, idx_scan, n_live_tup,
+                     pg_size_pretty(pg_total_relation_size(relid)) AS total_size
+              FROM pg_stat_user_tables
+              WHERE seq_scan > 0
+              ORDER BY seq_tup_read DESC LIMIT 15;"
+
+            echo "=== UNUSED INDEXES ==="
+            docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -c "
+              SELECT s.relname AS table_name, s.indexrelname AS index_name,
+                     pg_size_pretty(pg_relation_size(s.indexrelid)) AS index_size
+              FROM pg_stat_user_indexes s
+              JOIN pg_index i ON i.indexrelid = s.indexrelid
+              WHERE s.idx_scan = 0 AND NOT i.indisprimary
+              ORDER BY pg_relation_size(s.indexrelid) DESC LIMIT 15;"
+          } > "$SUMMARY"
+          cat "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the sanitised summary
+        if: always() && env.SUMMARY != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-db-report-${{ github.run_id }}
+          path: ${{ env.SUMMARY }}
+          if-no-files-found: warn
+
+      - name: Summary
+        if: always()
+        run: |
+          set +e
+          {
+            echo "## Index-forensics report (#169)"
+            echo ""
+            echo "- Full report (with query texts): \`$HOME/catchlogx-reports/observability-${STAMP:-<stamp>}.txt\` **on the production machine**"
+            echo "- Uploaded artifact: text-free summary only (this repository is public)"
+            echo "- Logs with plans: \`docker exec $PG_CONTAINER sh -c 'tail -n 200 \$PGDATA/log/postgresql-\$(date +%a).log'\`"
+            echo "- Clean measurement window: \`SELECT pg_stat_statements_reset(); SELECT pg_stat_reset();\` (superuser, discards history)"
           } >> "$GITHUB_STEP_SUMMARY"

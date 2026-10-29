@@ -94,3 +94,18 @@ Two additions from 2026-10-27 that are not part of the web topology:
 
 The VPS side of the off-site path (nginx PUT endpoint, rotation timer) lives in
 `deploy/vps/offsite-backup/`.
+
+## Database query observability (#169)
+
+PostgreSQL settings are **not** part of this directory: they live inside the
+data volume (`postgresql.auto.conf`) and are applied by the gated
+`db-observability` job in `production-maintenance.yml` (or by hand with
+`docker exec -i clx-postgres psql … < deploy/postgres/observability.sql`).
+Settings, analysis queries and the rollback recipe are in
+[`../postgres/README.md`](../postgres/README.md).
+
+The job restarts `clx-postgres` **once** (postmaster settings cannot be applied
+otherwise: `shared_preload_libraries`, `logging_collector`). It backs up
+`postgresql.auto.conf` first and restores it automatically if the container does
+not come up. Logs then live in `<PGDATA>/log` inside the volume, not in
+`docker logs`.
