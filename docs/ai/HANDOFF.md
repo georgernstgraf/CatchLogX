@@ -120,9 +120,14 @@ Superuser-Slots.
     ausgerollt: die Settings stehen in der Cluster-Config, das Messfenster ist
     gestartet. Den Report zieht man per SSH (Runbook `deploy/postgres/README.md`),
     der `db-report`-Job existiert nicht mehr.
-16. [ ] **#170 Nachlauf**: (a) Produktions-Deploy einmal dispatchen und prüfen,
-    dass der neue Adopted-Schema-Guard über den Host-`psql` greift und
-    `prisma migrate deploy` „No pending migrations" meldet; (b) bei BOKU-IT
+16. [ ] **#170 Nachlauf**: (a) **erledigt** — Deploy-Run 40825812338 auf
+    `master` (`4eeee4a`): Guard meldet „Production is on the adopted,
+    migration-tracked schema (baseline recorded).", `prisma migrate deploy`
+    „2 migrations found / No pending migrations to apply.", Release publiziert,
+    Health-Check grün; Reboot-Rehearsal danach: Cluster und App ohne Login
+    online (Boot 36,5 s, Userspace 20,5 s), `NRestarts=0`, nginx 200,
+    464.654 Fänge unverändert, Container bleibt `Exited`; `report.sql` auf dem
+    neuen Pfad erzeugt einen 127-Zeilen-Report. Offen bleibt: (b) bei BOKU-IT
     einen **DNS-Namen** für `141.244.222.191` erbitten (nimmt die IP aus allen
     R-Configs und erlaubt später ein echtes Zertifikat); (c) Volume
     `catchlogx_clx_pgdata` und Docker erst entfernen, wenn die native DB Wochen
