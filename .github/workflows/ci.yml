@@ -1,0 +1,84 @@
+# Correctness gate: lint, typecheck, tests and the migration-history check.
+# The dev instance is deployed by deploy-dev.yml, which waits for this
+# workflow to conclude successfully - the gate lives here, the deployer
+# does not (#178).
+name: CI
+
+on:
+  push:
+    branches: [dev, master]
+  pull_request:
+    branches: [dev, master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+  # Enforces the migration-only workflow (#129): the migration history must
+  # reproduce schema.prisma exactly. Red when someone changes the schema with
+  # `prisma db push` and leaves the history behind.
+  migration-drift:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: clxadmin
+          POSTGRES_PASSWORD: clxadmin
+          POSTGRES_DB: clx
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U clxadmin -d clx"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://clxadmin:clxadmin@localhost:5432/clx?schema=public
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply migration history to an empty database
+        run: npx prisma migrate deploy
+
+      - name: Fail if the migration history drifts from schema.prisma
+        run: >-
+          npx prisma migrate diff
+          --from-url "$DATABASE_URL"
+          --to-schema-datamodel prisma/schema.prisma
+          --exit-code

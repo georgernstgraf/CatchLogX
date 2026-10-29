@@ -85,11 +85,11 @@ Superuser-Slots.
    kann ein anderes Gerät sie bekommen → Adresskonflikt. Gleichzeitig melden, dass
    `.9` am 2026-10-27 **versehentlich** belegt war und wieder freigegeben ist.
    Bis dahin: bei Verbindungsproblemen zuerst `ip -br a` auf der Maschine prüfen.
-2. [ ] **#144 Gated Deploy-Pipeline** (nächster Code-Schritt): Prod-Deploy-Job in
-   `test.yml`, gated auf `test` + `migration-drift`, `master`-Trigger, eigene
-   Concurrency-Group (`cancel-in-progress: false`), Label `boku`. Danach
-   `production-deploy.yml` entfernen (#137) und den Push-Trigger für `master`
-   wiederherstellen. Die einmaligen Maintenance-Jobs sind mit #170 bereits weg
+2. [ ] **#144 Gated Deploy-Pipeline** (nächster Code-Schritt): Prod-Deploy-Workflow
+   `deploy-prod.yml` nach dem Muster von `deploy-dev.yml` (#178), gated auf `test` +
+   `migration-drift`, `master`-Trigger, eigene Concurrency-Group
+   (`cancel-in-progress: false`), Label `boku`. Danach `production-deploy.yml`
+   entfernen (#137) und den Push-Trigger für `master` wiederherstellen. Die einmaligen Maintenance-Jobs sind mit #170 bereits weg
    (`production-maintenance.yml` gelöscht, Runbooks unter `deploy/prod/postgres/`).
 3. [ ] **#159 Prod-Credentials**: kein Produktionspfad darf ein committetes
    Passwort nutzen (compose trägt weiterhin `clxadmin:clxadmin` als Dev-Default,

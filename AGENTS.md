@@ -26,8 +26,8 @@ On the dev instance `catchlogx.graf.priv.at` the app runs as a systemd **user** 
 `catchlogx` user and serves an **immutable release**: `catchlogx.service` runs
 `node ~/current/server.js`, where `~/current` → `~/releases/<sha>/` (Next.js `output: "standalone"`).
 
-Deploys are **push-driven**: the `deploy` job in `.github/workflows/test.yml` (gated by
-`needs: [test, migration-drift]`) builds on the self-hosted runner
+Deploys are **push-driven**: the `deploy` job in `.github/workflows/deploy-dev.yml` (gated by
+the `CI` workflow via `workflow_run`) builds on the self-hosted runner
 `actions.runner.catchlogx-vps.service` (label `vps`, running under the same `catchlogx` user
 manager), publishes the release with `scripts/publish-release.sh`, applies `prisma migrate deploy`,
 restarts `catchlogx.service` and health-checks `127.0.0.1:40873`. So
@@ -99,7 +99,10 @@ Strict red → green:
   - Check activation with `npm run check:hooks` (warns only — never fails).
   - Agents: warn about an inactive hook at session start (see the
     `issue-workflow` skill) — warn only, let the user activate it.
-- **CI is source of truth:** `.github/workflows/test.yml` runs `npm run lint` + `npm run typecheck` + `npm test` on push/PR to `dev`/`master`.
+- **CI is source of truth:** `.github/workflows/ci.yml` runs `npm run lint` + `npm run typecheck` + `npm test` on push/PR to `dev`/`master`.
+  The dev instance is deployed by `.github/workflows/deploy-dev.yml`, which fires via `workflow_run`
+  once `ci.yml` concluded successfully on `dev` (`needs:` does not cross workflow files, so the
+  gate is `workflow_run` plus an `if` on the job — and it requires the file on `master` to exist at all).
   The local hook is fast feedback only — hooks are bypassable (`--no-verify`) and opt-in per clone.
 
 ## Prisma
@@ -123,7 +126,7 @@ Query logging is disabled (empty `log: []` in `lib/prisma.ts`).
 - **Deploy (dev instance, production, CI):** `npx prisma migrate deploy` — applies pending migrations only.
 - **`npx prisma db push` is banned** outside throwaway sandboxes. It bypasses the history, writes no
   migration, and silently drops/recreates tables on renames (data loss).
-- **CI enforces this:** the `migration-drift` job in `.github/workflows/test.yml` applies the history to an
+- **CI enforces this:** the `migration-drift` job in `.github/workflows/ci.yml` applies the history to an
   empty database and fails when it no longer matches `schema.prisma`.
 - History state: a single baseline `20261017190000_init` was generated from `schema.prisma` on 2026-10-17
   (#129) after the history had drifted (the `UserRoles` enum had never been migrated). The dev database was
