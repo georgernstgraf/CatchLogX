@@ -2,6 +2,14 @@
 
 Offene Aufgaben für die nächste Session.
 
+**Stand 2026-10-30:** Die Produktionsdatenbank ist **nativ** (#170, Pendant zu
+#168 auf Dev): `postgresql@16-main`, echte Client-IPs, TLS angeboten, Backup und
+Read-only-Rolle laufen auf dem Host-Pfad. `production-maintenance.yml` ist
+gelöscht; Wartung passiert per SSH über das BOKU-VPN mit den Runbooks unter
+`deploy/prod/postgres/`. Details in `docs/ai/STATE.md` und
+`docs/meetings/2026-10-30-prod-postgres-native.md`. Der Container
+`clx-postgres` bleibt gestoppt mit `restart=no` als Rückfallweg.
+
 **Stand 2026-10-27:** Das zweite Vor-Ort-Fenster ist gelaufen. #143 ist **erledigt** —
 die Produktion läuft als systemd-User-Unit (Release `37fbcf7`, `~/current` →
 `~/releases/<sha>`), der Rollback wurde in beide Richtungen geübt und ein Reboot
@@ -54,8 +62,9 @@ Superuser-Slots.
 2. [ ] **#144 Gated Deploy-Pipeline** (nächster Code-Schritt): Prod-Deploy-Job in
    `test.yml`, gated auf `test` + `migration-drift`, `master`-Trigger, eigene
    Concurrency-Group (`cancel-in-progress: false`), Label `boku`. Danach
-   `production-deploy.yml` und die einmaligen Maintenance-Jobs entfernen (#137),
-   Push-Trigger für `master` wiederherstellen.
+   `production-deploy.yml` entfernen (#137) und den Push-Trigger für `master`
+   wiederherstellen. Die einmaligen Maintenance-Jobs sind mit #170 bereits weg
+   (`production-maintenance.yml` gelöscht, Runbooks unter `deploy/prod/postgres/`).
 3. [ ] **#159 Prod-Credentials**: kein Produktionspfad darf ein committetes
    Passwort nutzen (compose trägt weiterhin `clxadmin:clxadmin` als Dev-Default,
    auch in `SHADOW_DATABASE_URL`).
@@ -78,7 +87,8 @@ Superuser-Slots.
    (kurze SHAs scheitern in `actions/checkout`).
 8. [ ] **#153 In-App-Data-Access-Seite** (R-Verbindungsdaten + Read-only-Passwort
    für die Forschungsgruppe) — das Passwort liegt nur als `READONLY_DB_PASSWORD`
-   in `/opt/CatchLogX/.env`; Rotation = `readonly-role` erneut dispatchen.
+   in `/opt/CatchLogX/.env`; Rotation = `deploy/prod/postgres/readonly-role.sh`
+   per SSH (ohne `KEEP_PASSWORD=1`), Verifikation mit `KEEP_PASSWORD=1`.
 9. [ ] **#145 Wissensbasis** nachziehen (Läufe #143/#152 sind jetzt vollständig
    dokumentiert; offen bleibt die Zusammenfassung im Datenrepo-Kontext).
 10. [ ] **#115 Wartungszugang**: der Zugang existiert jetzt real — `root` per
@@ -106,21 +116,21 @@ Superuser-Slots.
 14. [ ] See `CatchLogX-Data#2` — Zugriffsrechte der Diplomgruppe (Write akzeptiert,
     Decision D007); `README.md` und `docs/ai/STATE.md` im Datenrepo nachziehen.
 
-15. [ ] **#169 Query-Observability auf Prod ausrollen**: Dev ist seit 2026-10-29
-    eingerichtet (`pg_stat_statements`, `auto_explain` ab 500 ms, Slow-Query-Log
-    ab 2 s ohne Bind-Parameter, Logs in `<PGDATA>/log`; Runbook
-    `deploy/postgres/README.md`). Auf Prod fehlt der Rollout: Job
-    **`db-observability`** (`production-maintenance.yml`, drittes Gate
-    `confirm=ADOPT-PRODUCTION`) anwendet `deploy/postgres/observability.sql`,
-    startet `clx-postgres` **einmal** neu (~10 s App-Aussetzer, Rollback der
-    `postgresql.auto.conf` ist eingebaut) und prüft, dass `clx_readonly` die
-    Statistik **nicht** lesen kann. Der Job ist erst nach einem Merge auf
-    `master` dispatchbar. Danach Messfenster: `SELECT
-    pg_stat_statements_reset(); SELECT pg_stat_reset();`, Last laufen lassen,
-    `job=db-report` ziehen (voller Report bleibt in `~/catchlogx-reports/`,
-    nur die textfreie Zusammenfassung wird Artefakt — das Repo ist public).
-    Der alte Dev-Container `clx-postgres` ist seit 2026-10-29 gestoppt mit
-    `restart=no`; Volume `dev-stack_clx_pgdata` bleibt als Rückfallweg.
+15. [x] **#169 Query-Observability auf Prod** — mit #170 am 2026-10-30
+    ausgerollt: die Settings stehen in der Cluster-Config, das Messfenster ist
+    gestartet. Den Report zieht man per SSH (Runbook `deploy/postgres/README.md`),
+    der `db-report`-Job existiert nicht mehr.
+16. [ ] **#170 Nachlauf**: (a) Produktions-Deploy einmal dispatchen und prüfen,
+    dass der neue Adopted-Schema-Guard über den Host-`psql` greift und
+    `prisma migrate deploy` „No pending migrations" meldet; (b) bei BOKU-IT
+    einen **DNS-Namen** für `141.244.222.191` erbitten (nimmt die IP aus allen
+    R-Configs und erlaubt später ein echtes Zertifikat); (c) Volume
+    `catchlogx_clx_pgdata` und Docker erst entfernen, wenn die native DB Wochen
+    inkl. Monatsprobe grün läuft. `/opt/CatchLogX` hängt jetzt am richtigen
+    Remote (`georgernstgraf/CatchLogX`) und wird per `git pull` aktuell gehalten;
+    es ist der Runbook-Host (kein Build, keine Unit liest daraus außer `.env`).
+    Macht #153 die R-Verbindungsdaten sichtbar: Host `141.244.222.191`, Port
+    5432, DB `clx`, Rolle `clx_readonly`, `sslmode=prefer` (oder `require`).
 
 Kontext: Das Epic #125 bleibt offen, solange `CatchLogX-Data#2` offen ist. Vom
 Produktions-Upgrade-Pfad #137–#153 sind #138–#143 und #150/#152 erledigt; offen
