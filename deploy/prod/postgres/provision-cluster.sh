@@ -83,10 +83,32 @@ echo "== 5/6 Konfiguration"
 install -d -m 755 "$CLUSTER_DIR/conf.d"
 install -m 644 "$SRC_DIR/99-catchlogx.conf" "$CLUSTER_DIR/conf.d/99-catchlogx.conf"
 install -m 640 -o postgres -g postgres "$SRC_DIR/pg_hba.conf" "$CLUSTER_DIR/pg_hba.conf"
-grep -qE "^[[:space:]]*start_conf[[:space:]]*=" "$CLUSTER_DIR/start.conf" \
-  && sed -i -E 's/^[[:space:]]*start_conf.*/start_conf = manual/' "$CLUSTER_DIR/start.conf" \
-  || echo "start_conf = manual" > "$CLUSTER_DIR/start.conf"
-echo "   start.conf: $(grep -E '^start_conf' "$CLUSTER_DIR/start.conf")"
+
+# Ubuntu ships `#include_dir = 'conf.d'` COMMENTED OUT. Without this line the
+# whole 99-catchlogx.conf is silently ignored - the cluster then starts with
+# Debian defaults (no TLS, no preload, no logging_collector). Found the hard way
+# during the 2026-10-29 preparation.
+if grep -qE "^[[:space:]]*#[[:space:]]*include_dir[[:space:]]*=" "$CLUSTER_DIR/postgresql.conf"; then
+  sed -i -E "s/^[[:space:]]*#[[:space:]]*include_dir[[:space:]]*=.*/include_dir = 'conf.d'/" "$CLUSTER_DIR/postgresql.conf"
+elif ! grep -qE "^[[:space:]]*include_dir[[:space:]]*=" "$CLUSTER_DIR/postgresql.conf"; then
+  printf "include_dir = 'conf.d'\n" >> "$CLUSTER_DIR/postgresql.conf"
+fi
+echo "   $(grep -E '^include_dir' "$CLUSTER_DIR/postgresql.conf")"
+
+# pg_createcluster auto-increments the port when 5432 is taken - and it IS
+# taken, by the container, until the maintenance window. conf.d/99-catchlogx.conf
+# already says 5432, but pg_ctlcluster/pg_lsclusters read `postgresql.conf`
+# itself, so both must agree.
+sed -i -E "s/^[[:space:]]*port[[:space:]]*=.*/port = 5432/" "$CLUSTER_DIR/postgresql.conf"
+echo "   postgresql.conf port: $(grep -E '^port' "$CLUSTER_DIR/postgresql.conf")"
+
+# Debian's start.conf is a BARE word, not a key=value line:
+#   # auto | manual | disabled
+#   manual
+# `pg_createcluster --start-conf=manual` writes it, but we (re)write it anyway
+# so a re-run is deterministic. The maintenance window flips it to `auto`.
+printf '# auto | manual | disabled\nmanual\n' > "$CLUSTER_DIR/start.conf"
+echo "   start.conf: $(tail -n1 "$CLUSTER_DIR/start.conf")"
 
 echo "== 6/6 TLS (selbstsigniert)"
 if [ -s "$CLUSTER_DIR/server.crt" ] && [ -s "$CLUSTER_DIR/server.key" ]; then

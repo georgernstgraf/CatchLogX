@@ -44,7 +44,11 @@ sudo ./deploy/prod/postgres/provision-cluster.sh
 pg_lsclusters                            # 16 main 5432 down  16/main start.conf=manual
 ```
 
-Prove the configuration boots **before** the window, on a throwaway port:
+Prove the configuration boots **before** the window, on a throwaway port. Note
+the two edits `provision-cluster.sh` makes to the packaged `postgresql.conf`:
+Ubuntu ships `#include_dir = 'conf.d'` **commented out** (without it the whole
+`99-catchlogx.conf` is silently ignored) and `pg_createcluster` picks port 5433
+because the container occupies 5432 at creation time.
 
 ```sh
 sudo pg_ctlcluster 16 main start -o '-p 5499'
@@ -234,9 +238,16 @@ runuser -u clxadmin -- psql -d clx -c 'DROP ROLE clx_readonly_selftest'
 rm -f /tmp/selftest.env
 ```
 
-### 9. Start the measurement window
+### 9. Make it boot-fixed, start the measurement window
 
 ```sh
+# The cluster was created with start.conf = manual so it could not race the
+# container for port 5432. Now it must come up at boot without a login.
+printf '# auto | manual | disabled\nauto\n' > /etc/postgresql/16/main/start.conf
+pg_lsclusters                     # 16 main 5432 online postgres ...
+# `systemctl is-enabled postgresql@16-main` may say `enabled-runtime` - that is
+# the postgresql-generator, not a defect.
+
 runuser -u clxadmin -- psql -d clx -c \
   'SELECT pg_stat_statements_reset(); SELECT pg_stat_reset();'
 mkdir -p /home/clxadmin/catchlogx-reports && chown clxadmin:clxadmin /home/clxadmin/catchlogx-reports
