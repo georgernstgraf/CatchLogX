@@ -1,21 +1,38 @@
-# Production compose override (#143) - layer it on the base file:
+# Production compose override - layer it on the base file:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
-# Since the immutable-release topology (#143) the production APP is a systemd
-# user unit (`catchlogx.service` -> `node ~/current/server.js`), NOT a
-# container. This override therefore DISABLES the base `app` service on
-# production: it puts it behind the compose profile `interim-container`, which
-# nothing activates, so `up -d` starts only the database. That is a structural
-# guard, not a convention - an accidental `docker compose up -d` on the machine
-# can no longer resurrect the app container and race the systemd unit for port
-# 3001.
+# Since #170 the production machine runs **no application containers at all**:
+#   * the app is a systemd user unit (`catchlogx.service` ->
+#     `node ~/current/server.js`, #143);
+#   * PostgreSQL is a native cluster (`postgresql@16-main`, #170);
+#   * MinIO is gone (#131).
 #
-# The base `app` command (which contains `prisma db push`) is overridden anyway,
-# so even an explicit `--profile interim-container up` could never run the
-# db-push-era code against the adopted, migration-tracked schema.
+# So this file is now purely a **structural guard**: every service of the base
+# file is put behind a compose profile that nothing activates. A `docker compose
+# up -d` on the production machine therefore starts *nothing* - it cannot
+# resurrect the db-push-era app and it cannot race the native cluster for port
+# 5432.
+#
+# Why keep the file instead of deleting it: the base `docker-compose.yml` is the
+# students' local setup and must stay usable. Without this override it would be
+# fully live on production, where it would
+#   * publish `0.0.0.0:5432` -> port clash with the native cluster, and
+#   * run the app container's start command, which applies migrations, SEEDS
+#     fish species (`scripts/insert-fish.ts`) and tries to bind :3001.
+#
+# The stopped `clx-postgres` container and its volume stay as the rollback path
+# for a few weeks; `docker start clx-postgres` is a direct docker command and is
+# not affected by these profiles.
+#
+# This file disappears together with docker on the host - once the native
+# database has proven itself (monthly restore probe) and the volume is deleted.
 #
 # Nothing here may ever run `prisma db push`.
 services:
+  db:
+    profiles: ["retired-db"]
+  db-shadow-init:
+    profiles: ["retired-db"]
   app:
     profiles: ["interim-container"]
     command: npx next start -p 3001

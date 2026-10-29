@@ -5,13 +5,15 @@ name: Deploy CatchLogX
 # This is the deploy path for the window between the immutable-release topology
 # (#143) and the gated pipeline (#144). It ships a deliberately chosen `master`
 # commit to Martin's BOKU machine through that machine's own self-hosted runner
-# (there is no SSH or tunnel access by decision, #115). It is DELETED together
-# with this workflow once #143 and #144 have landed.
+# (since 2026-10-27 there is also direct root SSH over the BOKU VPN, #115; the
+# runner remains the deploy path). It is DELETED together with this workflow
+# once #143 and #144 have landed.
 #
 # Topology on the machine since #143:
 #   * the app is a systemd USER unit (`catchlogx.service` -> `node
-#     ~/current/server.js`), NOT a container - provisioned by the
-#     `release-topology` job of production-maintenance.yml;
+#     ~/current/server.js`), NOT a container;
+#   * PostgreSQL is a native cluster (`postgresql@16-main`, #170), so the
+#     schema guard below talks to it over the local socket;
 #   * a deploy BUILDS ONCE here (native glibc Node, matching the runtime - never
 #     an alpine container build, whose musl bcrypt/Prisma binaries would not run
 #     on the host's glibc node), publishes `~/releases/<sha>/`, atomically swaps
@@ -52,7 +54,6 @@ concurrency:
 env:
   ENV_FILE: /opt/CatchLogX/.env
   APP_CONTAINER: clx-web
-  PG_CONTAINER: clx-postgres
   PG_USER: clxadmin
   PG_DB: clx
   UNIT_NAME: catchlogx.service
@@ -122,21 +123,21 @@ jobs:
       # production is already on the adopted, migration-tracked schema: on the
       # db-push era database there is no `_prisma_migrations` table and
       # `prisma migrate deploy` would collide with the existing tables.
+      #
+      # Since #170 the database is a native cluster: the checks connect over
+      # the local socket as the runner's own OS user (`clxadmin`), which
+      # pg_hba maps to the DB role of the same name via peer auth. No password,
+      # no container, no docker.
       - name: Adopted-schema guard
         env:
           FALLBACK_URL: ${{ secrets.PROD_DATABASE_URL }}
         run: |
           set -euo pipefail
-          docker inspect "$PG_CONTAINER" >/dev/null || { echo "::error::$PG_CONTAINER not found - is production running?"; exit 1; }
+          pg_isready -q || { echo "::error::PostgreSQL is not reachable - is postgresql@16-main running?"; exit 1; }
 
-          # The on-machine env file is the source of truth since #143; fall back
-          # to the running container, then to the secret.
+          # The on-machine env file is the source of truth since #143.
           if [ -f "$ENV_FILE" ]; then
             URL="$(grep -E '^DATABASE_URL=' "$ENV_FILE" | head -n1 | cut -d= -f2-)"
-          fi
-          if [ -z "${URL:-}" ] && docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
-            URL="$(docker exec "$APP_CONTAINER" printenv DATABASE_URL)"
-            URL="${URL/@db:5432/@127.0.0.1:5432}"
           fi
           if [ -z "${URL:-}" ]; then
             URL="$FALLBACK_URL"
@@ -147,11 +148,13 @@ jobs:
           fi
           echo "PROD_DATABASE_URL=$URL" >> "$GITHUB_ENV"
 
+          pgq() { psql -X -q -w -U "$PG_USER" -d "$PG_DB" -tAc "$1"; }
+
           # 1. the Prisma Migrate bookkeeping table must exist. On the db-push
           #    era database it never does - that is the legacy signal.
-          HAS_TABLE="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc "SELECT to_regclass('public.\"_prisma_migrations\"') IS NOT NULL")"
+          HAS_TABLE="$(pgq "SELECT to_regclass('public.\"_prisma_migrations\"') IS NOT NULL")"
           if [ "$HAS_TABLE" != "t" ]; then
-            echo "::error::production is not on the adopted schema yet - run the cutover (#141) first"
+            echo "::error::production is not on the adopted schema - restore it before deploying"
             exit 1
           fi
 
@@ -160,12 +163,10 @@ jobs:
           #    ref that itself adds a migration is NOT refused here - applying
           #    it is exactly what this deploy is for (step "Apply pending
           #    migrations" below runs `migrate deploy`).
-          ADOPTED="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc \
-            "SELECT count(*) FROM \"_prisma_migrations\" WHERE migration_name = '20261017190000_init' AND finished_at IS NOT NULL")"
-          INCOMPLETE="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -Atc \
-            "SELECT count(*) FROM \"_prisma_migrations\" WHERE finished_at IS NULL AND rolled_back_at IS NULL")"
+          ADOPTED="$(pgq "SELECT count(*) FROM \"_prisma_migrations\" WHERE migration_name = '20261017190000_init' AND finished_at IS NOT NULL")"
+          INCOMPLETE="$(pgq "SELECT count(*) FROM \"_prisma_migrations\" WHERE finished_at IS NULL AND rolled_back_at IS NULL")"
           if [ "$ADOPTED" != "1" ]; then
-            echo "::error::production is not on the adopted schema yet - run the cutover (#141) first"
+            echo "::error::production is not on the adopted schema - the baseline is not recorded"
             exit 1
           fi
           if [ "$INCOMPLETE" != "0" ]; then
