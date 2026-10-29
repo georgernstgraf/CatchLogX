@@ -13,8 +13,8 @@ Checkout `/opt/CatchLogX` ist gelöscht (Runbooks: root-eigener Clone unter
 behält **bewusst** den Konsolen-Passwort-Login als Break-Glass. Der Deploy-Job
 hat den docker-basierten „Retire the interim app container"-Schritt verloren.
 Verifiziert: Deploy grün (Run 40831004953), Backup mit `env.age` grün,
-`find /opt ! -user root` leer. Details: `DECISIONS.md` 2026-10-29,
-`PITFALLS.md`, `deploy/prod/README.md`.
+`find /opt ! -user root` leer. Details: `docs/meetings/2026-10-29-host-haertung.md`,
+`DECISIONS.md` 2026-10-29, `PITFALLS.md`, `deploy/prod/README.md`.
 
 **Stand 2026-10-30:** Die Produktionsdatenbank ist **nativ** (#170, Pendant zu
 #168 auf Dev): `postgresql@16-main`, echte Client-IPs, TLS angeboten, Backup und
