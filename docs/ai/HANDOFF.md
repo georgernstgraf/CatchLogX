@@ -16,6 +16,18 @@ Verifiziert: Deploy grün (Run 40831004953), Backup mit `env.age` grün,
 `find /opt ! -user root` leer. Details: `docs/meetings/2026-10-29-host-haertung.md`,
 `DECISIONS.md` 2026-10-29, `PITFALLS.md`, `deploy/prod/README.md`.
 
+**Nachtrag 2026-10-29 (#172), Bedienbarkeit nach der Härtung:** `clxadmin`
+hat jetzt `~/tools/node/bin` (Node **v22.23.3**, npm 10.9.9) im PATH
+(`deploy/prod/shell/node-path.sh` → `~/.config/catchlogx/path.sh`, gesourct aus
+`~/.profile`) und einen **von Hand** gepflegten Diagnose-Klon unter
+`~/src/CatchLogX`, der `master` trackt und dessen `.env` auf
+`~/.config/catchlogx/.env` symlinkt. Damit läuft
+`npx prisma migrate status` auf dem Host (verifiziert: 2 Migrationen, Schema
+aktuell; deploytes Release `d3216a8` ist Vorfahr von `master` `2620c6c`).
+Bewusst **kein** Skript — die drei Zeilen stehen in `deploy/prod/README.md`
+(„Checking prod by hand"). Die Node-Laufzeit ist in `deploy/prod/node/README.md`
+dokumentiert (vorher stand sie nur in einer `ExecStart`-Zeile).
+
 **Stand 2026-10-30:** Die Produktionsdatenbank ist **nativ** (#170, Pendant zu
 #168 auf Dev): `postgresql@16-main`, echte Client-IPs, TLS angeboten, Backup und
 Read-only-Rolle laufen auf dem Host-Pfad. `production-maintenance.yml` ist

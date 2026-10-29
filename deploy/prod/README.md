@@ -45,6 +45,35 @@ PostgreSQL 16 (native, since #170)
 - Health checks in the workflows still probe `127.0.0.1:3001` (the app
   directly), so they do not depend on nginx.
 
+## Checking prod by hand (#172)
+
+No wrapper, no script — four commands answer "what is deployed and does the
+schema match?". They run as `clxadmin` over SSH; `git`/`node`/`npm`/`npx` are
+available in a **login** shell (`ssh … 'bash -lc "…"'`).
+
+```sh
+# 1. what is running, and is the checkout older than the deployment?
+readlink -f ~/current                    # ~/releases/<full-sha>
+git -C ~/src/CatchLogX rev-parse HEAD    # clone (tracks master, like prod)
+git -C ~/src/CatchLogX log --oneline $(basename $(readlink -f ~/current))..HEAD
+
+# 2. does the schema match the checkout? (Prisma reads .env from the cwd)
+cd ~/src/CatchLogX && git pull --ff-only   # + `npm ci` only if package-lock changed
+npx prisma migrate status                  # "Database schema is up to date!"
+```
+
+`~/src/CatchLogX` is a **hand-maintained diagnosis clone**, not a deployment
+source: it tracks `master` (prod runs `master`; `dev` has migrations that are
+not released yet and would show up as bogus "pending"), and its `.env` is a
+symlink to `~/.config/catchlogx/.env` so there is only one copy of the DB
+password. Deploys still come from the runner, never from this clone.
+
+Why this clone and not `psql`: `prisma migrate status` compares
+`prisma/migrations/` against `_prisma_migrations` **in the checkout that matches
+the running release**, which is exactly the question. `psql -c 'select * from
+_prisma_migrations'` answers only half of it. Node itself: see
+[`node/README.md`](node/README.md).
+
 ## Files and their target on the host
 
 | File here | Target on the host | Mode |
@@ -57,6 +86,7 @@ PostgreSQL 16 (native, since #170)
 | `systemd/catchlogx.service` | `~clxadmin/.config/systemd/user/catchlogx.service` | `644 clxadmin:clxadmin` |
 | `systemd/actions.runner.AlphaVIE-CatchLogX.catchlogx-server.service` | `~clxadmin/.config/systemd/user/actions.runner.AlphaVIE-CatchLogX.catchlogx-server.service` | `644 clxadmin:clxadmin` |
 | `sshd/99-catchlogx-no-password.conf` | `/etc/ssh/sshd_config.d/99-catchlogx-no-password.conf` | `644 root:root` |
+| `shell/node-path.sh` | `~clxadmin/.config/catchlogx/path.sh` (+ one `source` line in `~clxadmin/.profile`) | `644 clxadmin:clxadmin` |
 | `postfix/main.cf.nondefault` + `postfix/README.md` | applied by hand (`postconf -e`), see that README | – |
 | `postgres/99-catchlogx.conf` | `/etc/postgresql/16/main/conf.d/99-catchlogx.conf` | `644 root:root` |
 | `postgres/pg_hba.conf` | `/etc/postgresql/16/main/pg_hba.conf` | `640 postgres:postgres` |
@@ -86,8 +116,10 @@ curl -sSI http://141.244.222.191:3001/ | head -3   # 301 -> port 80
 ```
 
 Not managed here: the release tree under `~clxadmin` (created by
-`.github/workflows/production-deploy.yml`) and the stopped `clx-postgres`
-container (kept as a rollback path, `restart=no`).
+`.github/workflows/production-deploy.yml`), the diagnosis clone
+`~/src/CatchLogX` (hand-pulled, see above), the Node distribution in
+`~/tools/node` (documented in [`node/README.md`](node/README.md)) and the
+stopped `clx-postgres` container (kept as a rollback path, `restart=no`).
 
 Since **2026-10-29 (#122)** the host is hardened around one rule: **nothing of
 `clxadmin` lives outside its home**.
