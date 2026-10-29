@@ -24,6 +24,10 @@ Internet / BOKUnet
   │
   ├─ http://141.244.222.191:3001/…  → nginx  → 301 → http://<host>/…   (old bookmarks)
   └─ http://141.244.222.191/…       → nginx  → proxy_pass → 127.0.0.1:3001 (Next.js)
+
+PostgreSQL 16 (native, since #170)
+  ├─ 127.0.0.1:5432 + unix socket → app (clxadmin, scram) and host tooling (peer)
+  └─ 0.0.0.0:5432 → research group (clx_readonly, scram, TLS offered)
 ```
 
 - The app (`catchlogx.service`, user unit of `clxadmin`) binds **only**
@@ -52,6 +56,9 @@ Internet / BOKUnet
 | `systemd/99-any-link.conf` | `/etc/systemd/system/systemd-networkd-wait-online.service.d/99-any-link.conf` | `644 root:root` |
 | `systemd/catchlogx.service` | `~clxadmin/.config/systemd/user/catchlogx.service` | `644 clxadmin:clxadmin` |
 | `postfix/main.cf.nondefault` + `postfix/README.md` | applied by hand (`postconf -e`), see that README | – |
+| `postgres/99-catchlogx.conf` | `/etc/postgresql/16/main/conf.d/99-catchlogx.conf` | `644 root:root` |
+| `postgres/pg_hba.conf` | `/etc/postgresql/16/main/pg_hba.conf` | `640 postgres:postgres` |
+| `postgres/provision-cluster.sh`, `make-tls-cert.sh`, `readonly-role.sh` | run from the checkout (root) | – |
 | `backup/backup.sh` | `/usr/local/bin/catchlogx-backup` | `755 root:root` |
 | `backup/catchlogx-*.service`, `backup/catchlogx-*.timer`, `backup/catchlogx-alert@.service` | `/etc/systemd/system/` | `644 root:root` |
 | `backup/catchlogx-backup.env.example` | `/etc/catchlogx-backup.env` (filled in) | `600 root:root` |
@@ -77,8 +84,9 @@ curl -sSI http://141.244.222.191:3001/ | head -3   # 301 -> port 80
 ```
 
 Not managed here: the Actions runner (`actions.runner.AlphaVIE-CatchLogX.catchlogx-server.service`,
-system service, outbound only), `docker`/`clx-postgres`, and the release tree
-under `~clxadmin` (created by `.github/workflows/production-deploy.yml`).
+system service, outbound only), the stopped `clx-postgres` container (kept as a
+rollback path, `restart=no`), and the release tree under `~clxadmin` (created by
+`.github/workflows/production-deploy.yml`).
 
 ## Mail and backup
 
@@ -89,23 +97,20 @@ Two additions from 2026-10-27 that are not part of the web topology:
   blocks every SMTP port except 25 to BOKU's own mail servers; see
   `postfix/README.md`.
 - `backup/` — daily `pg_dump` + encrypted env + off-site upload, with a monthly
-  restore rehearsal. Runs as `clxadmin` (docker group), config in
-  `/etc/catchlogx-backup.env`; see `backup/README.md`.
+  restore rehearsal. Runs as `clxadmin` (peer auth to the native cluster),
+  config in `/etc/catchlogx-backup.env`; see `backup/README.md`.
 
 The VPS side of the off-site path (nginx PUT endpoint, rotation timer) lives in
 `deploy/vps/offsite-backup/`.
 
-## Database query observability (#169)
+## PostgreSQL (#170)
 
-PostgreSQL settings are **not** part of this directory: they live inside the
-data volume (`postgresql.auto.conf`) and are applied by the gated
-`db-observability` job in `production-maintenance.yml` (or by hand with
-`docker exec -i clx-postgres psql … < deploy/postgres/observability.sql`).
-Settings, analysis queries and the rollback recipe are in
-[`../postgres/README.md`](../postgres/README.md).
+The database is a **native cluster** (`postgresql@16-main`) since 2026-10-30 —
+configuration, TLS, the maintenance window runbook and the research group's
+connection details live in [`postgres/README.md`](postgres/README.md). The
+cluster's settings are in `postgres/99-catchlogx.conf`
+(`/etc/postgresql/16/main/conf.d/`), the access rules in `postgres/pg_hba.conf`.
 
-The job restarts `clx-postgres` **once** (postmaster settings cannot be applied
-otherwise: `shared_preload_libraries`, `logging_collector`). It backs up
-`postgresql.auto.conf` first and restores it automatically if the container does
-not come up. Logs then live in `<PGDATA>/log` inside the volume, not in
-`docker logs`.
+Query observability (#169) is part of that configuration;
+`postgres/observability-extension.sql` only creates the extension and revokes
+the public grant. Analysis queries: [`../postgres/report.sql`](../postgres/report.sql).

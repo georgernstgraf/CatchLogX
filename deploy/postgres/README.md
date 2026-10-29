@@ -9,7 +9,7 @@ Two modes and two roles are involved:
 | Instance | How it runs | How to apply |
 |---|---|---|
 | Dev VPS (`claw.graf.priv.at`) | native cluster `postgresql@16-main`, config in `/etc/postgresql/16/main/` | `sudo -u postgres psql -d clx -f deploy/postgres/observability.sql` |
-| Production (BOKU) | container `clx-postgres` (volume `clx_pgdata`) | gated job `db-observability` in `production-maintenance.yml`, or `docker exec -i … psql < observability.sql` |
+| Production (BOKU) | native cluster `postgresql@16-main` since #170, settings in `/etc/postgresql/16/main/conf.d/99-catchlogx.conf` | already configured at cluster creation; only the extension part is run once: `deploy/prod/postgres/observability-extension.sql` |
 
 ## What gets collected — and what deliberately does not
 
@@ -18,7 +18,7 @@ Two modes and two roles are involved:
 | `pg_stat_statements` | one row per **normalised** query shape (constants become `$1`): `calls`, `total_exec_time`, `mean_exec_time`, `rows`, `shared_blks_hit/read`, `temp_blks_written`, `userid` |
 | `auto_explain` (≥ 500 ms) | the **real plan with BUFFERS** of slow statements; this is what proves *where* the time goes (`Seq Scan on fish_catches`, bad row estimates, …) |
 | `log_min_duration_statement` (≥ 2 s) | safety net for statements auto_explain does not cover, **without bind parameters** |
-| `logging_collector` | logs inside `PGDATA/log`, one file per weekday, ≤ 128 MB each, truncated on rotation (bounded, survives container restarts) |
+| `logging_collector` | logs inside `PGDATA/log`, one file per weekday, ≤ 128 MB each, truncated on rotation (bounded, survives restarts) |
 
 **Not collected on purpose:** `log_statement = 'all'`. It would write every
 statement including literals — i.e. research data from the R clients and the
@@ -56,28 +56,29 @@ sudo -u postgres psql -d clx -f deploy/postgres/report.sql
 
 Logs: `/var/lib/postgresql/16/main/log/postgresql-<day>.log`.
 
-### Production (container `clx-postgres`)
+### Production (native cluster since #170)
 
-Preferred path: dispatch the **`db-observability`** job of
-`production-maintenance.yml` on `master` with
-`confirm=ADOPT-PRODUCTION`. It applies the script, restarts the container,
-re-applies it and verifies the result. A workflow_dispatch job only exists once
-the workflow file is on `master` — until then the change is not dispatchable
-(see `docs/ai/PITFALLS.md`).
-
-The restart drops the app's database connections for ~10 s. Prisma reconnects,
-but the job is a maintenance action: run it when a short blip is acceptable,
-and check `curl -fsS http://127.0.0.1:3001/` afterwards.
-
-Logs (inside the volume, so they survive restarts and re-created containers):
+The settings are part of the cluster configuration
+(`/etc/postgresql/16/main/conf.d/99-catchlogx.conf`, versioned in
+`deploy/prod/postgres/`), so they are applied **before the first start** — no
+two-pass `ALTER SYSTEM`, no restart dance. What is left is the extension part,
+which needs the preloaded library:
 
 ```bash
-docker exec clx-postgres ls -lh /var/lib/postgresql/data/log
-docker exec clx-postgres tail -c 200000 /var/lib/postgresql/data/log/postgresql-$(date +%a).log
+cd /opt/CatchLogX
+runuser -u clxadmin -- psql -d clx -f deploy/prod/postgres/observability-extension.sql
 ```
 
-`docker logs clx-postgres` no longer shows connection/statement lines while
-`logging_collector` is on — that is expected.
+Logs:
+
+```bash
+ls -lh /var/lib/postgresql/16/main/log/
+tail -n 200 /var/lib/postgresql/16/main/log/postgresql-$(date +%a).log
+```
+
+`logging_collector` is on: connection/statement lines are **not** in
+`journalctl`, they are in the files above. `%r` shows the real client address
+(the app is loopback by design).
 
 ## Reading the result
 
@@ -86,11 +87,18 @@ time, the same restricted to `clx_readonly`, slowest shapes per call,
 sequential scans, index use per table, unused indexes, temp-file spills and
 table sizes.
 
-The read-only job **`db-report`** runs exactly this report on production. The
-full output (query texts) stays on the machine in
-`~/catchlogx-reports/observability-<stamp>.txt`; only a text-free summary goes
-to the job log/artifact, because this repository is public and its artifacts
-are readable by anyone.
+On production it is run **on the machine** (there is no dispatch job any more);
+the full output contains query texts and therefore stays there, in
+`~/catchlogx-reports/`:
+
+```bash
+cd /opt/CatchLogX
+runuser -u clxadmin -- bash -c 'psql -d clx -f deploy/postgres/report.sql' \
+  > "/home/clxadmin/catchlogx-reports/observability-$(date -u +%Y%m%dT%H%M%SZ).txt"
+chown clxadmin:clxadmin /home/clxadmin/catchlogx-reports/observability-*.txt
+```
+
+Only a text-free summary may leave the machine — this repository is public.
 
 Turn evidence into a schema change like this:
 
@@ -117,9 +125,9 @@ Caveats that decide whether the numbers mean anything:
   query *shapes* and rough relative costs, but a `Seq Scan` that looks harmless
   there can still be the bottleneck at production volume — confirm the decisive
   cases on production (or a production dump in a scratch database).
-- On production the docker userland proxy masks client IPs (`172.18.0.1`), so
-  `%r` in the log does not identify the R client. `clx_readonly` as a role
-  still does.
+- Since #170 production shows the **real client address** in `%r` (the container
+  proxy masked it as `172.18.0.1`). The app's own connections are `127.0.0.1`;
+  everything else is a research-group client.
 - `CREATE INDEX CONCURRENTLY` cannot run inside a transaction block. Prisma
   wraps each migration in one, so an index on a large table needs the
   `CONCURRENTLY` variant written by hand into the migration with the
