@@ -62,7 +62,7 @@ WHERE d.datname = current_database();
 -- "5 concurrent connections per client address" is the observed ceiling of the
 -- read-only workload, NOT a server-side rule: PostgreSQL has no per-IP limit.
 -- A `note` is only a prompt to look at the R client's pool settings, not an alarm.
-SELECT coalesce(client_addr::text, 'local (socket)')            AS source,
+SELECT coalesce(host(client_addr), 'local (socket)')            AS source,
        usename                                                   AS role,
        count(*)                                                  AS conns,
        count(*) FILTER (WHERE state <> 'idle')                   AS busy,
