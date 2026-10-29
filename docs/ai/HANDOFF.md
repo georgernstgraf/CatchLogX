@@ -153,26 +153,31 @@ Superuser-Slots.
     `/home/clxadmin/.config/catchlogx/.env`.
     Macht #153 die R-Verbindungsdaten sichtbar: Host `141.244.222.191`, Port
     5432, DB `clx`, Rolle `clx_readonly`, `sslmode=prefer` (oder `require`).
-17. [x] **#171 Read-only-Kapazität**: `clx_readonly` hat **108**
-    Verbindungen, `max_connections = 200` (+ `superuser_reserved_connections = 5`,
-    `work_mem = 8MB`). Ausgerollt am **2026-10-29** per SSH-Runbook aus
-    `/root/CatchLogX` (Commit `1332258`) mit
-    `KEEP_PASSWORD=1 ./deploy/prod/postgres/readonly-role.sh` (keine Rotation):
-    Restart in **2,4 s**, App `200` (loopback und nginx), `fish_catches`
-    unverändert **464 654**, `rolconnlimit = 108`, Rechte-Probe grün,
-    Gegenprobe von außen: **5 gleichzeitige Startpakete von einer Quell-IP**
-    alle nach ~1,28 s beantwortet. Der Restart hat die Statistik **nicht**
-    geleert (`pg_stat_statements.save = on`). Die gemeldete Grenze „1
-    Verbindung pro IP" war **kein** DB-Limit: 8 gleichzeitige TCP-Sessions und
-    4 gleichzeitige Postgres-Startpakete von **einer** Quell-IP wurden bedient
-    (Messung im Issue, `PITFALLS.md`) — ein Timeout ist nie das Symptom einer
-    Postgres-Grenze, es war der Tunnel (behoben durch den VPN-Restart). Die „5
-    pro Client-Adresse" werden **nicht** durchgesetzt, sondern stehen im neuen
-    Report-Abschnitt (`deploy/postgres/report.sql`). **Offen:** Dev-Parität
-    (#168) — `clx_readonly` auf dem Dev-VPS ebenfalls auf 108;
-    `max_connections` dort bewusst nicht anheben (~3,8 GB RAM). Beim Rollout
-    war SSH:22 auf `claw` von `think` aus nicht erreichbar (Web und 5432
-    schon) — der Schritt braucht den üblichen Zugang.
+17. [x] **#171 Kapazität auf Prod und Dev**: `clx_readonly` hat auf **beiden**
+    Instanzen **108** Verbindungen (Prod vorher 40, Dev 20), `max_connections = 200`
+    (+ `superuser_reserved_connections = 5`, `work_mem = 8MB`) — vorher galt der
+    PGDG-Default 100, womit 108 Slots gar nicht erreichbar waren.
+    **Prod** (2026-10-29, SSH-Runbook aus `/root/CatchLogX`, Commit `1332258`):
+    Config vorab per `postgres -C` geprüft, Restart in **2,4 s**, App `200`
+    (loopback und nginx), `fish_catches` unverändert **464 654**, dann
+    `KEEP_PASSWORD=1 ./readonly-role.sh` (keine Rotation) → `rolconnlimit = 108`,
+    Rechte-Probe grün; Gegenprobe von außen: **5 gleichzeitige Startpakete** von
+    einer Quell-IP alle nach ~1,28 s beantwortet.
+    **Dev** (2026-10-29, `claw` über `tun0`/10.8.0.2 — Port 22 ist auf der
+    öffentlichen IP **zu**, Web und 5432 sind offen): neue versionierte
+    `deploy/vps/postgres/99-catchlogx-capacity.conf` installiert, Restart in
+    **2,5 s**, `ALTER ROLE clx_readonly CONNECTION LIMIT 108`, App `200` auf
+    `127.0.0.1:40873` und `https://catchlogx.graf.priv.at`, `fish_catches`
+    127 179 unverändert.
+    Die ursprünglich gewünschte Grenze „**5 Verbindungen pro Client-IP**" ist
+    **fallengelassen**: PostgreSQL hat kein solches Feature, und der Anlass war
+    eine Fehldiagnose — 8 gleichzeitige TCP-Sessions und 4 gleichzeitige
+    Postgres-Startpakete von **einer** Quell-IP wurden bedient (Messung im
+    Issue, `PITFALLS.md`); ein Timeout ist nie das Symptom einer Postgres-Grenze,
+    es war der Tunnel. Der Report-Abschnitt „CONNECTIONS PER CLIENT ADDRESS"
+    bleibt als Diagnose (wer hält wie viele Verbindungen), ohne Schwelle.
+    Kein Restart kostet Statistik: `pg_stat_statements.save = on` (198 Shapes,
+    `stats_reset` unverändert nach dem Prod-Restart).
 
 Kontext: Das Epic #125 bleibt offen, solange `CatchLogX-Data#2` offen ist. Vom
 Produktions-Upgrade-Pfad #137–#153 sind #138–#143 und #150/#152 erledigt; offen
