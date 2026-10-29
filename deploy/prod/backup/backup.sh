@@ -45,7 +45,7 @@ PG_RESTORE_DB="${PG_RESTORE_DB:-clx_restore_probe}"
 BACKUP_ROOT="${BACKUP_ROOT:-/home/clxadmin/catchlogx-backups}"
 KEEP_DAILY="${KEEP_DAILY:-7}"
 KEEP_MONTHLY="${KEEP_MONTHLY:-3}"
-APP_ENV_FILE="${APP_ENV_FILE:-/opt/CatchLogX/.env}"
+APP_ENV_FILE="${APP_ENV_FILE:-/home/clxadmin/.config/catchlogx/.env}"
 
 BACKUP_AGE_RECIPIENT="${BACKUP_AGE_RECIPIENT:-}"
 OFFSITE_URL="${OFFSITE_URL:-}"

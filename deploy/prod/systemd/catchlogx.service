@@ -9,7 +9,7 @@ Documentation=https://github.com/georgernstgraf/CatchLogX
 # longer reachable from the network - nginx on :80 proxies to it, and the
 # former public URL on port 3001 redirects to :80. PORT stays 3001.
 WorkingDirectory=%h/current
-EnvironmentFile=/opt/CatchLogX/.env
+EnvironmentFile=/home/clxadmin/.config/catchlogx/.env
 Environment=NODE_ENV=production
 Environment=PORT=3001
 Environment=HOSTNAME=127.0.0.1

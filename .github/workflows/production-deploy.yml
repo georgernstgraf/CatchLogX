@@ -29,9 +29,12 @@ name: Deploy CatchLogX
 #   * the ADOPTED-SCHEMA GUARD runs as the first thing that touches the machine:
 #     it refuses to deploy while production is still on the legacy `prisma db
 #     push` schema;
-#   * the runtime env file must exist (created by #143's `release-topology`);
-#   * the interim app container, if it still exists, is retired right before the
-#     unit starts, so exactly one process owns port 3001.
+#   * the runtime env file must exist (created by #143's `release-topology`,
+#     moved into `clxadmin`'s home with #122);
+#   * exactly one process owns port 3001 - the systemd user unit. The interim
+#     `clx-web` container was retired in #143 and its docker-based cleanup step
+#     is gone with #122 (the machine no longer gives `clxadmin` the docker
+#     group; the stopped `clx-postgres` fallback is root's business).
 #
 # Rollback: re-dispatch this workflow with `ref` set to the previous master
 # commit:
@@ -52,8 +55,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  ENV_FILE: /opt/CatchLogX/.env
-  APP_CONTAINER: clx-web
+  ENV_FILE: /home/clxadmin/.config/catchlogx/.env
   PG_USER: clxadmin
   PG_DB: clx
   UNIT_NAME: catchlogx.service
@@ -78,7 +80,7 @@ jobs:
           case "$(systemctl --user is-system-running 2>/dev/null || true)" in
             running|degraded) echo "User systemd manager reachable." ;;
             *)
-              echo "::error::no systemd user manager - run the release-topology job (#143) first (or 'sudo loginctl enable-linger $(id -un)' on-site)"
+              echo "::error::no systemd user manager - linger for clxadmin is missing; enable it on-site as root: 'loginctl enable-linger clxadmin'"
               exit 1
               ;;
           esac
@@ -193,7 +195,8 @@ jobs:
       # #162: the build inlines NEXT_PUBLIC_* but ALSO copies the workspace
       # .env into .next/standalone/, which publish-release.sh would ship into
       # every immutable release (secrets, and a stale DB password after a
-      # rotation). The unit only reads EnvironmentFile=/opt/CatchLogX/.env.
+      # rotation). The unit only reads
+      # EnvironmentFile=/home/clxadmin/.config/catchlogx/.env.
       - name: Keep the runtime env out of the build output
         run: |
           set -euo pipefail
@@ -215,19 +218,10 @@ jobs:
         run: ./scripts/publish-release.sh "$DEPLOY_SHA"
 
       # The systemd unit owns the app and port 3001 from here. The interim
-      # container (present until the first #143 deploy) must not race it.
-      # Idempotent - absent on every deploy after the first.
-      - name: Retire the interim app container
-        run: |
-          set -euo pipefail
-          if docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
-            docker update --restart=no "$APP_CONTAINER"
-            docker stop "$APP_CONTAINER"
-            docker rm "$APP_CONTAINER"
-            echo "Removed $APP_CONTAINER - the systemd unit owns the app now."
-          else
-            echo "$APP_CONTAINER is already gone."
-          fi
+      # container was retired with #143; #122 removed this step together with
+      # clxadmin's docker group - a docker call would only fail, and the
+      # remaining stopped `clx-postgres` is deliberately kept as a rollback
+      # path (root-level, #170).
 
       - name: Restart the service
         run: systemctl --user restart "$UNIT_NAME"

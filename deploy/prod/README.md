@@ -5,8 +5,8 @@ Versioned copies of the configuration that lives on the production machine
 (see #115) and the host has no SVN checkout, so `EDV/Deployed/<host>` in the SVN
 knowledge tree cannot hold these files — they are kept here instead. **No
 secrets** belong in this directory: the runtime env stays in
-`/opt/CatchLogX/.env` (mode 600) on the machine, the SMTP credential in
-`/etc/postfix/sasl_passwd`, and the backup secrets in
+`/home/clxadmin/.config/catchlogx/.env` (mode 600) on the machine, the SMTP
+credential in `/etc/postfix/sasl_passwd`, and the backup secrets in
 `/etc/catchlogx-backup.env`.
 
 Since 2026-10-27 there is direct `root` SSH access with a personal key (#115
@@ -55,6 +55,8 @@ PostgreSQL 16 (native, since #170)
 | `nginx/99-catchlogx-address.conf` | `/etc/systemd/system/nginx.service.d/99-catchlogx-address.conf` | `644 root:root` |
 | `systemd/99-any-link.conf` | `/etc/systemd/system/systemd-networkd-wait-online.service.d/99-any-link.conf` | `644 root:root` |
 | `systemd/catchlogx.service` | `~clxadmin/.config/systemd/user/catchlogx.service` | `644 clxadmin:clxadmin` |
+| `systemd/actions.runner.AlphaVIE-CatchLogX.catchlogx-server.service` | `~clxadmin/.config/systemd/user/actions.runner.AlphaVIE-CatchLogX.catchlogx-server.service` | `644 clxadmin:clxadmin` |
+| `sshd/99-catchlogx-no-password.conf` | `/etc/ssh/sshd_config.d/99-catchlogx-no-password.conf` | `644 root:root` |
 | `postfix/main.cf.nondefault` + `postfix/README.md` | applied by hand (`postconf -e`), see that README | – |
 | `postgres/99-catchlogx.conf` | `/etc/postgresql/16/main/conf.d/99-catchlogx.conf` | `644 root:root` |
 | `postgres/pg_hba.conf` | `/etc/postgresql/16/main/pg_hba.conf` | `640 postgres:postgres` |
@@ -83,10 +85,28 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://141.244.222.191/
 curl -sSI http://141.244.222.191:3001/ | head -3   # 301 -> port 80
 ```
 
-Not managed here: the Actions runner (`actions.runner.AlphaVIE-CatchLogX.catchlogx-server.service`,
-system service, outbound only), the stopped `clx-postgres` container (kept as a
-rollback path, `restart=no`), and the release tree under `~clxadmin` (created by
-`.github/workflows/production-deploy.yml`).
+Not managed here: the release tree under `~clxadmin` (created by
+`.github/workflows/production-deploy.yml`) and the stopped `clx-postgres`
+container (kept as a rollback path, `restart=no`).
+
+Since **2026-10-29 (#122)** the host is hardened around one rule: **nothing of
+`clxadmin` lives outside its home**.
+
+- The Actions runner is a **user** unit of `clxadmin`
+  (`~/.config/systemd/user/actions.runner.AlphaVIE-CatchLogX.catchlogx-server.service`,
+  `~/actions-runner`, `Restart=always`), kept alive at boot by linger — no root
+  unit, no `/opt`. Note the runner's `bin`/`externals` symlinks are **relative**
+  on purpose: the absolute ones to `/opt/actions-runner` broke the first move.
+- `clxadmin` is **not** in `sudo`, `docker` or `lxd`; it cannot escalate at all.
+  Root SSH (key) over the BOKU VPN is the only privileged path, and the console
+  password login of `root` is the break-glass fallback.
+- The runtime env moved from `/home/clxadmin/.config/catchlogx/.env` to
+  `~clxadmin/.config/catchlogx/.env`; the old `/root/CatchLogX` checkout is
+  **deleted**. The runbook checkout is now root-owned and re-cloned on demand
+  (`git clone https://github.com/georgernstgraf/CatchLogX /root/CatchLogX`).
+- SSH: keys only (`PasswordAuthentication no`), for `root` *and* `clxadmin`;
+  `clxadmin`'s password is locked. `root` keeps password login **on the
+  console** — deliberate break-glass, do not "fix" it.
 
 ## Mail and backup
 

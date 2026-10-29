@@ -12,7 +12,7 @@ assumption, not a backup.
 | Database `clx` (all fishing data, users, sessions, uploads, templates, file blobs) | `pg_dump -Fc` over the local socket of the native cluster | `<set>/db.dump` |
 | Restorability proof / table of contents | `pg_restore --list` | `<set>/db.dump.list` |
 | Row counts and `FileBlob` byte total **at dump time** | `psql` (no password: peer auth as `clxadmin`) | `<set>/rowcounts.txt` |
-| `/opt/CatchLogX/.env` (only copy of `DATABASE_URL`, `NEXTAUTH_SECRET`, `READONLY_DB_PASSWORD`) | `age` to the operator's public key | `<set>/env.age` |
+| `/home/clxadmin/.config/catchlogx/.env` (only copy of `DATABASE_URL`, `NEXTAUTH_SECRET`, `READONLY_DB_PASSWORD`) | `age` to the operator's public key | `<set>/env.age` |
 | Checksums of the above | `sha256sum` | `<set>/SHA256SUMS` |
 
 Not backed up on purpose: `~/releases` (reproducible from git), the

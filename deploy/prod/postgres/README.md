@@ -39,7 +39,7 @@ re-initialises an existing `PGDATA`.
 ## Preparation (no downtime)
 
 ```sh
-cd /opt/CatchLogX && git pull            # the checkout is the runbook host
+cd /root/CatchLogX && git pull            # the checkout is the runbook host
 sudo ./deploy/prod/postgres/provision-cluster.sh
 pg_lsclusters                            # 16 main 5432 down  16/main start.conf=manual
 ```
@@ -128,8 +128,8 @@ systemctl start postgresql@16-main
 pg_isready
 
 # passwords come from the env file, never from the shell history
-PGPW="$(sed -n 's#^DATABASE_URL=postgresql://clxadmin:\([^@]*\)@.*#\1#p' /opt/CatchLogX/.env)"
-ROPW="$(sed -n 's#^READONLY_DB_PASSWORD=##p' /opt/CatchLogX/.env)"
+PGPW="$(sed -n 's#^DATABASE_URL=postgresql://clxadmin:\([^@]*\)@.*#\1#p' /home/clxadmin/.config/catchlogx/.env)"
+ROPW="$(sed -n 's#^READONLY_DB_PASSWORD=##p' /home/clxadmin/.config/catchlogx/.env)"
 [ ${#PGPW} -eq 48 ] && [ -n "$ROPW" ] || { echo "env parse failed"; exit 1; }
 
 printf '%s\n' '\getenv pw PG_NEW_PW' \
@@ -151,7 +151,7 @@ runuser -u clxadmin -- pg_restore -d clx --no-owner --role=clxadmin \
 `clx_shadow` is **not** restored: it existed for `prisma migrate dev`, which
 never runs on production. The `clxadmin` role keeps `SUPERUSER` (#166 is a
 separate ticket) and the app's `DATABASE_URL` stays `127.0.0.1:5432` — nothing
-in `/opt/CatchLogX/.env` changes except the read-only password, which is not
+in `/home/clxadmin/.config/catchlogx/.env` changes except the read-only password, which is not
 rotated here.
 
 ### 4. Verify before the app comes back
@@ -173,7 +173,7 @@ table above is the equivalent proof at this point.
 ### 5. Query observability (#169), now native
 
 ```sh
-cd /opt/CatchLogX
+cd /root/CatchLogX
 runuser -u clxadmin -- psql -d clx -f deploy/prod/postgres/observability-extension.sql
 # expect: pg_stat_statements loaded, extension present, PUBLIC revoked
 ```
@@ -201,7 +201,7 @@ runuser -u clxadmin -- psql -d clx -tAc \
 ### 7. Backup on the new path
 
 ```sh
-cd /opt/CatchLogX
+cd /root/CatchLogX
 install -m 755 deploy/prod/backup/backup.sh /usr/local/bin/catchlogx-backup
 install -m 644 deploy/prod/backup/catchlogx-backup.service \
              deploy/prod/backup/catchlogx-backup-probe.service \
@@ -219,7 +219,7 @@ auth) and `postgresql@16-main`.
 ### 8. Read-only role: verify, then prove rotation
 
 ```sh
-cd /opt/CatchLogX
+cd /root/CatchLogX
 KEEP_PASSWORD=1 ./deploy/prod/postgres/readonly-role.sh
 ```
 
@@ -257,7 +257,7 @@ After a few days of real workload, pull the report (query texts stay on the
 machine):
 
 ```sh
-cd /opt/CatchLogX
+cd /root/CatchLogX
 runuser -u clxadmin -- bash -c \
   'psql -d clx -f deploy/postgres/report.sql' \
   > "/home/clxadmin/catchlogx-reports/observability-$(date -u +%Y%m%dT%H%M%SZ).txt"

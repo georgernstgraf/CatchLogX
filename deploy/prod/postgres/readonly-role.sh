@@ -5,7 +5,8 @@
 # This replaces the `readonly-role` dispatch job of the retired
 # production-maintenance.yml: since 2026-10-30 maintenance happens over the
 # BOKU VPN, so the procedure lives here as a versioned script that is pulled
-# with the on-machine checkout (/opt/CatchLogX).
+# with the root-owned runbook checkout (/root/CatchLogX since #122 - the old
+# /opt/CatchLogX checkout is gone; clxadmin's runtime env lives in its home).
 #
 # Modes:
 #   ./readonly-role.sh                  rotate: new password, write it to .env
@@ -19,7 +20,7 @@
 #   2. grants SELECT on every `public` table EXCEPT the auth tables, positively,
 #      and sets default privileges for future tables;
 #   3. rotates the password ON THE MACHINE (never printed, never a repository
-#      secret) and writes it into /opt/CatchLogX/.env as READONLY_DB_PASSWORD
+#      secret) and writes it into the runtime env file as READONLY_DB_PASSWORD
 #      (0600, atomically) - that file is the only copy the app reads (#153);
 #   4. verifies on the REAL path: TCP against the host address, TLS required,
 #      wrong password rejected, reads allowed, writes and auth tables denied.
@@ -32,7 +33,7 @@ set -euo pipefail
 ROLE="${ROLE:-clx_readonly}"
 DB="${DB:-clx}"
 PG_USER="${PG_USER:-clxadmin}"           # owner of the tables / default privileges
-ENV_FILE="${ENV_FILE:-/opt/CatchLogX/.env}"
+ENV_FILE="${ENV_FILE:-/home/clxadmin/.config/catchlogx/.env}"
 ENV_OWNER="${ENV_OWNER:-clxadmin:clxadmin}"
 PG_EXT_HOST="${PG_EXT_HOST:-141.244.222.191}"
 PG_EXT_PORT="${PG_EXT_PORT:-5432}"

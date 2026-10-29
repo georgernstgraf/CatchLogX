@@ -2,6 +2,20 @@
 
 Offene Aufgaben für die nächste Session.
 
+**Stand 2026-10-29 (Härtung, #122):** Der Produktions-Host ist auf eine Regel
+gebracht — **nichts von `clxadmin` außerhalb seines Homes, keine Erhöhung
+möglich**. Der Runner ist eine **User-Unit** von `clxadmin`
+(`~/actions-runner`, `Restart=always`, Linger), die System-Unit und
+`/opt/actions-runner` sind weg; `clxadmin` ist aus `sudo`, `docker` und `lxd`
+entfernt; die Laufzeit-Env liegt in `~clxadmin/.config/catchlogx/.env`, der
+Checkout `/opt/CatchLogX` ist gelöscht (Runbooks: root-eigener Clone unter
+`/root/CatchLogX`); SSH ist keys-only, `clxadmin` hat kein Passwort mehr, `root`
+behält **bewusst** den Konsolen-Passwort-Login als Break-Glass. Der Deploy-Job
+hat den docker-basierten „Retire the interim app container"-Schritt verloren.
+Verifiziert: Deploy grün (Run 40831004953), Backup mit `env.age` grün,
+`find /opt ! -user root` leer. Details: `DECISIONS.md` 2026-10-29,
+`PITFALLS.md`, `deploy/prod/README.md`.
+
 **Stand 2026-10-30:** Die Produktionsdatenbank ist **nativ** (#170, Pendant zu
 #168 auf Dev): `postgresql@16-main`, echte Client-IPs, TLS angeboten, Backup und
 Read-only-Rolle laufen auf dem Host-Pfad. `production-maintenance.yml` ist
@@ -77,9 +91,9 @@ Superuser-Slots.
    #164 auf `http://141.244.222.191` (ohne Port) korrigiert, (d) Reset einmal
    end-to-end testen. `MAIL_TO`/`MAIL_FROM` in `/etc/catchlogx-backup.env` und der
    `root`-Alias in `/etc/aliases` hängen am selben Konto.
-5. [ ] **#161 maintenance-Jobs**: `audit`/`rehearse`/`cutover` finden die DB-URL
-   nicht mehr, seit `clx-web` weg ist (kein `PROD_DATABASE_URL`-Secret) — auf
-   `/opt/CatchLogX/.env` umstellen oder mit #144 ausmustern.
+5. [x] **#161 maintenance-Jobs** — mit #170 **ausgemustert**: `production-maintenance.yml`
+   und damit `audit`/`rehearse`/`cutover` existieren nicht mehr, es gibt keinen Code,
+   der eine DB-URL auflösen müsste. Issue geschlossen.
 6. [x] **#162 Deploy legt `.env` in jedes Release** — erledigt mit #164:
    `rm -f .env .next/standalone/.env` nach dem Build und `rm -f "$REL/.env"` in
    `publish-release.sh`.
@@ -87,7 +101,7 @@ Superuser-Slots.
    (kurze SHAs scheitern in `actions/checkout`).
 8. [ ] **#153 In-App-Data-Access-Seite** (R-Verbindungsdaten + Read-only-Passwort
    für die Forschungsgruppe) — das Passwort liegt nur als `READONLY_DB_PASSWORD`
-   in `/opt/CatchLogX/.env`; Rotation = `deploy/prod/postgres/readonly-role.sh`
+   in `/home/clxadmin/.config/catchlogx/.env`; Rotation = `deploy/prod/postgres/readonly-role.sh`
    per SSH (ohne `KEEP_PASSWORD=1`), Verifikation mit `KEEP_PASSWORD=1`.
 9. [ ] **#145 Wissensbasis** nachziehen (Läufe #143/#152 sind jetzt vollständig
    dokumentiert; offen bleibt die Zusammenfassung im Datenrepo-Kontext).
@@ -95,10 +109,11 @@ Superuser-Slots.
     persönlichem SSH-Key (`grafg@spengergasse.at` **und** `georg@grafg`, seit
     2026-10-27), **kein** unprivilegierter Account, keine zweite Person. Mit der OE
     klären und dokumentieren, ob das so bleibt (Alternative: eigener `georg`-Account
-    + sudo). Nebenbefund vom 2026-10-27: `sshd` erlaubt weiterhin
-    `PasswordAuthentication yes` (root selbst ist `prohibit-password`, aber jeder
-    Account mit Passwort käme per Passwort rein) — beim nächsten Zugriff auf `no`
-    stellen, nachdem geprüft ist, dass niemand mehr Passwort-Login braucht.
+    + sudo). **Erledigt am 2026-10-29:** `PasswordAuthentication no`
+    (`deploy/prod/sshd/99-catchlogx-no-password.conf`, `KbdInteractiveAuthentication
+    no`), `passwd -l clxadmin`; Key-Login für `root` **und** `clxadmin` bleibt
+    (verifiziert), `root` behält den Passwort-Login **auf der Konsole** als
+    Break-Glass — nicht weg-härten.
 11. [ ] **MinIO-Volume** `catchlogx_clx_miniodata` endgültig löschen, sobald das
     Backup-Set `cutover-20261018T085752Z` (21 Objekte, 54 M) als ausreichend
     bewertet ist. Container sind bereits entfernt.
@@ -131,9 +146,11 @@ Superuser-Slots.
     einen **DNS-Namen** für `141.244.222.191` erbitten (nimmt die IP aus allen
     R-Configs und erlaubt später ein echtes Zertifikat); (c) Volume
     `catchlogx_clx_pgdata` und Docker erst entfernen, wenn die native DB Wochen
-    inkl. Monatsprobe grün läuft. `/opt/CatchLogX` hängt jetzt am richtigen
-    Remote (`georgernstgraf/CatchLogX`) und wird per `git pull` aktuell gehalten;
-    es ist der Runbook-Host (kein Build, keine Unit liest daraus außer `.env`).
+    inkl. Monatsprobe grün läuft. Der Runbook-Checkout ist seit #122
+    **root-eigen** und wird bei Bedarf frisch geklont
+    (`git clone https://github.com/georgernstgraf/CatchLogX /root/CatchLogX`);
+    `/opt/CatchLogX` ist gelöscht, die Laufzeit-Env liegt in
+    `/home/clxadmin/.config/catchlogx/.env`.
     Macht #153 die R-Verbindungsdaten sichtbar: Host `141.244.222.191`, Port
     5432, DB `clx`, Rolle `clx_readonly`, `sslmode=prefer` (oder `require`).
 

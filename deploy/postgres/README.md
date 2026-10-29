@@ -65,7 +65,7 @@ two-pass `ALTER SYSTEM`, no restart dance. What is left is the extension part,
 which needs the preloaded library:
 
 ```bash
-cd /opt/CatchLogX
+cd /root/CatchLogX
 runuser -u clxadmin -- psql -d clx -f deploy/prod/postgres/observability-extension.sql
 ```
 
@@ -92,7 +92,7 @@ the full output contains query texts and therefore stays there, in
 `~/catchlogx-reports/`:
 
 ```bash
-cd /opt/CatchLogX
+cd /root/CatchLogX
 runuser -u clxadmin -- bash -c 'psql -d clx -f deploy/postgres/report.sql' \
   > "/home/clxadmin/catchlogx-reports/observability-$(date -u +%Y%m%dT%H%M%SZ).txt"
 chown clxadmin:clxadmin /home/clxadmin/catchlogx-reports/observability-*.txt

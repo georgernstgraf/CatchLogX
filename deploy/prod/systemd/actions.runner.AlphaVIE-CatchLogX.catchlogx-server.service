@@ -1,0 +1,36 @@
+# GitHub Actions Runner for the production host - **user** unit of `clxadmin`
+# since 2026-10-29 (#122). Target on the host:
+#
+#   ~clxadmin/.config/systemd/user/actions.runner.AlphaVIE-CatchLogX.catchlogx-server.service
+#
+# It replaced a *system* unit (`/etc/systemd/system/…`, User=clxadmin) whose
+# jobs had no logind session and whose binaries lived under /opt/actions-runner.
+# With linger enabled for clxadmin (`loginctl enable-linger clxadmin`, done
+# 2026-10-27) the user manager starts this unit at boot without anyone logging
+# in, and the account needs no root at all.
+#
+# Two things learned during the move:
+#   * ~/actions-runner/bin and ~/actions-runner/externals must be **relative**
+#     symlinks (bin -> bin.2.338.0, externals -> externals.2.338.0). The runner
+#     ships them absolute (/opt/actions-runner/...), and the service then dies
+#     with status 127 after a move.
+#   * logs are read as root with
+#       runuser -u clxadmin -- env XDG_RUNTIME_DIR=/run/user/1000 \
+#         journalctl --user-unit actions.runner.AlphaVIE-CatchLogX.catchlogx-server.service
+#     (`journalctl -M clxadmin@` refuses as "non-root").
+[Unit]
+Description=GitHub Actions Runner (AlphaVIE-CatchLogX.catchlogx-server, user unit since #122)
+Documentation=https://github.com/georgernstgraf/CatchLogX/tree/dev/deploy/prod
+
+[Service]
+Type=simple
+WorkingDirectory=/home/clxadmin/actions-runner
+ExecStart=/home/clxadmin/actions-runner/runsvc.sh
+KillMode=process
+KillSignal=SIGTERM
+TimeoutStopSec=5min
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
