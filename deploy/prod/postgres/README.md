@@ -136,7 +136,7 @@ printf '%s\n' '\getenv pw PG_NEW_PW' \
   "CREATE ROLE clxadmin LOGIN SUPERUSER PASSWORD :'pw';" \
   | PGPW="$PGPW" runuser -u postgres -- psql -v ON_ERROR_STOP=1 -d postgres -f -
 printf '%s\n' '\getenv pw PG_NEW_PW' \
-  "CREATE ROLE clx_readonly LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE CONNECTION LIMIT 40 PASSWORD :'pw';" \
+  "CREATE ROLE clx_readonly LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE CONNECTION LIMIT 108 PASSWORD :'pw';" \
   | PGPW="$ROPW" runuser -u postgres -- psql -v ON_ERROR_STOP=1 -d postgres -f -
 
 # same collation as the container database (en_US.utf8) - otherwise text sort
@@ -302,7 +302,7 @@ Nothing about the connection changed except that it can now be encrypted:
 | role | `clx_readonly` |
 | password | from the app (data-access page, #153) or out of band |
 | TLS | offered; `sslmode=prefer` (libpq default) encrypts automatically, `sslmode=require` enforces it |
-| limits | `CONNECTION LIMIT 40`, `SELECT` on all tables except `User`, `Session`, `PasswordResets`; no writes, no DDL |
+| limits | `CONNECTION LIMIT 108` (role-wide, not per client address), `SELECT` on all tables except `User`, `Session`, `PasswordResets`; no writes, no DDL. Several connections per client address are normal — PostgreSQL has no per-IP limit |
 
 ```sh
 # psql
@@ -357,6 +357,57 @@ runuser -u clxadmin -- psql -d clx -c 'SHOW shared_preload_libraries'
 `logging_collector` is on: connection and slow-query lines are **not** in
 `journalctl`, they are in the files above. `%r` in the log prefix now shows the
 real client address for the research group (the app is loopback by design).
+
+## Connection capacity (#171)
+
+| | |
+|---|---|
+| `clx_readonly` | `CONNECTION LIMIT 108` (role-wide, **not** per client address) |
+| `max_connections` | `200`, `superuser_reserved_connections = 5` |
+| `work_mem` | `8MB` — the real cost of a connection is its sorts, not its slot |
+| per client address | ~5 concurrent connections is the **observed** figure, shown in `deploy/postgres/report.sql`; not enforced |
+
+Sizing: 108 read-only + the app's Prisma pool (~2×CPU+1) + backup/runbook
+sessions + 5 superuser slots ≈ 135 of 200. 108 < 50 users × 5 connections —
+the role ceiling is the binding limit by design.
+
+Both knobs are file settings in `99-catchlogx.conf` (**never** `ALTER SYSTEM`,
+see `docs/ai/PITFALLS.md`). `max_connections` is a **postmaster** setting, so
+applying it needs a restart, and that restart **empties `pg_stat_statements`**
+(#169): pull the report first if the measurement window matters.
+
+```sh
+cd /root/CatchLogX && git log --oneline -1
+install -m 644 deploy/prod/postgres/99-catchlogx.conf \
+        /etc/postgresql/16/main/conf.d/99-catchlogx.conf
+systemctl restart postgresql@16-main            # ~2 s app blip, Prisma reconnects
+runuser -u clxadmin -- psql -d clx -tAc \
+  "SHOW max_connections; SHOW superuser_reserved_connections; SHOW work_mem;
+   SELECT rolname, rolconnlimit FROM pg_roles WHERE rolname = 'clx_readonly'"
+KEEP_PASSWORD=1 ./deploy/prod/postgres/readonly-role.sh   # applies 108, keeps the password
+```
+
+### Proving several connections per client address (no password needed)
+
+A TCP `ESTAB` alone proves nothing — it can be the listen backlog with a stuck
+postmaster. What proves it is a **Postgres startup packet** that gets answered.
+With a deliberately wrong password every attempt has to come back with
+`FATAL: password authentication failed` after ~1.3 s (TLS + SCRAM +
+`auth_delay` 1 s):
+
+```sh
+for i in 1 2 3 4; do
+  ( PGPASSWORD=definitely-wrong PGCONNECT_TIMEOUT=8 \
+      psql "host=141.244.222.191 port=5432 dbname=clx user=clx_readonly sslmode=require" \
+           -tAc 'select 1' 2>&1 | tail -1 ) &
+done; wait
+```
+
+Four answers within ~1.4 s = four connections accepted and served
+simultaneously from **one** source IP. A hang instead means the packet never
+arrived (tunnel/middlebox — check `log_connections` output below) or the
+postmaster is not accepting. Credential-free counterpart: `ss -tan '( dport = :5432 )'`
+must show several `ESTAB` lines from the same `Local Address:Port`.
 
 ## Aftercare
 

@@ -153,6 +153,19 @@ Superuser-Slots.
     `/home/clxadmin/.config/catchlogx/.env`.
     Macht #153 die R-Verbindungsdaten sichtbar: Host `141.244.222.191`, Port
     5432, DB `clx`, Rolle `clx_readonly`, `sslmode=prefer` (oder `require`).
+17. [x] **#171 Read-only-Kapazität**: `clx_readonly` hat **108**
+    Verbindungen, `max_connections = 200` (+ `superuser_reserved_connections = 5`,
+    `work_mem = 8MB`) — ausgerollt per SSH-Runbook mit
+    `KEEP_PASSWORD=1 ./deploy/prod/postgres/readonly-role.sh` (keine Rotation).
+    Die gemeldete Grenze „1 Verbindung pro IP" war **kein** DB-Limit: 8
+    gleichzeitige TCP-Sessions und 4 gleichzeitige Postgres-Startpakete von
+    **einer** Quell-IP wurden bedient (Messung im Issue, `PITFALLS.md`) — ein
+    Timeout ist nie das Symptom einer Postgres-Grenze, es war der Tunnel
+    (behoben durch den VPN-Restart). Die „5 pro Client-Adresse" werden **nicht**
+    durchgesetzt, sondern stehen im neuen Report-Abschnitt
+    (`deploy/postgres/report.sql`). **Offen:** Dev-Parität (#168) —
+    `clx_readonly` auf dem Dev-VPS ebenfalls auf 108; `max_connections` dort
+    bewusst nicht anheben (~3,8 GB RAM).
 
 Kontext: Das Epic #125 bleibt offen, solange `CatchLogX-Data#2` offen ist. Vom
 Produktions-Upgrade-Pfad #137–#153 sind #138–#143 und #150/#152 erledigt; offen

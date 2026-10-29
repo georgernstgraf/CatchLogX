@@ -2,8 +2,8 @@
 --
 -- Run against the database whose workload you want to judge:
 --   dev  : sudo -u postgres psql -d clx -f deploy/postgres/report.sql
---   prod : docker exec -i clx-postgres psql -U clxadmin -d clx \
---            -v ON_ERROR_STOP=1 < deploy/postgres/report.sql
+--   prod : runuser -u clxadmin -- bash -c 'psql -d clx -f deploy/postgres/report.sql'
+--          (native cluster since #170; the docker path is gone)
 --
 -- How to read it:
 --   1. `TOP STATEMENTS`      - where the time goes, per normalised shape.
@@ -17,6 +17,10 @@
 --   5. `TEMP BLOCKS`         - sorts/hashes spilling to disk: usually a
 --                              missing index or a work_mem question.
 --   6. `TABLE SIZES`         - puts the numbers above into perspective.
+--   7. `CONNECTIONS PER CLIENT ADDRESS` - a snapshot of who holds how many
+--                              connections (#171). "5 per client address" is an
+--                              observed figure, not a limit: PostgreSQL has no
+--                              per-IP connection limit.
 --
 -- Rules of thumb for turning this into schema changes:
 --   * A statement with high `total_ms` AND high `blk_read` per call on a big
@@ -52,6 +56,33 @@ SELECT current_database()                                                       
        (SELECT count(*) FROM pg_stat_statements)                                 AS tracked_shapes
 FROM pg_stat_database d
 WHERE d.datname = current_database();
+
+\echo ''
+\echo '=== CONNECTIONS PER CLIENT ADDRESS (snapshot, #171) ==='
+-- "5 concurrent connections per client address" is the observed ceiling of the
+-- read-only workload, NOT a server-side rule: PostgreSQL has no per-IP limit.
+-- A `note` is only a prompt to look at the R client's pool settings, not an alarm.
+SELECT coalesce(client_addr::text, 'local (socket)')            AS source,
+       usename                                                   AS role,
+       count(*)                                                  AS conns,
+       count(*) FILTER (WHERE state <> 'idle')                   AS busy,
+       CASE WHEN usename = 'clx_readonly' AND count(*) > 5
+            THEN 'over the observed 5/address' ELSE '' END       AS note,
+       string_agg(DISTINCT coalesce(nullif(application_name, ''), '?'), ', ')
+                                                                 AS clients
+FROM pg_stat_activity
+WHERE backend_type = 'client backend'
+GROUP BY 1, 2
+ORDER BY count(*) DESC, 1;
+
+\echo ''
+\echo '=== ROLE CEILINGS vs. LIVE CONNECTIONS (rolconnlimit -1 = unlimited) ==='
+SELECT r.rolname,
+       r.rolconnlimit,
+       (SELECT count(*) FROM pg_stat_activity a WHERE a.usesysid = r.oid)  AS live
+FROM pg_roles r
+WHERE r.rolcanlogin
+ORDER BY r.rolconnlimit DESC, r.rolname;
 
 \echo ''
 \echo '=== TOP STATEMENTS BY TOTAL TIME (top-level, all roles) ==='
