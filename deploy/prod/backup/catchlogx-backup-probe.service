@@ -1,8 +1,8 @@
 [Unit]
 Description=CatchLogX restore rehearsal (restore newest set into a scratch database)
 Documentation=https://github.com/georgernstgraf/CatchLogX/tree/dev/deploy/prod/backup
-After=network-online.target docker.service
-Wants=network-online.target
+After=network-online.target postgresql@16-main.service
+Wants=network-online.target postgresql@16-main.service
 OnFailure=catchlogx-alert@%n.service
 
 [Service]

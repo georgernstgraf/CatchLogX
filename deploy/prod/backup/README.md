@@ -9,9 +9,9 @@ assumption, not a backup.
 
 | Item | How | Where |
 |---|---|---|
-| Database `clx` (all fishing data, users, sessions, uploads, templates, file blobs) | `pg_dump -Fc` streamed out of `clx-postgres` | `<set>/db.dump` |
+| Database `clx` (all fishing data, users, sessions, uploads, templates, file blobs) | `pg_dump -Fc` over the local socket of the native cluster | `<set>/db.dump` |
 | Restorability proof / table of contents | `pg_restore --list` | `<set>/db.dump.list` |
-| Row counts and `FileBlob` byte total **at dump time** | `psql` (no password: local socket in the container is trusted) | `<set>/rowcounts.txt` |
+| Row counts and `FileBlob` byte total **at dump time** | `psql` (no password: peer auth as `clxadmin`) | `<set>/rowcounts.txt` |
 | `/opt/CatchLogX/.env` (only copy of `DATABASE_URL`, `NEXTAUTH_SECRET`, `READONLY_DB_PASSWORD`) | `age` to the operator's public key | `<set>/env.age` |
 | Checksums of the above | `sha256sum` | `<set>/SHA256SUMS` |
 
@@ -32,10 +32,13 @@ accepts messages up to 50 MB; the dump is ~56 MB and growing.
 | `catchlogx-alert@.service` | `/etc/systemd/system/` | `644 root:root` |
 | `catchlogx-backup.env.example` | `/etc/catchlogx-backup.env` (filled in, **no** `.example`) | `600 root:root` |
 
-Packages: `age` (`apt install age`), `zstd`, `curl`, `postfix` (see
-`../postfix/`). Runner: the units run as `clxadmin` because that user is in the
-`docker` group; `EnvironmentFile` is read by systemd as root, so secrets stay
-unreadable for the backup user.
+Packages: `age` (`apt install age`), `zstd`, `curl`, `postgresql-client-16` (from
+PGDG, matching the cluster), `postfix` (see `../postfix/`). Runner: the units
+run as `clxadmin` because the native cluster maps that OS user to the DB role
+`clxadmin` via `local all clxadmin peer` in `pg_hba.conf` (#170) — that is what
+makes `pg_dump`/`psql`/`pg_restore` work without any password.
+`EnvironmentFile` is read by systemd as root, so secrets stay unreadable for the
+backup user.
 
 ## Install
 
@@ -109,25 +112,32 @@ success) are both closed.
 
 ## Manual restore (disaster)
 
+Run the database commands **as `clxadmin`** (`sudo -iu clxadmin`): peer auth maps
+that OS user to the DB role of the same name, so the restored tables belong to
+the app role again. As root you would have to prefix every line with
+`runuser -u clxadmin --`; restoring as `postgres` would leave the tables owned
+by the wrong role.
+
 ```sh
+# as clxadmin
 SET=$(ls -1d /home/clxadmin/catchlogx-backups/20* | sort -r | head -1); echo "$SET"
 
 # 1. stop the app so nothing writes while the database is swapped
-sudo -u clxadmin XDG_RUNTIME_DIR=/run/user/1000 systemctl --user stop catchlogx.service
+XDG_RUNTIME_DIR=/run/user/1000 systemctl --user stop catchlogx.service
 
 # 2. restore into a NEW database, verify, then rename - never restore over live
-docker exec clx-postgres createdb -U clxadmin clx_restore
-docker exec -i clx-postgres pg_restore -U clxadmin -d clx_restore --no-owner --no-privileges < "$SET/db.dump"
-docker exec clx-postgres psql -U clxadmin -d clx_restore -c 'select count(*) from fish_catches;'   # see rowcounts.txt
+createdb -U clxadmin clx_restore
+pg_restore -U clxadmin -d clx_restore --no-owner --no-privileges < "$SET/db.dump"
+psql -U clxadmin -d clx_restore -c 'select count(*) from fish_catches;'   # see rowcounts.txt
 
-# 3. swap
-docker exec clx-postgres psql -U clxadmin -d postgres -c 'alter database clx rename to clx_broken;'
-docker exec clx-postgres psql -U clxadmin -d postgres -c 'alter database clx_restore rename to clx;'
-sudo -u clxadmin XDG_RUNTIME_DIR=/run/user/1000 systemctl --user start catchlogx.service
+# 3. swap (needs the app role to have CREATEDB - it is a superuser today, #166)
+psql -U clxadmin -d postgres -c 'alter database clx rename to clx_broken;'
+psql -U clxadmin -d postgres -c 'alter database clx_restore rename to clx;'
+XDG_RUNTIME_DIR=/run/user/1000 systemctl --user start catchlogx.service
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3001/
 
-# 4. the env, if it was lost too
-age -d -i ~/clx-backup-key.txt "$SET/env.age" > /tmp/restored.env   # on YOUR machine
+# 4. the env, if it was lost too (on YOUR machine)
+age -d -i ~/clx-backup-key.txt "$SET/env.age" > /tmp/restored.env
 ```
 
 `clx_broken` stays until the restore is confirmed — it is the way back.
@@ -170,7 +180,7 @@ contains production data.
 systemctl start catchlogx-backup.service            # one real run; then read the mail
 systemctl start catchlogx-backup-probe.service      # one real rehearsal
 journalctl -u catchlogx-backup -n 50 --no-pager
-docker exec clx-postgres psql -U clxadmin -d postgres -c '\l'   # no clx_restore_probe left
+sudo -u clxadmin psql -U clxadmin -d postgres -c '\l'   # no clx_restore_probe left
 ```
 
 ## Known limits
@@ -183,7 +193,7 @@ docker exec clx-postgres psql -U clxadmin -d postgres -c '\l'   # no clx_restore
   changes configuration, not code.
 - **`env.age` is only as good as the key copy.** Lose the identity and the env
   backup is worthless; the database dump stays readable, and the secrets can be
-  reissued (`ALTER ROLE`, the `readonly-role` job, a new `NEXTAUTH_SECRET` —
-  which invalidates all sessions).
+  reissued (`ALTER ROLE`, `deploy/prod/postgres/readonly-role.sh`, a new
+  `NEXTAUTH_SECRET` — which invalidates all sessions).
 - **The scratch database costs disk.** ~114 MB while it exists; it is dropped
   in the same run, also on failure.

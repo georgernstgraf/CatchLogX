@@ -10,7 +10,9 @@
 #
 # Configuration comes from /etc/catchlogx-backup.env (mode 600, root) via the
 # systemd units; see README.md. Nothing here needs the database password: the
-# local socket inside the postgres container trusts connections.
+# units run as the OS user `clxadmin`, and the native cluster (#170) maps that
+# OS user to the DB role of the same name via `local all clxadmin peer` in
+# pg_hba.conf. The socket is the only path used - never TCP, never a password.
 #
 # Never put a database dump into a mail. The BOKU relay refuses messages over
 # 50 MB, and the mail is a status line - the data travels as an off-site upload.
@@ -34,10 +36,8 @@ if [ -r "$BACKUP_ENV_FILE" ]; then
   set +a
 fi
 
-PG_CONTAINER="${PG_CONTAINER:-clx-postgres}"
 PG_USER="${PG_USER:-clxadmin}"
 PG_DB="${PG_DB:-clx}"
-PG_IMAGE="${PG_IMAGE:-postgres:16-alpine}"
 PG_RESTORE_DB="${PG_RESTORE_DB:-clx_restore_probe}"
 
 # Absolute default on purpose: a manual `status` run as root must not look in
@@ -114,15 +114,17 @@ send_mail() {
 # --------------------------------------------------------------- helpers -----
 
 pg() {
-  # $1 = database, rest = psql arguments
+  # $1 = database, rest = psql arguments.
+  # `-w` refuses to prompt: there is no tty under systemd, and a peer-auth
+  # misconfiguration must fail immediately instead of waiting for a password.
   local db="$1"; shift
-  docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$db" "$@"
+  psql -X -q -w -U "$PG_USER" -d "$db" "$@"
 }
 
 pgdump() {
   # $1 = database, rest = pg_dump arguments (writes to stdout)
   local db="$1"; shift
-  docker exec "$PG_CONTAINER" pg_dump -U "$PG_USER" -d "$db" "$@"
+  pg_dump -w -U "$PG_USER" -d "$db" "$@"
 }
 
 newest_set() {
@@ -179,9 +181,10 @@ cmd_run() {
   log "run: start, Ziel $dest"
   mkdir -p "$dest"
 
-  docker inspect "$PG_CONTAINER" >/dev/null 2>&1 || die "Container $PG_CONTAINER läuft nicht"
+  # The cluster, not a container, is the precondition since #170.
+  pg_isready -q || die "PostgreSQL ist nicht erreichbar (systemctl status postgresql@16-main)"
 
-  # 1. Dump. Local socket inside the container trusts connections (no password).
+  # 1. Dump over the local socket (peer auth as clxadmin, no password).
   if ! pgdump "$PG_DB" -Fc > "$dest/db.dump"; then
     rm -rf -- "$dest"
     die "pg_dump fehlgeschlagen"
@@ -193,8 +196,7 @@ cmd_run() {
 
   # 2. Never trust an archive that was not listed. The listing doubles as the
   #    table-of-contents needed for a selective restore.
-  docker run --rm -v "$dest:/backup:ro" "$PG_IMAGE" \
-    pg_restore --list /backup/db.dump > "$dest/db.dump.list" \
+  pg_restore --list "$dest/db.dump" > "$dest/db.dump.list" \
     || die "pg_restore --list fehlgeschlagen (Dump unbrauchbar)"
   [ -s "$dest/db.dump.list" ] || die "db.dump.list ist leer"
 
@@ -341,7 +343,7 @@ cmd_probe() {
   # Scratch database, dropped even if the restore fails.
   drop_scratch
   pg postgres -q -c "create database \"$PG_RESTORE_DB\"" >/dev/null
-  if ! docker exec -i "$PG_CONTAINER" pg_restore -U "$PG_USER" -d "$PG_RESTORE_DB" \
+  if ! pg_restore -w -U "$PG_USER" -d "$PG_RESTORE_DB" \
         --no-owner --no-privileges < "$BACKUP_ROOT/$set/db.dump" 2>/dev/null; then
     write_json_result "last-probe.json" "failed" "set=$set" "reason=pg_restore"
     die "pg_restore in $PG_RESTORE_DB fehlgeschlagen"
