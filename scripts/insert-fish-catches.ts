@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { syncSeedSequence } from "@/lib/seedSequences";
 
 type FishCatchRow = {
   id: number;
@@ -458,6 +459,8 @@ async function main() {
       })
     )
   );
+
+  await syncSeedSequence("fish_catches");
 
   console.log(
     `✅ Insert/Update completed for ${FISH_CATCHES.length} fish catches.`

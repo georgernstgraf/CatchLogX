@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { syncSeedSequence } from "@/lib/seedSequences";
 
 type RiverSiteRow = {
   id: number;
@@ -195,6 +196,8 @@ async function main() {
       })
     )
   );
+
+  await syncSeedSequence("river_sites");
 
   console.log(
     `✅ Insert/Update completed for ${RIVER_SITES.length} river sites.`

@@ -85,6 +85,7 @@ lib/                    Server-side utilities
   fileBlobs.ts          FileBlob helpers (bytes in PostgreSQL)
   mailer.ts             Nodemailer SMTP transport (password reset emails)
   template-files.ts      Template file tracking helpers
+  seedSequences.ts      Moves id sequences past fixed ids written by seed scripts
 services/               Business logic layer (API routes delegate here)
   authService.ts        Sign-in, session validation
   passwordService.ts    Forgot-password, reset, change-initial-password

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { syncSeedSequence } from "@/lib/seedSequences";
 
 type SpeciesRow = {
   id: number;
@@ -905,6 +906,8 @@ async function main() {
       },
     });
   }
+
+  await syncSeedSequence("fish_species");
 
   console.log(`✅ Insert/Update completed for ${SPECIES.length} species.`);
 }

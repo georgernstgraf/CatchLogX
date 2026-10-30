@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { syncSeedSequence } from "@/lib/seedSequences";
 
 type SamplingRow = {
   id: number;
@@ -403,6 +404,8 @@ async function main() {
       })
     )
   );
+
+  await syncSeedSequence("samplings");
 
   console.log(`✅ Insert/Update completed for ${SAMPLINGS.length} samplings.`);
 }
