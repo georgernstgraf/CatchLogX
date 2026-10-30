@@ -209,6 +209,12 @@ Superuser-Slots.
     Kein Restart kostet Statistik: `pg_stat_statements.save = on` (198 Shapes,
     `stats_reset` unverändert nach dem Prod-Restart).
 
+18. [ ] **#121 Rollout `clx_query`**: Die SQL-Seite läuft nur mit `QUERY_DATABASE_URL`, es gibt
+    bewusst keinen Fallback auf die Admin-URL. **Dev:** Rolle anlegen und Env setzen, **bevor**
+    #121 auf `dev` landet (Push deployt sofort). **Prod:** vor dem nächsten `dev`→`master` mit
+    `deploy/prod/postgres/query-role.sh`, danach `KEEP_PASSWORD=1 ./readonly-role.sh`
+    (Reihenfolge und Details: `deploy/prod/postgres/README.md`).
+
 Kontext: Das Epic #125 bleibt offen, solange `CatchLogX-Data#2` offen ist. Vom
 Produktions-Upgrade-Pfad #137–#153 sind #138–#143 und #150/#152 erledigt; offen
 sind #144 (gated Pipeline), #153 (Data-Access-Seite) und #145 (Wissensbasis).

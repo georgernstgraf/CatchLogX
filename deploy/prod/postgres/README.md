@@ -431,3 +431,21 @@ must show several `ESTAB` lines from the same `Local Address:Port`.
 - `deploy/postgres/README.md` (the apply path is no longer a dispatch job)
 - `.github/workflows/production-maintenance.yml` is retired; recurring
   operations are the scripts in this directory plus `deploy/postgres/report.sql`.
+
+## SQL query UI role (`clx_query`, #121)
+
+The SQL page runs user SQL as `clx_query`: `SELECT` on `fish_catches`, `samplings`,
+`river_sites` and `fish_species` only, read-only by default, 10 s statement timeout.
+The app has **no fallback** to the admin URL, so without `QUERY_DATABASE_URL` the SQL
+page answers 500 and the rest of the app keeps working.
+
+Order: migration `add_query_log` applied first, then
+
+```bash
+cd /root/CatchLogX/deploy/prod/postgres && ./query-role.sh
+```
+
+Then restart `catchlogx.service`, because the app reads the env at start.
+`KEEP_PASSWORD=1 ./query-role.sh` verifies and repairs without rotating. The script
+overrides (`ENV_FILE`, `ENV_OWNER`, `PG_USER`, ...) cover the dev instance. Also re-run
+`KEEP_PASSWORD=1 ./readonly-role.sh`, which keeps `QueryLog` away from `clx_readonly`.

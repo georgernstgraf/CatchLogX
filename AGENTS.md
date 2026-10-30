@@ -46,7 +46,7 @@ npm run create-user   # create admin user (hardcoded admin/admin, dev only)
 npm run prisma:generate  # regenerate Prisma client (required after schema changes; also runs via postinstall)
 npm run prisma:migrate -- --name <name>  # schema change (dev): create + apply a migration
 npm run prisma:deploy   # apply pending migrations (dev instance, production)
-npm run db:query-role   # create/refresh read-only role clx_query for the SQL query UI (see below; idempotent)
+npm run db:query-role   # local: create/refresh read-only role clx_query for the SQL query UI (hosts: deploy/prod/postgres/query-role.sh)
 ```
 
 ## Tests (Vitest, #112)
@@ -229,3 +229,13 @@ Before starting any task, read the following files in order:
 
 If `HANDOFF.md` contains open tasks, complete them before starting
 any new work unless the user explicitly says otherwise.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
