@@ -508,6 +508,70 @@ describe("updateUpload", () => {
     expect(prisma.uploads.update).not.toHaveBeenCalled();
   });
 
+  describe("state guard", () => {
+    /** Answers like the database: a `where.state` that does not match finds no row. */
+    function givenStoredState(state: string) {
+      vi.mocked(prisma.uploads.findUnique).mockResolvedValue({
+        ...upload,
+        state,
+      } as any);
+      vi.mocked(prisma.uploads.update).mockImplementation((async ({
+        where,
+        data,
+      }: any) => {
+        if (where.state && where.state !== state) {
+          throw Object.assign(new Error("Record not found"), { code: "P2025" });
+        }
+        return { ...upload, state, ...data };
+      }) as any);
+      vi.mocked(prisma.uploads.findFirst).mockResolvedValue({
+        user: { email: "u1@x.at", name: "Uwe", username: "u1" },
+      } as any);
+    }
+
+    const decided = ["ACCEPTED", "REJECTED", "DB_ERROR", "SAVED_IN_DB"];
+
+    it.each(decided)("does not import an upload in state %s again", async (state) => {
+      givenStoredState(state);
+
+      const result = await updateUpload("up1", "accept", undefined);
+
+      expect(result).toMatchObject({ conflict: true, upload: { state } });
+      expect(prisma.fileBlob.findUnique).not.toHaveBeenCalled();
+    });
+
+    it.each(decided)("does not reject an upload in state %s", async (state) => {
+      givenStoredState(state);
+
+      const result = await updateUpload("up1", "deny", "Bad data");
+
+      expect(result).toMatchObject({ conflict: true, upload: { state } });
+      expect(sendMail).not.toHaveBeenCalled();
+    });
+
+    it("lets only one of two simultaneous accepts through", async () => {
+      vi.mocked(prisma.uploads.update).mockRejectedValue(
+        Object.assign(new Error("Record not found"), { code: "P2025" }),
+      );
+
+      const result = await updateUpload("up1", "accept", undefined);
+
+      expect(prisma.uploads.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: "up1", state: "UPLOADED" } }),
+      );
+      expect(result?.conflict).toBe(true);
+      expect(prisma.fileBlob.findUnique).not.toHaveBeenCalled();
+    });
+
+    it("passes other database errors on", async () => {
+      vi.mocked(prisma.uploads.update).mockRejectedValue(new Error("connection lost"));
+
+      await expect(updateUpload("up1", "accept", undefined)).rejects.toThrow(
+        "connection lost",
+      );
+    });
+  });
+
   describe("reject", () => {
     it("stores the reason and mails the uploader", async () => {
       vi.mocked(prisma.uploads.findFirst).mockResolvedValue({

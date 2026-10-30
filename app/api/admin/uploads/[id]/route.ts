@@ -35,6 +35,13 @@ export async function PATCH(
       return NextResponse.json({ error: "Upload not found" }, { status: 404 });
     }
 
+    if (result.conflict) {
+      return NextResponse.json(
+        { error: `Upload has already been processed (${result.upload.state})` },
+        { status: 409 },
+      );
+    }
+
     return NextResponse.json(
       {
         message: `Upload ${action}ed successfully`,

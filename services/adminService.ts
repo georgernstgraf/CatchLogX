@@ -662,11 +662,8 @@ export async function updateUpload(
   id: string,
   action: UploadAction,
   reason: string | undefined,
-): Promise<{ upload: Uploads; emailError?: boolean } | null> {
-  const upload = await prisma.uploads.findUnique({
-    where: { id },
-    select: { id: true, blobId: true, state: true },
-  });
+): Promise<{ upload: Uploads; emailError?: boolean; conflict?: boolean } | null> {
+  const upload = await prisma.uploads.findUnique({ where: { id } });
 
   if (!upload) {
     return null;
@@ -674,14 +671,24 @@ export async function updateUpload(
 
   const newState = action === "accept" ? "ACCEPTED" : "REJECTED";
 
-  const updatedUpload = await prisma.uploads.update({
-    where: { id },
-    data: {
-      note: reason,
-      state: newState,
-      updatedAt: new Date(),
-    },
-  });
+  // Only an undecided upload can change state. The check is part of the write, so
+  // of two simultaneous requests exactly one wins and imports.
+  let updatedUpload: Uploads;
+  try {
+    updatedUpload = await prisma.uploads.update({
+      where: { id, state: "UPLOADED" },
+      data: {
+        note: reason,
+        state: newState,
+        updatedAt: new Date(),
+      },
+    });
+  } catch (error) {
+    if ((error as { code?: string })?.code === "P2025") {
+      return { upload, conflict: true };
+    }
+    throw error;
+  }
 
   if (newState === "REJECTED") {
     try {
