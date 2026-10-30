@@ -16,6 +16,18 @@ Verifiziert: Deploy grün (Run 40831004953), Backup mit `env.age` grün,
 `find /opt ! -user root` leer. Details: `docs/meetings/2026-10-29-host-haertung.md`,
 `DECISIONS.md` 2026-10-29, `PITFALLS.md`, `deploy/prod/README.md`.
 
+**Nachtrag 2026-10-29 (#172), Bedienbarkeit nach der Härtung:** `clxadmin`
+hat jetzt `~/tools/node/bin` (Node **v22.23.3**, npm 10.9.9) im PATH
+(`deploy/prod/shell/node-path.sh` → `~/.config/catchlogx/path.sh`, gesourct aus
+`~/.profile`) und einen **von Hand** gepflegten Diagnose-Klon unter
+`~/src/CatchLogX`, der `master` trackt und dessen `.env` auf
+`~/.config/catchlogx/.env` symlinkt. Damit läuft
+`npx prisma migrate status` auf dem Host (verifiziert: 2 Migrationen, Schema
+aktuell; deploytes Release `d3216a8` ist Vorfahr von `master` `2620c6c`).
+Bewusst **kein** Skript — die drei Zeilen stehen in `deploy/prod/README.md`
+(„Checking prod by hand"). Die Node-Laufzeit ist in `deploy/prod/node/README.md`
+dokumentiert (vorher stand sie nur in einer `ExecStart`-Zeile).
+
 **Stand 2026-10-30:** Die Produktionsdatenbank ist **nativ** (#170, Pendant zu
 #168 auf Dev): `postgresql@16-main`, echte Client-IPs, TLS angeboten, Backup und
 Read-only-Rolle laufen auf dem Host-Pfad. `production-maintenance.yml` ist
@@ -73,11 +85,11 @@ Superuser-Slots.
    kann ein anderes Gerät sie bekommen → Adresskonflikt. Gleichzeitig melden, dass
    `.9` am 2026-10-27 **versehentlich** belegt war und wieder freigegeben ist.
    Bis dahin: bei Verbindungsproblemen zuerst `ip -br a` auf der Maschine prüfen.
-2. [ ] **#144 Gated Deploy-Pipeline** (nächster Code-Schritt): Prod-Deploy-Job in
-   `test.yml`, gated auf `test` + `migration-drift`, `master`-Trigger, eigene
-   Concurrency-Group (`cancel-in-progress: false`), Label `boku`. Danach
-   `production-deploy.yml` entfernen (#137) und den Push-Trigger für `master`
-   wiederherstellen. Die einmaligen Maintenance-Jobs sind mit #170 bereits weg
+2. [ ] **#144 Gated Deploy-Pipeline** (nächster Code-Schritt): Prod-Deploy-Workflow
+   `deploy-prod.yml` nach dem Muster von `deploy-dev.yml` (#178), gated auf `test` +
+   `migration-drift`, `master`-Trigger, eigene Concurrency-Group
+   (`cancel-in-progress: false`), Label `boku`. Danach `production-deploy.yml`
+   entfernen (#137) und den Push-Trigger für `master` wiederherstellen. Die einmaligen Maintenance-Jobs sind mit #170 bereits weg
    (`production-maintenance.yml` gelöscht, Runbooks unter `deploy/prod/postgres/`).
 3. [ ] **#159 Prod-Credentials**: kein Produktionspfad darf ein committetes
    Passwort nutzen (compose trägt weiterhin `clxadmin:clxadmin` als Dev-Default,
@@ -153,6 +165,31 @@ Superuser-Slots.
     `/home/clxadmin/.config/catchlogx/.env`.
     Macht #153 die R-Verbindungsdaten sichtbar: Host `141.244.222.191`, Port
     5432, DB `clx`, Rolle `clx_readonly`, `sslmode=prefer` (oder `require`).
+17. [x] **#171 Kapazität auf Prod und Dev**: `clx_readonly` hat auf **beiden**
+    Instanzen **108** Verbindungen (Prod vorher 40, Dev 20), `max_connections = 200`
+    (+ `superuser_reserved_connections = 5`, `work_mem = 8MB`) — vorher galt der
+    PGDG-Default 100, womit 108 Slots gar nicht erreichbar waren.
+    **Prod** (2026-10-29, SSH-Runbook aus `/root/CatchLogX`, Commit `1332258`):
+    Config vorab per `postgres -C` geprüft, Restart in **2,4 s**, App `200`
+    (loopback und nginx), `fish_catches` unverändert **464 654**, dann
+    `KEEP_PASSWORD=1 ./readonly-role.sh` (keine Rotation) → `rolconnlimit = 108`,
+    Rechte-Probe grün; Gegenprobe von außen: **5 gleichzeitige Startpakete** von
+    einer Quell-IP alle nach ~1,28 s beantwortet.
+    **Dev** (2026-10-29, `claw` über `tun0`/10.8.0.2 — Port 22 ist auf der
+    öffentlichen IP **zu**, Web und 5432 sind offen): neue versionierte
+    `deploy/vps/postgres/99-catchlogx-capacity.conf` installiert, Restart in
+    **2,5 s**, `ALTER ROLE clx_readonly CONNECTION LIMIT 108`, App `200` auf
+    `127.0.0.1:40873` und `https://catchlogx.graf.priv.at`, `fish_catches`
+    127 179 unverändert.
+    Die ursprünglich gewünschte Grenze „**5 Verbindungen pro Client-IP**" ist
+    **fallengelassen**: PostgreSQL hat kein solches Feature, und der Anlass war
+    eine Fehldiagnose — 8 gleichzeitige TCP-Sessions und 4 gleichzeitige
+    Postgres-Startpakete von **einer** Quell-IP wurden bedient (Messung im
+    Issue, `PITFALLS.md`); ein Timeout ist nie das Symptom einer Postgres-Grenze,
+    es war der Tunnel. Der Report-Abschnitt „CONNECTIONS PER CLIENT ADDRESS"
+    bleibt als Diagnose (wer hält wie viele Verbindungen), ohne Schwelle.
+    Kein Restart kostet Statistik: `pg_stat_statements.save = on` (198 Shapes,
+    `stats_reset` unverändert nach dem Prod-Restart).
 
 Kontext: Das Epic #125 bleibt offen, solange `CatchLogX-Data#2` offen ist. Vom
 Produktions-Upgrade-Pfad #137–#153 sind #138–#143 und #150/#152 erledigt; offen

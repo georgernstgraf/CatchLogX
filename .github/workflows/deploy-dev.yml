@@ -1,0 +1,103 @@
+name: Deploy dev
+
+# Deploys the dev instance (catchlogx.graf.priv.at) to the VPS runner: build
+# once per commit, publish an immutable release keyed by SHA, restart the
+# service. The running process never builds (#135).
+#
+# Split out of test.yml (#178) so the file that publishes releases and
+# restarts a systemd unit is not the file called "test".
+#
+# Trigger: the CI workflow concluding successfully on `dev`, or a manual
+# dispatch. A `needs:` edge cannot cross workflow files, so that gate is
+# reproduced with `workflow_run` plus the `if` on the job below.
+#
+# NOTE: GitHub resolves `workflow_run` and `workflow_dispatch` from the
+# workflow file on the DEFAULT branch (`master`). Until this file reaches
+# master, a push to `dev` is tested but not deployed, and dispatch is not
+# available yet.
+#
+# Never triggered by `pull_request`: a self-hosted runner must not execute
+# untrusted PR code.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [dev]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "dev commit to deploy (empty = head of the dispatched branch)"
+        required: false
+        default: ""
+        type: string
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  # Build once per commit, publish an immutable release, restart the unit.
+  deploy:
+    # workflow_run only fires for a successful CI run *on a push*. The `event`
+    # check matters: a pull_request run carries the PR's head branch, so a
+    # `dev -> master` PR would otherwise deploy an unmerged dev commit. A manual
+    # dispatch always runs.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.conclusion == 'success')
+    runs-on: [self-hosted, vps]
+
+    env:
+      # The deploy job builds in the runner's checkout, which has no .env
+      # (gitignored); the instance's real env file is the source of truth.
+      APP_ENV_FILE: /home/catchlogx/repos/georgernstgraf/CatchLogX/.env
+      # In a workflow_run, github.sha points at the default branch, NOT at the
+      # commit CI tested - the triggering run carries that commit instead.
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || inputs.ref || github.sha }}
+
+    steps:
+      - name: Report the commit being deployed
+        run: echo "Deploying $DEPLOY_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Provide runtime environment
+        run: cp "$APP_ENV_FILE" .env
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Build (standalone)
+        run: npm run build
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+
+      - name: Publish release
+        run: ./scripts/publish-release.sh "$DEPLOY_SHA"
+
+      - name: Restart service
+        run: systemctl --user restart catchlogx.service
+
+      - name: Health check
+        run: |
+          for attempt in $(seq 1 15); do
+            if curl -fsS -o /dev/null http://127.0.0.1:40873/upload; then
+              echo "Service is healthy."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Health check failed - the new release is live but not responding." >&2
+          exit 1

@@ -16,7 +16,7 @@
 #                                       the research group needed)
 #
 # What it does:
-#   1. upserts the role (NOSUPERUSER/NOCREATEDB/NOCREATEROLE, CONNECTION LIMIT 40);
+#   1. upserts the role (NOSUPERUSER/NOCREATEDB/NOCREATEROLE, CONNECTION LIMIT 108);
 #   2. grants SELECT on every `public` table EXCEPT the auth tables, positively,
 #      and sets default privileges for future tables;
 #   3. rotates the password ON THE MACHINE (never printed, never a repository
@@ -37,7 +37,10 @@ ENV_FILE="${ENV_FILE:-/home/clxadmin/.config/catchlogx/.env}"
 ENV_OWNER="${ENV_OWNER:-clxadmin:clxadmin}"
 PG_EXT_HOST="${PG_EXT_HOST:-141.244.222.191}"
 PG_EXT_PORT="${PG_EXT_PORT:-5432}"
-CONN_LIMIT="${CONN_LIMIT:-40}"
+# 108 = the generous ceiling for ~50 research-group users (#171). It is a
+# ROLE-WIDE limit, not per client address: PostgreSQL has no per-IP limit, and
+# max_connections (200 in 99-catchlogx.conf) is what makes 108 reachable at all.
+CONN_LIMIT="${CONN_LIMIT:-108}"
 KEEP_PASSWORD="${KEEP_PASSWORD:-0}"
 AUTH_TABLES=(User Session PasswordResets)
 

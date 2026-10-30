@@ -3,6 +3,7 @@
 import Sidebar from "@/components/Sidebar";
 import DarkModeToggle from "@/components/DarkModeToggle";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { formatReleaseLabel, readReleaseInfo } from "@/lib/releaseInfo";
 import { Mail } from "lucide-react";
 
 type Contributor = {
@@ -71,15 +72,32 @@ function ContributorCard({ contributor }: { contributor: Contributor }) {
 }
 
 function AboutPageContent() {
+  // Each variable is accessed statically so Next can inline it at build time;
+  // a dynamic `process.env[name]` lookup would be undefined in the browser.
+  const releaseLabel = formatReleaseLabel(
+    readReleaseInfo({
+      NEXT_PUBLIC_APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION,
+      NEXT_PUBLIC_GIT_SHA: process.env.NEXT_PUBLIC_GIT_SHA,
+    })
+  );
+
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
       <Sidebar />
       <div className="flex-1 p-6 md:p-8 bg-gray-50 dark:bg-gray-900">
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-between mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-              About CatchLogX
-            </h1>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+                About CatchLogX
+              </h1>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Version{" "}
+                <span className="font-mono" data-testid="release-version">
+                  {releaseLabel}
+                </span>
+              </p>
+            </div>
             <DarkModeToggle variant="page" />
           </div>
 
