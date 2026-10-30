@@ -302,7 +302,19 @@ Nothing about the connection changed except that it can now be encrypted:
 | role | `clx_readonly` |
 | password | from the app (data-access page, #153) or out of band |
 | TLS | offered; `sslmode=prefer` (libpq default) encrypts automatically, `sslmode=require` enforces it |
-| limits | `CONNECTION LIMIT 108` (role-wide, not per client address), `SELECT` on all tables except `User`, `Session`, `PasswordResets`; no writes, no DDL. Several connections per client address are normal — PostgreSQL has no per-IP limit |
+| limits | `CONNECTION LIMIT 108` (role-wide, not per client address), `SELECT` **only** on `fish_catches`, `samplings`, `river_sites`, `fish_species`; no writes, no DDL. Several connections per client address are normal — PostgreSQL has no per-IP limit |
+
+**This is a whitelist since #121** — it used to be "all tables except the auth
+tables", which also covered `Uploads`, `FileBlob`, `TemplateFiles`,
+`UserQueries` and `_prisma_migrations`. Those are closed now, because the same
+role also drives the **SQL page of the app** (`QUERY_DATABASE_URL`): whatever
+the role may read, every signed-in user can read through the web UI. In
+particular `FileBlob.data` holds the raw Excel uploads, and `Uploads`/`UserQueries`
+carry other users' metadata. If the research group needs one of those tables
+later, add it to `READ_TABLES` in `readonly-role.sh` and re-run the script —
+**not** with a one-off `GRANT`: the script's first step revokes every table
+privilege of the role, so a manual grant would silently disappear on the next
+run.
 
 ```sh
 # psql

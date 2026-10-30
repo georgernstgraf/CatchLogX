@@ -17,22 +17,29 @@
 #
 # What it does:
 #   1. upserts the role (NOSUPERUSER/NOCREATEDB/NOCREATEROLE, CONNECTION LIMIT 108);
-#   2. grants SELECT on every `public` table EXCEPT the auth tables, positively,
-#      and sets default privileges for future tables;
-#   3. rotates the password ON THE MACHINE (never printed, never a repository
+#   2. clears every table privilege of the role and grants SELECT on the
+#      WHITELIST of research tables only (READ_TABLES) - one read-only account
+#      for both consumers (#121): the research group in psql/R and the app's
+#      SQL page, which reads the same role through QUERY_DATABASE_URL. Anything
+#      granted here is reachable from the web UI by every signed-in user, so
+#      Uploads/FileBlob/UserQueries and the auth tables stay closed;
+#   3. revokes the "SELECT on all future tables" default privilege, so a later
+#      migration cannot widen the role by accident (QueryLog, ...);
+#   4. rotates the password ON THE MACHINE (never printed, never a repository
 #      secret) and writes it into the runtime env file as READONLY_DB_PASSWORD
 #      (0600, atomically) - that file is the only copy the app reads (#153);
-#   4. verifies on the REAL path: TCP against the host address, TLS required,
-#      wrong password rejected, reads allowed, writes and auth tables denied.
+#   5. verifies on the REAL path: TCP against the host address, TLS required,
+#      wrong password rejected, whitelist readable, everything else and writes
+#      denied.
 #
 # Re-running a rotating run is the rotation. The app does not read the value
-# until #153 ships, so no restart is needed.
+# until #121/#153 ship, so no restart is needed.
 
 set -euo pipefail
 
 ROLE="${ROLE:-clx_readonly}"
 DB="${DB:-clx}"
-PG_USER="${PG_USER:-clxadmin}"           # owner of the tables / default privileges
+PG_USER="${PG_USER:-clxadmin}"           # role used for the server-side work (peer/socket)
 ENV_FILE="${ENV_FILE:-/home/clxadmin/.config/catchlogx/.env}"
 ENV_OWNER="${ENV_OWNER:-clxadmin:clxadmin}"
 PG_EXT_HOST="${PG_EXT_HOST:-141.244.222.191}"
@@ -42,14 +49,25 @@ PG_EXT_PORT="${PG_EXT_PORT:-5432}"
 # max_connections (200 in 99-catchlogx.conf) is what makes 108 reachable at all.
 CONN_LIMIT="${CONN_LIMIT:-108}"
 KEEP_PASSWORD="${KEEP_PASSWORD:-0}"
-AUTH_TABLES=(User Session PasswordResets)
+# Table owner: the app role that creates the tables, whose DEFAULT PRIVILEGES
+# must not hand the read-only role every future table. Kept separate from
+# PG_USER so the script also runs on the dev cluster, where the local socket is
+# peer-only for `postgres` (PG_USER=postgres) while the tables belong to
+# `clxadmin`.
+TBL_OWNER="${TBL_OWNER:-clxadmin}"
+# ONE read-only account serves both consumers (#121): the research group in
+# psql/R and the app's SQL page. Whatever is listed here is readable from the
+# web UI by every signed-in user, so this is a whitelist, not "everything minus
+# auth": Uploads/FileBlob/UserQueries and the auth tables stay closed.
+READ_TABLES=(fish_catches samplings river_sites fish_species)
 
 [ "$(id -u)" -eq 0 ] || { echo "FEHLER: als root ausführen" >&2; exit 1; }
 command -v runuser >/dev/null || { echo "FEHLER: runuser fehlt" >&2; exit 1; }
 
-# Server-side work runs as clxadmin over the local socket (peer auth). Running
-# the grants as clxadmin matters: ALTER DEFAULT PRIVILEGES applies to the
-# objects that ROLE creates later.
+# Server-side work runs as clxadmin over the local socket (peer auth). The
+# default-privilege step names the table owner explicitly (TBL_OWNER), because
+# it must revoke what the owner's earlier runs granted - on the dev cluster the
+# server-side commands run as `postgres` instead.
 pg() { runuser -u "$PG_USER" -- psql -X -q -w -v ON_ERROR_STOP=1 -d "$DB" "$@"; }
 
 env_get() {
@@ -60,21 +78,29 @@ env_get() {
 echo "== 1/5 Voraussetzungen"
 pg -tAc 'select 1' >/dev/null || { echo "FEHLER: Datenbank nicht erreichbar" >&2; exit 1; }
 
-# Refuse to grant anything if the schema is not what we think it is: every auth
-# table must exist, otherwise the "everything except these" grant would silently
-# become "everything".
-AUTH_LIST=""
-for t in "${AUTH_TABLES[@]}"; do
+# Refuse to work if the schema is not what we think it is: every whitelist
+# table must exist, otherwise a typo would silently shrink the grant to nothing
+# while the verification below still "passes" on whatever is left.
+READ_LIST=""
+READ_SQL_LIST=""
+for t in "${READ_TABLES[@]}"; do
   if [ "$(pg -tAc "SELECT to_regclass('public.\"$t\"') IS NOT NULL")" != "t" ]; then
-    echo "FEHLER: erwartete Auth-Tabelle '$t' fehlt - Skript prüfen, bevor Rechte vergeben werden" >&2
+    echo "FEHLER: erwartete Tabelle '$t' fehlt - Skript prüfen, bevor Rechte vergeben werden" >&2
     exit 1
   fi
-  [ -n "$AUTH_LIST" ] && AUTH_LIST="$AUTH_LIST, "
-  AUTH_LIST="$AUTH_LIST\"$t\""
+  [ -n "$READ_LIST" ] && READ_LIST="$READ_LIST, "
+  READ_LIST="$READ_LIST\"$t\""
+  READ_SQL_LIST="$READ_SQL_LIST,'$t'"
 done
+READ_SQL_LIST="${READ_SQL_LIST#,}"
 
-TABLES="$(pg -tAc "SELECT string_agg(format('%I', tablename), ', ') FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('${AUTH_TABLES[0]}','${AUTH_TABLES[1]}','${AUTH_TABLES[2]}')")"
-[ -n "$TABLES" ] || { echo "FEHLER: keine lesbaren Tabellen in schema public" >&2; exit 1; }
+# Everything else in schema public is denied. Derived from pg_tables, not
+# hardcoded, so a future table (QueryLog, ...) is denied by default and the
+# verification below covers it without a code change.
+DENY_LIST="$(pg -tAc "SELECT coalesce(string_agg(format('%I', tablename), ', '), '')
+  FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ($READ_SQL_LIST)")"
+DENY_TABLES="$(pg -tAc "SELECT coalesce(string_agg(tablename, ' '), '')
+  FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ($READ_SQL_LIST)")"
 
 echo "== 2/5 Passwort"
 if [ "$KEEP_PASSWORD" = "1" ]; then
@@ -107,12 +133,18 @@ fi
 pg -f - <<SQL
 GRANT CONNECT ON DATABASE "$DB" TO "$ROLE";
 GRANT USAGE ON SCHEMA public TO "$ROLE";
-GRANT SELECT ON TABLE $TABLES TO "$ROLE";
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO "$ROLE";
-REVOKE SELECT ON TABLE $AUTH_LIST FROM "$ROLE";
+-- Clear the previous grant set first: a plain GRANT would leave tables
+-- readable that the role could read under the older "everything except auth"
+-- rule (Uploads, FileBlob, UserQueries, _prisma_migrations).
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM "$ROLE";
+GRANT SELECT ON TABLE $READ_LIST TO "$ROLE";
+-- Older versions granted SELECT on all FUTURE tables. That must stop, or the
+-- next migration (QueryLog) becomes readable from the web UI by accident.
+ALTER DEFAULT PRIVILEGES FOR ROLE "$TBL_OWNER" IN SCHEMA public
+  REVOKE SELECT ON TABLES FROM "$ROLE";
 SQL
-echo "   SELECT auf: $TABLES"
-echo "   gesperrt:   $AUTH_LIST"
+echo "   SELECT auf: $READ_LIST"
+echo "   gesperrt:   ${DENY_LIST:-<keine weiteren Tabellen>}"
 
 echo "== 4/5 Passwort in $ENV_FILE"
 if [ "$KEEP_PASSWORD" = "1" ]; then
@@ -149,20 +181,23 @@ else
   echo "   falsches Passwort: abgewiesen"
 fi
 
-READ_TABLE="$(pg -tAc "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('${AUTH_TABLES[0]}','${AUTH_TABLES[1]}','${AUTH_TABLES[2]}') ORDER BY tablename LIMIT 1")"
-if ext "$PW" -tAc "SELECT count(*) FROM \"$READ_TABLE\"" >/dev/null 2>&1; then
-  echo "   richtiges Passwort: akzeptiert, Lesen erlaubt ($READ_TABLE)"
-else
-  echo "   FEHLER: Lesen als $ROLE fehlgeschlagen" >&2
-  fail=1
-fi
+for t in "${READ_TABLES[@]}"; do
+  if ext "$PW" -tAc "SELECT count(*) FROM \"$t\"" >/dev/null 2>&1; then
+    echo "   lesbar:   $t"
+  else
+    echo "   FEHLER: $t ist für $ROLE nicht lesbar" >&2
+    fail=1
+  fi
+done
 
-if ext "$PW" -tAc 'SELECT 1 FROM "Session" LIMIT 1' >/dev/null 2>&1; then
-  echo "   FEHLER: $ROLE kann Session lesen - REVOKE hat nicht gegriffen" >&2
-  fail=1
-else
-  echo "   Auth-Tabellen: gesperrt (Session)"
-fi
+for t in $DENY_TABLES; do
+  if ext "$PW" -tAc "SELECT 1 FROM \"$t\" LIMIT 1" >/dev/null 2>&1; then
+    echo "   FEHLER: $ROLE kann $t lesen - die Whitelist greift nicht" >&2
+    fail=1
+  else
+    echo "   gesperrt: $t"
+  fi
+done
 
 if ext "$PW" -c 'CREATE TABLE public._readonly_probe(i int)' >/dev/null 2>&1; then
   ext "$PW" -c 'DROP TABLE public._readonly_probe' >/dev/null 2>&1 || true
@@ -179,6 +214,7 @@ echo
 if [ "$fail" -eq 0 ]; then
   echo "OK: $ROLE ist bereit. Passwort für die Forschungsgruppe: $ENV_FILE (READONLY_DB_PASSWORD)."
   echo "    Verbindungsdaten: host=$PG_EXT_HOST port=$PG_EXT_PORT dbname=$DB user=$ROLE sslmode=prefer"
+  echo "    Dieselbe Rolle bedient die SQL-Seite der App über QUERY_DATABASE_URL (#121)."
 else
   echo "FEHLGESCHLAGEN: siehe Meldungen oben." >&2
   exit 1

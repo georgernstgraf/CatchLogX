@@ -2,6 +2,24 @@
 
 Offene Aufgaben für die nächste Session.
 
+**Nachtrag 2026-10-30 (#121), Dev für die SQL-Rollen-Umstellung vorbereitet:**
+`clx_readonly` ist auf der Dev-Instanz jetzt die **einzige** lesende Rolle und
+eine **Whitelist** (`SELECT` nur auf `fish_catches`, `samplings`,
+`river_sites`, `fish_species`; `Uploads`/`FileBlob`/`UserQueries`/Auth-Tabellen
+und `_prisma_migrations` gesperrt), verifiziert über TCP mit TLS. Grund: Jakobs
+fertige #121-Arbeit ersetzt den `validateSQLQuery`-Blocklist durch diese Rolle
+und die SQL-Seite verbindet mit **derselben** Rolle über `QUERY_DATABASE_URL`
+(kein `clx_query`, kein `query-role.sh`). `QUERY_DATABASE_URL` steht in
+`~/repos/georgernstgraf/CatchLogX/.env` (nur loopback; das Passwort ist
+prozentkodiert, weil base64 `/`/`+` enthält) und ist im laufenden Prozess
+sichtbar (Restart am 2026-10-30, Health-Check 200). **Noch offen:** Jakobs Push
+abwarten (er war blockiert, weil ein Push sofort deployt), Deploy + SQL-Seite
+end-to-end prüfen, und **auf Prod** `KEEP_PASSWORD=1
+./deploy/prod/postgres/readonly-role.sh` fahren (verengt dieselbe Rolle, kein
+neues Passwort) und `QUERY_DATABASE_URL` in `~clxadmin/.config/catchlogx/.env`
+nachziehen, dann `catchlogx.service` neu starten. Der Forschungsgruppe vorher
+sagen, dass `Uploads`/`FileBlob`/`UserQueries`/`TemplateFiles` in R wegfallen.
+
 **Stand 2026-10-29 (Härtung, #122):** Der Produktions-Host ist auf eine Regel
 gebracht — **nichts von `clxadmin` außerhalb seines Homes, keine Erhöhung
 möglich**. Der Runner ist eine **User-Unit** von `clxadmin`
