@@ -130,7 +130,7 @@ CatchLogX/
 │   └── schema.prisma         # DB-Schema (Änderungen via `prisma migrate dev`)
 ├── scripts/                  # create-user, Seed- und Wipe-Scripts
 ├── docs/ai/                  # Projektwissen (Architektur, Entscheidungen, ...)
-├── samples/                  # Beispieldaten
+├── samples/                  # Vorlagen und Beispieldaten (siehe samples/README.md)
 ├── middleware.ts             # Edge-Cookie-Check für /api/admin/*
 └── docker-compose.yml        # PostgreSQL 16 + App
 ```
