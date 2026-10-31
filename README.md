@@ -128,6 +128,7 @@ CatchLogX/
 │   └── csv.ts                # CSV-Export-Escaping
 ├── prisma/
 │   └── schema.prisma         # DB-Schema (Änderungen via `prisma migrate dev`)
+├── assets/                   # Master-Artenliste (Artliste + Eingabemaske V.6, siehe #183)
 ├── scripts/                  # create-user, Seed- und Wipe-Scripts
 ├── docs/ai/                  # Projektwissen (Architektur, Entscheidungen, ...)
 ├── samples/                  # Vorlagen und Beispieldaten (siehe samples/README.md)
