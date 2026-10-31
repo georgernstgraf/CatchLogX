@@ -197,8 +197,13 @@ When committing, consult the `issue-workflow` skill. Every commit must reference
 Skills live in `.opencode/skills/` and are **committed to the repo** — every clone discovers them without extra setup.
 
 - `engineering/` — vendored snapshot of [mattpocock/skills](https://github.com/mattpocock/skills) (`skills/engineering/`). 18 skills (code-review, implement, tdd, diagnosing-bugs, …). Not auto-updated.
-- `issue-workflow/` — project-owned; backs the commit rule below.
-- `knowledge-persistence/` — project-owned; maintains the `docs/ai/*` knowledge files.
+- `issue-workflow/` — vendored from `georgernstgraf/opencode-helpers` (`skills/issue-workflow`, commit `547b70f`, synced 2026-10-31); backs the commit rule below. CatchLogX-specific parts are marked in the file (dev trunk, `.githooks`); SVN support is deliberately not ported (#124).
+- `knowledge-persistence/` — vendored from `georgernstgraf/opencode-helpers` (`skills/knowledge-persistence`); maintains the `docs/ai/*` knowledge files. Same language/SVN policy as `issue-workflow` (#124).
+
+**Update the two vendored skills** (manual — there is no script for them yet):
+copy the upstream `SKILL.md` over, re-apply the CatchLogX-specific parts, and
+record the upstream commit in the header. `scripts/update-engineering-skills.sh`
+covers only `engineering/`.
 
 **Update engineering skills** (run when you want upstream changes; review the diff before committing):
 ```

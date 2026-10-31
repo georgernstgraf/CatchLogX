@@ -10,6 +10,13 @@ metadata:
 
 # Issue Workflow Skill
 
+> **Vendored from `georgernstgraf/opencode-helpers`** (`skills/issue-workflow`,
+> commit `547b70f`, synced 2026-10-31). Everything is upstream content,
+> translated to English and stripped of SVN support as decided in #124 — except
+> the parts marked **CatchLogX-specific**: the section
+> “Trunk-Based Development (this repo)” and the `dev`/hook bullet under
+> “Proactive Commit and Push”.
+
 ## Purpose
 
 This skill governs issue-centered work as a **continuous state**, not a
@@ -26,17 +33,78 @@ being invoked.
 - At any point in a session, the agent must know which GitHub issue it is
   currently working under, and announce it (e.g., "Working under issue
   #123: <title>").
-- Before starting work, resolve the current issue: search open issues first
-  (`gh issue list` / `gh issue view <N> --json title,body,comments`) for one
-  matching the task.
-- If no existing issue matches and the task is clearly a new topic, create a
-  new issue immediately and **without user interaction**, then announce it.
+- Before starting work, resolve the current issue: run the **Duplicate Check**
+  (below) and reuse a matching open issue instead of creating a new one.
+- Only when the Duplicate Check finds no match and the task is clearly a new
+  topic, create a new issue immediately and **without user interaction**, then
+  announce it.
+- Never create an issue while an open issue already tracks all or part of the
+  same goal — see "Duplicate Check" for the decision matrix.
 - If the assignment is ambiguous (several candidate issues, or unclear
   whether a new one is needed), ask the user before touching code.
 - The assignment to an issue may change mid-session when the user redirects
   the work; resolve the new issue the same way.
 
-## Trunk-Based Development (this repo)
+## Duplicate Check (mandatory gate before every issue creation)
+
+This gate is mandatory **before every `gh issue create`** — in the `start`
+mode, in continuous work, and in every other skill or command that creates
+issues (they reference this section instead of re-implementing it). Its scope
+is always the **current repository** (`--repo <owner>/<repo>` from
+`gh repo view --json nameWithOwner --jq .nameWithOwner`) — never an org-wide
+search.
+
+### 1. Search for candidates (all three, in parallel)
+
+```bash
+# open issues, keyword search
+gh issue list --repo <owner>/<repo> --state open --limit 50 \
+  --search "<terms>" --json number,title,labels,updatedAt
+# full text in title and body
+gh search issues --repo <owner>/<repo> --state open "in:title,body <terms>" \
+  --json number,title,updatedAt
+# in-flight work that is not yet an issue
+gh search prs --repo <owner>/<repo> --state open "<terms>" \
+  --json number,title
+```
+
+- Derive 2–4 **discriminating** terms from the planned title and scope
+  (module, file, feature noun, error string) — not the whole sentence. In
+  mixed-language trackers search German *and* English synonyms.
+- If the first pass returns nothing, repeat with the single broadest term (the
+  feature noun) so that different wording still matches.
+- Read every promising hit (`gh issue view <N> --json title,body,comments`).
+  Titles alone are not evidence; the goal stated in the body decides.
+
+### 2. Decide
+
+| Finding | Action |
+|---|---|
+| 0 plausible candidates | create the new issue |
+| 1 open issue covers the planned goal | **do not create** — work under it, add the new scope as a comment |
+| 1 open issue covers only part of the plan | **do not duplicate** — work under it; create a separate sub-issue only if the parent genuinely requires independent tracking (then link it formally, see "Sub-Issues") |
+| ≥2 plausible candidates, or unclear whether a new issue is needed | **stop and ask the user** — per candidate: number, title, `updatedAt`, one-line rationale |
+| only closed issues match | create the new issue; mention the closed one in the body as a regression/repeat |
+
+**Tie-breaker (asymmetric cost):** when in doubt, comment on the existing
+issue instead of opening a new one. A comment is cheap and reversible; a
+duplicate pollutes the tracker, its boards, and its auto-close logic. There is
+no "obviously new topic" shortcut around this matrix — passing it is what
+licenses creating without asking.
+
+### 3. Record the check (trace line)
+
+The body of every newly created issue ends with:
+
+```
+Duplicate check (YYYY-MM-DD): no matching open issue. Checked: #12, #34, search "backup restore".
+```
+
+When an existing issue is reused instead, post a comment that names the planned
+scope and the date. This keeps the check auditable and lets the duplicate rate
+be measured later.
+
+## Trunk-Based Development (this repo) — CatchLogX-specific
 
 This repository follows **trunk-based development**:
 
@@ -48,7 +116,7 @@ This repository follows **trunk-based development**:
 - **Pull first, always:** Before ANY work session (or resuming work), lift
   the working copy onto the trunk with `git pull --ff-only origin dev`.
   - If the pull fails or reports conflicts: STOP immediately and report to
-    the user; do not continue on a stale tree.
+  the user; do not continue on a stale tree.
   - Rationale: trunk-based workflows depend on always building from the
     current state — otherwise avoidable conflicts and re-discovery of other
     people's commits pile up.
@@ -76,8 +144,8 @@ This repository follows **trunk-based development**:
   work, commit and push immediately — do not wait for the user to request it
   or for a trigger phrase. This overrides the opencode default "never commit
   unless the user asks". See "Proactive Commit and Push" below.
-- **Green commits only:** run `npm run lint` (and tests once they exist)
-  before committing; never push a broken state.
+- **Green commits only:** run the repository's tests/lint for the affected
+  area before committing; never push a broken state.
 - Never create a commit without first identifying an existing issue or
   creating a new one.
 - If no relevant issue exists and a commit is needed, create the issue first,
@@ -106,17 +174,20 @@ These rules apply at any time during session work, without a trigger phrase:
   immediately — do not wait for the user to request it or for a mode
   invocation. This overrides the opencode default "never commit unless the
   user asks".
-- **Green commits only:** run the repository's lint/tests for the affected
+- **Green commits only:** run the repository's tests/lint for the affected
   area first. Commit only when they pass. If verification fails, fix or
   report — never push a broken state.
 - The commit message must include the issue reference (see Commit Message
   Rule) and preserve the repository's existing style.
 - No empty commits. If there is nothing to commit, say so instead.
-- Trunk-based: commit and push **directly to `dev`**; no feature branches
-  or PRs. The pre-push hook (`.githooks/pre-push`, lint gate) automatically
-  blocks pushes to `dev` when `npm run lint` fails — activate it once per
-  clone with `git config core.hooksPath .githooks`.
-- Explicit "hold back" requests from the user always win over this policy.
+- **CatchLogX-specific:** Trunk-based: commit and push **directly to `dev`**;
+  no feature branches or PRs. The pre-push hook (`.githooks/pre-push`, lint
+  gate) automatically blocks pushes to `dev` when `npm run lint` fails —
+  activate it once per clone with `git config core.hooksPath .githooks`.
+- The read-only scope exclusions (`homework`, `repograde`, `grading-shared`,
+  `knowledge-assessment`, `knowledge-exam`, `projectgrade`, student
+  repositories, and explicit "hold back" requests) always win over this
+  policy.
 
 ## Manual Override Modes
 
@@ -132,9 +203,12 @@ Use this mode to explicitly begin or resume work (e.g., "issue start").
   `gh issue view <N> --json title,body,comments` and read the description plus comments.
   Check if the issue has a parent or should be linked as a sub-issue to an existing epic.
 - If `issue` is `new`, or if no usable issue exists for the current work,
-  create a new issue from the provided context. If the new issue is part of a larger epic, link it as a sub-issue immediately.
+  run the Duplicate Check first; only then create a new issue from the
+  provided context. If the new issue is part of a larger epic, link it as a
+  sub-issue immediately.
 - If no issue is supplied, infer whether there is already a current issue for
-  the work. If not, create one before proceeding.
+  the work (Duplicate Check). Only if none matches, create one before
+  proceeding.
 - Assess the codebase against the issue. If the requested functionality is
   already complete, comment with the finding and follow the completion
   criteria in "Issue Completion" (check open sub-issues first).
@@ -157,11 +231,14 @@ Use this mode to force an immediate checkpoint while the issue remains open
   - what remains
   - known risks, blockers, or follow-ups
 - Persist session knowledge by invoking the `knowledge-persistence` skill.
-  Note: knowledge-persistence never closes issues; it only adds comments
-  for traceability.
+  Note: knowledge-persistence **commits and pushes its own knowledge commit**
+  (with the issue reference) and never closes issues; it only adds comments for
+  traceability.
 - Review git status and staged/unstaged changes.
-- Create a commit that includes the issue number.
-- Push to `dev`.
+- Create a commit that includes the issue number for any **remaining**
+  non-knowledge changes. Never create an empty commit — if knowledge-persistence
+  already committed everything, there is nothing to do here.
+- Push to the trunk line.
 - Keep the issue open.
 
 ### 3. `finish`
@@ -174,37 +251,55 @@ Use this mode to force finalization and issue closure (e.g., "issue finish",
 - Comment on the issue with a final implementation report.
 - Persist all newly acquired session knowledge by also using the
   `knowledge-persistence` skill before finalizing the workflow.
-  Note: knowledge-persistence itself never closes issues. The issue
-  closure below is owned exclusively by this `finish` mode.
+  Note: knowledge-persistence **commits and pushes its own knowledge commit**
+  (with the issue reference); it never closes issues. The issue closure below is
+  owned exclusively by this `finish` mode.
 - Review git status and remaining changes.
-- Create the final commit including the issue number.
-- Push to `dev`.
+- Create the final commit including the issue number for any **remaining**
+  non-knowledge changes. Never create an empty commit.
+- Push to the trunk line.
 - **Before closing the issue**, list its sub-issues via:
   `gh api repos/{owner}/{repo}/issues/{NUMBER}/sub_issues --jq '.[].number'`
   If any sub-issues remain open, the issue **must not** be closed. Report the
   open sub-issues and keep the parent open.
 - Close the issue with a short closing comment if helpful.
+- **Post-close knowledge follow-up:** because `STATE.md`/`HANDOFF.md` record the
+  *closed* state, run `knowledge-persistence` once more after closing — it ends
+  with its own commit + push, so the recorded closure reaches the trunk. This
+  second run is expected; the first (pre-close) run must not be skipped.
 
 ## Issue Completion
 
 Applies at any time, independent of the modes:
 
-- When the agent believes the issue's goal is fully implemented, it normally
-  **asks the user** before closing the issue.
-- The agent may close the issue **autonomously** only when ALL of these hold:
+- When the agent believes the issue's goal is fully implemented, it **closes
+  the issue autonomously** — it does not wait for the user to ask and does not
+  ask for permission first.
+- The agent may close autonomously only when ALL of these hold:
   - the implementation covers the issue goal completely,
-  - verification (lint/tests) is green,
-  - the issue has no open sub-issues (always check via the sub-issues API first),
+  - verification (tests/lint) is green,
+  - the issue has no open sub-issues (always check via the `issue-workflow`
+    sub-issues API first),
   - the user has not signalled anything that contradicts completion.
-- Before closing, also comment on the issue with a final implementation
+- Before closing, comment on the issue with a final implementation
   report (persist session knowledge via `knowledge-persistence` when new
   knowledge exists).
-- Otherwise report the status, state what is missing, and ask.
+- Knowledge persistence is not finished until it is **committed and pushed**
+  (its own commit with the issue reference). Because `STATE.md`/`HANDOFF.md`
+  describe the closed state, this usually means a **follow-up knowledge commit
+  after the close** — never leave the knowledge files uncommitted/unpushed.
+- The final message to the user **MUST** state that the issue was closed and
+  name its number (e.g. "Issue #123 closed"). A silent closure is not enough.
+- If any criterion is not met, do **not** close: report the status, state what
+  is missing, and ask.
 
 ## Issue Creation Guidance
 
 When creating an issue:
 
+- **Run the Duplicate Check first** (see "Duplicate Check"). No issue is
+  created before that gate reports no match — this is the primary anti-
+  duplication rule of this skill.
 - Write a short, outcome-oriented title.
 - Include enough body detail for a future agent to understand scope and intent.
 - **Link as Sub-Issue:** If this issue is a component of a larger task, identify the parent issue and link it as a sub-issue immediately after creation.
@@ -277,6 +372,8 @@ Issue comments should be compact but useful.
 ## Safety Constraints
 
 - Never fabricate issue numbers.
+- Never create an issue before the Duplicate Check ran and reported no match.
+- Never open a second issue for a goal that an open issue already tracks.
 - Never create an empty commit when there are no changes.
 - If there are no local changes in `commit` or `finish` mode, still update the
   issue comment as needed, but report that there was nothing to commit.
@@ -289,7 +386,11 @@ Issue comments should be compact but useful.
 At the end of the workflow, report:
 
 - the issue number used or created
+- the duplicate check result: which candidates were checked, or that no open
+  issue matched
 - whether a comment was added
 - whether a commit was created, including its message
-- whether knowledge persistence was run
-- whether the issue remains open or was closed
+- whether knowledge persistence was run, and the hash of its commit (and that
+  it was pushed)
+- the issue number and its final state: when the issue was closed, state this
+  explicitly (e.g. "Issue #123 closed"); otherwise note that it remains open
