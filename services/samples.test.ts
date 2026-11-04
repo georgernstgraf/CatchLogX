@@ -34,12 +34,12 @@ const sample = (fileName: string) => readRepoFile("samples", fileName);
 
 const allColumns = Object.keys(buildSchema({}).shape);
 
-// Read from the source: importing the script would run its main().
-const seedSpecies = [
-  ...readRepoFile("scripts", "insert-fish.ts")
-    .toString("utf8")
-    .matchAll(/speciesName: "([^"]+)"/g),
-].map((match) => match[1]);
+// Read from the JSON master (#183): importing the script would run its main().
+const seedSpecies = (
+  JSON.parse(readRepoFile("assets", "species.json").toString("utf8")) as {
+    speciesName: string;
+  }[]
+).map((s) => s.speciesName);
 
 function listsOf(fileName: string) {
   const workbook = XLSX.read(sample(fileName), { type: "buffer" });
