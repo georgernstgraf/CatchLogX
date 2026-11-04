@@ -18,7 +18,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "postinstall": "prisma generate",
-    "db:query-role": "tsx scripts/create-query-role.ts"
+    "db:readonly-role": "tsx scripts/create-readonly-role.ts"
   },
   "dependencies": {
     "@next-auth/prisma-adapter": "^1.0.7",

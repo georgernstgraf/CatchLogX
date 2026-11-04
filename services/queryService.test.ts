@@ -8,10 +8,11 @@ vi.mock("@/lib/prisma", () => ({
   prisma: { $queryRawUnsafe: vi.fn(), queryLog: { create: vi.fn() } },
 }));
 vi.mock("@/lib/queryPrisma", () => ({
-  getQueryPrisma: () => ({ $queryRawUnsafe: queryRaw }),
+  getQueryPrisma: vi.fn(),
 }));
 
 import { prisma } from "@/lib/prisma";
+import { getQueryPrisma } from "@/lib/queryPrisma";
 import {
   executeQuery,
   isPermissionDenied,
@@ -21,6 +22,7 @@ import {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(prisma.queryLog.create).mockResolvedValue({} as any);
+  vi.mocked(getQueryPrisma).mockReturnValue({ $queryRawUnsafe: queryRaw } as any);
 });
 
 describe("validateSQLQuery", () => {
@@ -60,6 +62,36 @@ describe("executeQuery", () => {
     expect(result.query).toBe("SELECT 1");
     expect(result.timestamp).toBeInstanceOf(Date);
     expect(result.result).toEqual([{ id: 1, count: "12345678901234" }]);
+  });
+
+  // No keyword guard in front of the DB any more (#121): even a write reaches the
+  // read-only client verbatim, and clx_readonly's missing grants reject it.
+  it("hands writes and DDL unchanged to the read-only client", async () => {
+    queryRaw.mockRejectedValue(new Error("permission denied for table fish_catches"));
+
+    await expect(executeQuery("DELETE FROM fish_catches", "user-1")).rejects.toThrow(
+      "permission denied",
+    );
+    expect(queryRaw).toHaveBeenCalledWith("DELETE FROM fish_catches");
+    expect(prisma.$queryRawUnsafe).not.toHaveBeenCalled();
+  });
+
+  it("fails with a clear error and no admin fallback without QUERY_DATABASE_URL", async () => {
+    vi.mocked(getQueryPrisma).mockImplementation(() => {
+      throw new Error("QUERY_DATABASE_URL is not set");
+    });
+
+    await expect(executeQuery("SELECT 1", "user-1")).rejects.toThrow(
+      "QUERY_DATABASE_URL is not set",
+    );
+    expect(prisma.$queryRawUnsafe).not.toHaveBeenCalled();
+    expect(prisma.queryLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        query: "SELECT 1",
+        success: false,
+        error: "QUERY_DATABASE_URL is not set",
+      }),
+    });
   });
 
   it("logs the exact query text on success", async () => {

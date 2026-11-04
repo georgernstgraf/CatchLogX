@@ -432,20 +432,32 @@ must show several `ESTAB` lines from the same `Local Address:Port`.
 - `.github/workflows/production-maintenance.yml` is retired; recurring
   operations are the scripts in this directory plus `deploy/postgres/report.sql`.
 
-## SQL query UI role (`clx_query`, #121)
+## SQL query page (`QUERY_DATABASE_URL`, #121)
 
-The SQL page runs user SQL as `clx_query`: `SELECT` on `fish_catches`, `samplings`,
-`river_sites` and `fish_species` only, read-only by default, 10 s statement timeout.
-The app has **no fallback** to the admin URL, so without `QUERY_DATABASE_URL` the SQL
-page answers 500 and the rest of the app keeps working.
+The SQL page runs user SQL as **`clx_readonly`**, the same whitelisted role as the
+research group (see "For the research group — connecting" above) — there is no second role. The app
+reads it from `QUERY_DATABASE_URL` and has **no fallback** to the admin URL, so
+without the variable the SQL page answers 500 and the rest of the app keeps working.
+Every query is written to `QueryLog` through the admin connection; the migration
+`add_query_log` also revokes `QueryLog` from `clx_readonly` as a second line behind
+the whitelist.
 
-Order: migration `add_query_log` applied first, then
+Keep the URL a **plain libpq URL** — no `?connection_limit=` and no `?schema=`:
+psql rejects both (`invalid URI query parameter`), and the same string should work
+in psql and R. The app caps its pool for this client in code (`lib/queryPrisma.ts`).
+Percent-encode the password (`/` and `+` from base64).
+
+Order on a host, after the release containing `add_query_log` is deployed:
 
 ```bash
-cd /root/CatchLogX/deploy/prod/postgres && ./query-role.sh
+cd /root/CatchLogX/deploy/prod/postgres && KEEP_PASSWORD=1 ./readonly-role.sh
+# then, in ~clxadmin/.config/catchlogx/.env:
+#   QUERY_DATABASE_URL=postgresql://clx_readonly:<READONLY_DB_PASSWORD, percent-encoded>@127.0.0.1:5432/clx
+sudo -u clxadmin XDG_RUNTIME_DIR=/run/user/1000 \
+  DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
+  systemctl --user restart catchlogx.service
 ```
 
-Then restart `catchlogx.service`, because the app reads the env at start.
-`KEEP_PASSWORD=1 ./query-role.sh` verifies and repairs without rotating. The script
-overrides (`ENV_FILE`, `ENV_OWNER`, `PG_USER`, ...) cover the dev instance. Also re-run
-`KEEP_PASSWORD=1 ./readonly-role.sh`, which keeps `QueryLog` away from `clx_readonly`.
+The app reads the env at start, hence the restart. Locally, `npm run db:readonly-role`
+(`scripts/create-readonly-role.ts`) creates the same role with the same whitelist in the
+compose database — keep both lists in sync.

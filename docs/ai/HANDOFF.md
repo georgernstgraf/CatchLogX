@@ -209,11 +209,12 @@ Superuser-Slots.
     Kein Restart kostet Statistik: `pg_stat_statements.save = on` (198 Shapes,
     `stats_reset` unverändert nach dem Prod-Restart).
 
-18. [ ] **#121 Rollout `clx_query`**: Die SQL-Seite läuft nur mit `QUERY_DATABASE_URL`, es gibt
-    bewusst keinen Fallback auf die Admin-URL. **Dev:** Rolle anlegen und Env setzen, **bevor**
-    #121 auf `dev` landet (Push deployt sofort). **Prod:** vor dem nächsten `dev`→`master` mit
-    `deploy/prod/postgres/query-role.sh`, danach `KEEP_PASSWORD=1 ./readonly-role.sh`
-    (Reihenfolge und Details: `deploy/prod/postgres/README.md`).
+18. [ ] **#121 Rollout SQL-Seite auf `clx_readonly`**: Die SQL-Seite läuft nur mit
+    `QUERY_DATABASE_URL` (Rolle `clx_readonly`, libpq-taugliche URL ohne `?connection_limit=`/`?schema=`),
+    es gibt bewusst keinen Fallback auf die Admin-URL. **Dev:** Rolle verengt und Env gesetzt (Georg,
+    2026-10-30). **Prod (Georg, nach `dev`→`master`):** `KEEP_PASSWORD=1 ./readonly-role.sh`, dann
+    `QUERY_DATABASE_URL` in `~clxadmin/.config/catchlogx/.env`, dann Unit-Restart
+    (Details: `deploy/prod/postgres/README.md`, Abschnitt „SQL query page").
 
 Kontext: Das Epic #125 bleibt offen, solange `CatchLogX-Data#2` offen ist. Vom
 Produktions-Upgrade-Pfad #137–#153 sind #138–#143 und #150/#152 erledigt; offen

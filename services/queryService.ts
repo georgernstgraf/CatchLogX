@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getQueryPrisma } from "@/lib/queryPrisma";
 
-// No keyword heuristics any more (#121): user SQL runs as the read-only role `clx_query`,
+// No keyword heuristics any more (#121): user SQL runs as the read-only role `clx_readonly`,
 // so PostgreSQL permissions decide what is allowed. Only reject empty input here.
 
 export function validateSQLQuery(query: string): {

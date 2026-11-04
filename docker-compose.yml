@@ -42,8 +42,8 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://clxadmin:clxadmin@db:5432/clx?schema=public
       SHADOW_DATABASE_URL: postgresql://clxadmin:clxadmin@db:5432/clx_shadow?schema=public
-      QUERY_DATABASE_URL: postgresql://clx_query:clxquery@db:5432/clx?schema=public
-      QUERY_DB_PASSWORD: clxquery
+      QUERY_DATABASE_URL: postgresql://clx_readonly:clxreadonly@db:5432/clx
+      READONLY_DB_PASSWORD: clxreadonly
       NEXTAUTH_URL: http://localhost:3001
       NEXTAUTH_SECRET: "your-secure-secret-change-in-production"
       NEXT_TELEMETRY_DISABLED: "1"
@@ -59,7 +59,7 @@ services:
       sh -c "npm ci --include=dev || npm install --include=dev
       && npx prisma generate
       && npx prisma migrate deploy
-      && npx tsx scripts/create-query-role.ts
+      && npx tsx scripts/create-readonly-role.ts
       && npx tsx scripts/insert-fish.ts
       && npm run build
       && npx next start -p 3001
