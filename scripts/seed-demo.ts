@@ -22,11 +22,10 @@ const SEED_STEPS = [
 
 const TEMPLATE_FILES: { fileName: string; contentType: string }[] = [
   {
-    fileName: "import-template.xlsx",
+    fileName: "2026_Eingabemaske.Rohdaten.V.6.xlsx",
     contentType:
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   },
-  { fileName: "import-template.csv", contentType: "text/csv" },
 ];
 
 function runStep(script: string) {
@@ -51,7 +50,7 @@ async function seedTemplateFiles() {
     }
 
     const fileBuffer = await readFile(
-      path.join(process.cwd(), "samples", template.fileName),
+      path.join(process.cwd(), "assets", template.fileName),
     );
 
     const created = await createTemplateFile({

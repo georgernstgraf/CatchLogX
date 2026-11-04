@@ -6,8 +6,7 @@ type SpeciesRow = {
   id: number;
   speciesName: string; // scientific name (matches Excel 'species' column)
   germanName: string;
-  latinName: string;
-  family: string;
+  family: string | null;
 };
 
 // Species master data lives in assets/species.json (#183); the seed script
@@ -21,14 +20,12 @@ async function main() {
       update: {
         speciesName: s.speciesName,
         germanName: s.germanName,
-        latinName: s.latinName,
         family: s.family,
       },
       create: {
         id: s.id,
         speciesName: s.speciesName,
         germanName: s.germanName,
-        latinName: s.latinName,
         family: s.family,
       },
     });

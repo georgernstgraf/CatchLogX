@@ -62,7 +62,6 @@ ORDER BY rs."riverName", fs."speciesName";`,
     query: `SELECT DISTINCT
   fs."speciesName" AS "Fish Species",
   fs."germanName" AS "German Name",
-  fs."latinName" AS "Latin Name",
   fs."family" AS "Family",
   COUNT(fc.id) AS "Catch Count"
 FROM fish_catches fc
@@ -70,7 +69,7 @@ JOIN fish_species fs ON fc."speciesId" = fs.id
 JOIN samplings s ON fc."samplingId" = s.id
 JOIN river_sites rs ON s."siteId" = rs.id
 WHERE rs."riverName" ILIKE '%{{PARAMETER}}%' OR rs."siteName" ILIKE '%{{PARAMETER}}%'
-GROUP BY fs.id, fs."speciesName", fs."germanName", fs."latinName", fs."family"
+GROUP BY fs.id, fs."speciesName", fs."germanName", fs."family"
 ORDER BY "Catch Count" DESC;`,
     hasParameter: true,
     parameterLabel: "River or Site Name",

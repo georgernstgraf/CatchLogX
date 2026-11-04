@@ -131,7 +131,6 @@ CatchLogX/
 ├── assets/                   # Master-Artenliste (Artliste + Eingabemaske V.6, siehe #183)
 ├── scripts/                  # create-user, Seed- und Wipe-Scripts
 ├── docs/ai/                  # Projektwissen (Architektur, Entscheidungen, ...)
-├── samples/                  # Vorlagen und Beispieldaten (siehe samples/README.md)
 ├── middleware.ts             # Edge-Cookie-Check für /api/admin/*
 └── docker-compose.yml        # PostgreSQL 16 + App
 ```

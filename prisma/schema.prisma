@@ -219,7 +219,6 @@ model FishSpecies {
     id          Int     @id @default(autoincrement())
     speciesName String  @unique
     germanName  String?
-    latinName   String?
     family      String?
 
     // relations
