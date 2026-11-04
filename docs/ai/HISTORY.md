@@ -40,3 +40,7 @@ Ursprünglicher Satz (Tradeoff-Eintrag zu #169 am 2026-10-29): *„pg_stat_state
 ## 2026-10-16: SQL guard keyword blocklist (from PITFALLS.md)
 - **Reason superseded**: #121 removed the heuristic; the read-only role `clx_readonly` (whitelist) is now the boundary.
 - **Original**: - `validateSQLQuery` (`services/queryService.ts`) is a keyword blocklist (whole-word match since #116), not a security boundary — it can't see through e.g. Postgres unicode-escaped identifiers. Real protection for the query UI would be a read-only DB role.
+
+## 2026-10-30 (SUPERSEDED 2026-11-04, origin: HANDOFF.md / deploy/prod/postgres/README.md, reason: #121 Plan-Änderung durch Georg): Eigene Rolle `clx_query` für die SQL-Seite
+- **Original**: Die SQL-Seite sollte als eigene Rolle `clx_query` laufen (Whitelist, `default_transaction_read_only = on`, `statement_timeout = 10s`), angelegt auf Hosts mit `deploy/prod/postgres/query-role.sh`, lokal mit `npm run db:query-role`; `clx_readonly` hätte breit bleiben und nur `QueryLog` per `AUTH_TABLES` ausschließen sollen. HANDOFF-Punkt 18 hieß „#121 Rollout `clx_query`".
+- **Reason**: Georg (`0380c9b`, Kommentar in #121): ein Read-only-Account für Forschungsgruppe und SQL-Seite, `clx_readonly` ist jetzt selbst die Whitelist. `query-role.sh` gelöscht, Skript zu `scripts/create-readonly-role.ts` (`npm run db:readonly-role`) umgebaut. Entfallen sind dabei das Read-only-Default und das `statement_timeout` der Rolle.

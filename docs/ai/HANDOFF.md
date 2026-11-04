@@ -12,13 +12,18 @@ und die SQL-Seite verbindet mit **derselben** Rolle über `QUERY_DATABASE_URL`
 (kein `clx_query`, kein `query-role.sh`). `QUERY_DATABASE_URL` steht in
 `~/repos/georgernstgraf/CatchLogX/.env` (nur loopback; das Passwort ist
 prozentkodiert, weil base64 `/`/`+` enthält) und ist im laufenden Prozess
-sichtbar (Restart am 2026-10-30, Health-Check 200). **Noch offen:** Jakobs Push
-abwarten (er war blockiert, weil ein Push sofort deployt), Deploy + SQL-Seite
-end-to-end prüfen, und **auf Prod** `KEEP_PASSWORD=1
-./deploy/prod/postgres/readonly-role.sh` fahren (verengt dieselbe Rolle, kein
-neues Passwort) und `QUERY_DATABASE_URL` in `~clxadmin/.config/catchlogx/.env`
-nachziehen, dann `catchlogx.service` neu starten. Der Forschungsgruppe vorher
-sagen, dass `Uploads`/`FileBlob`/`UserQueries`/`TemplateFiles` in R wegfallen.
+sichtbar (Restart am 2026-10-30, Health-Check 200). **Stand 2026-11-04:** Jakobs #121 ist auf `dev` (`ef63d85`, `a035eef`, `546ea84`;
+`query-role.sh`/`clx_query` gestrichen) und auf Dev deployt (Run 41855520925, Migration
+`add_query_log` angewendet). End-to-end über die SQL-Seite geprüft: `fish_catches` lesbar,
+`User`/`FileBlob`/`Uploads`/`QueryLog` sowie INSERT/CREATE/DROP → 403 mit sauberer Meldung,
+ohne Session 401. **Noch offen:** (1) dass die Einträge in `QueryLog` landen, hat niemand mit
+DB-Zugang gesehen (Bitte an Georg in #121); (2) **Prod (Georg)**: `KEEP_PASSWORD=1
+./deploy/prod/postgres/readonly-role.sh` und `QUERY_DATABASE_URL` in
+`~clxadmin/.config/catchlogx/.env` — geht schon vor dem `dev`→`master`-Merge, sonst antwortet die
+SQL-Seite auf Prod nach dem Merge bis zum Restart mit 500; der Forschungsgruppe vorher sagen, dass
+`Uploads`/`FileBlob`/`UserQueries`/`TemplateFiles` in R wegfallen; (3) Frage an Georg: das
+`statement_timeout = 10s` der verworfenen `clx_query` fehlt jetzt — im Code setzen (eigenes Issue)?
+#121 bleibt offen, bis Prod läuft.
 
 **Stand 2026-10-29 (Härtung, #122):** Der Produktions-Host ist auf eine Regel
 gebracht — **nichts von `clxadmin` außerhalb seines Homes, keine Erhöhung
@@ -212,7 +217,7 @@ Superuser-Slots.
 18. [ ] **#121 Rollout SQL-Seite auf `clx_readonly`**: Die SQL-Seite läuft nur mit
     `QUERY_DATABASE_URL` (Rolle `clx_readonly`, libpq-taugliche URL ohne `?connection_limit=`/`?schema=`),
     es gibt bewusst keinen Fallback auf die Admin-URL. **Dev:** Rolle verengt und Env gesetzt (Georg,
-    2026-10-30). **Prod (Georg, nach `dev`→`master`):** `KEEP_PASSWORD=1 ./readonly-role.sh`, dann
+    2026-10-30); Code deployt und Rauchtest grün (2026-11-04, `546ea84`). **Prod (Georg, um den `dev`→`master`-Merge):** `KEEP_PASSWORD=1 ./readonly-role.sh`, dann
     `QUERY_DATABASE_URL` in `~clxadmin/.config/catchlogx/.env`, dann Unit-Restart
     (Details: `deploy/prod/postgres/README.md`, Abschnitt „SQL query page").
 

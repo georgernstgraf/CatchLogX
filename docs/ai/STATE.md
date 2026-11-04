@@ -1,6 +1,8 @@
 # Project State
 
-Current status as of 2026-10-31.
+Current status as of 2026-11-04.
+
+- **SQL-Seite liest über `clx_readonly` (#121, 2026-11-04)**: `/api/query` verlangt eine Session (401 ohne), führt User-SQL über `lib/queryPrisma.ts` (`QUERY_DATABASE_URL`, kein Fallback, Pool-Deckel `QUERY_POOL_SIZE = 5` im Code) als `clx_readonly` aus und schreibt jede Abfrage in `QueryLog`; der Keyword-Guard ist weg, Rechteverletzungen kommen als 403. **Dev**: deployt (`546ea84`, Run 41855520925), Rauchtest grün (`fish_catches` lesbar; `User`/`FileBlob`/`Uploads`/`QueryLog`, INSERT, CREATE, DROP → 403). **Prod**: Rolle noch nicht verengt, `QUERY_DATABASE_URL` fehlt — offen bei Georg (HANDOFF). `QueryLog`-Einträge auf Dev noch nicht per DB-Zugang bestätigt.
 
 - **Projekt-Skills mit opencode-helpers synchronisiert (#186, 2026-10-31)**: `issue-workflow` hat jetzt das **Duplicate-Check-Gate** (Pflicht vor jedem `gh issue create`: drei Suchen, Entscheidungsmatrix, Trail-Zeile im Issue-Body) und schließt Issues **autonom** — der Widerspruch aus #124 (Einleitung „autonom", Abschnitt `Issue Completion` weiterhin „asks the user") ist damit aufgelöst. `knowledge-persistence` verweist in der Escalation Rule auf dasselbe Gate. Beide Skills bleiben Englisch und ohne SVN (#124); die CatchLogX-Spezifika (dev-Trunk, `.githooks`, `npm run check:hooks`) sind im Skill als **CatchLogX-specific** markiert, die Quelle (`opencode-helpers@547b70f`, Sync 2026-10-31) steht im Kopf und in `AGENTS.md`. Kein Sync-Automatismus für diese beiden Skills — `scripts/update-engineering-skills.sh` deckt nur `engineering/` ab. Nebenbefund und mitbehoben: `~/.config/opencode/AGENTS.md` fehlte als Symlink auf `opencode-helpers/AGENTS.global.md`, wodurch die globalen Regeln (autonomes Schließen, proaktives Committen) auf dieser Maschine **gar nicht geladen** waren; Link gesetzt, in einer neuen Session verifiziert.
 
