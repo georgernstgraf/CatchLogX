@@ -4,7 +4,7 @@
 Agents (opencode) are started **on every machine that clones this repo** — a clone can sit
 on live infrastructure, and there is **no sandbox**: the agent's shell shares the host with
 whatever runs there. **At session start, identify the host before touching anything**
-(`hostname`, `whoami`, `systemctl --user list-units | grep -i clx`):
+(`hostname`, `whoami`, `systemctl --user list-units | grep -i catchlogx`):
 - On the dev VPS (`claw.graf.priv.at`, served as `catchlogx.graf.priv.at`, user `catchlogx`)
   the shell shares the machine with `catchlogx.service` (app, port 40873) and
   `actions.runner.catchlogx-vps.service` (the `vps` deploy runner). Never stop/restart units

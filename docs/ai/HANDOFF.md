@@ -16,8 +16,9 @@ sichtbar (Restart am 2026-10-30, Health-Check 200). **Stand 2026-11-04:** Jakobs
 `query-role.sh`/`clx_query` gestrichen) und auf Dev deployt (Run 41855520925, Migration
 `add_query_log` angewendet). End-to-end über die SQL-Seite geprüft: `fish_catches` lesbar,
 `User`/`FileBlob`/`Uploads`/`QueryLog` sowie INSERT/CREATE/DROP → 403 mit sauberer Meldung,
-ohne Session 401. **Noch offen:** (1) dass die Einträge in `QueryLog` landen, hat niemand mit
-DB-Zugang gesehen (Bitte an Georg in #121); (2) **Prod (Georg)**: `KEEP_PASSWORD=1
+ohne Session 401. **`QueryLog` auf Dev bestätigt (2026-11-06, Jakob per SSH und read-only `psql`):**
+die Ablehnungen aus dem Rauchtest (`42501`, Mehrfach-Statement `42601`) und erfolgreiche SELECTs
+mit User, `rowCount` und `durationMs` sind geloggt. **Noch offen:** (2) **Prod (Georg)**: `KEEP_PASSWORD=1
 ./deploy/prod/postgres/readonly-role.sh` und `QUERY_DATABASE_URL` in
 `~clxadmin/.config/catchlogx/.env` — geht schon vor dem `dev`→`master`-Merge, sonst antwortet die
 SQL-Seite auf Prod nach dem Merge bis zum Restart mit 500; der Forschungsgruppe vorher sagen, dass
@@ -199,7 +200,8 @@ Superuser-Slots.
     Rechte-Probe grün; Gegenprobe von außen: **5 gleichzeitige Startpakete** von
     einer Quell-IP alle nach ~1,28 s beantwortet.
     **Dev** (2026-10-29, `claw` über `tun0`/10.8.0.2 — Port 22 ist auf der
-    öffentlichen IP **zu**, Web und 5432 sind offen): neue versionierte
+    öffentlichen IP ohne Port-Knocking **zu**, siehe `PITFALLS.md`; Web und
+    5432 sind offen): neue versionierte
     `deploy/vps/postgres/99-catchlogx-capacity.conf` installiert, Restart in
     **2,5 s**, `ALTER ROLE clx_readonly CONNECTION LIMIT 108`, App `200` auf
     `127.0.0.1:40873` und `https://catchlogx.graf.priv.at`, `fish_catches`
