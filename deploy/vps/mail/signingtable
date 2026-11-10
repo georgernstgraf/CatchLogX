@@ -1,0 +1,3 @@
+# /etc/dkimkeys/signingtable on claw (#193).
+# The dev instance only sends as noreply@catchlogx.graf.priv.at.
+*@catchlogx.graf.priv.at                 clx._domainkey.catchlogx.graf.priv.at

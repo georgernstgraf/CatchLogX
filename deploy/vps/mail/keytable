@@ -1,0 +1,3 @@
+# /etc/dkimkeys/keytable on claw (#193).
+# name                                   domain:selector:private key
+clx._domainkey.catchlogx.graf.priv.at     catchlogx.graf.priv.at:clx:/etc/dkimkeys/clx.private

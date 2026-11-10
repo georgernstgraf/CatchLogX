@@ -2,6 +2,24 @@
 
 Offene Aufgaben für die nächste Session.
 
+**Stand 2026-11-10 (Send-Only-Mail Dev, #193):** `catchlogx.graf.priv.at` ist
+als reine Sende-Domain eingerichtet (`noreply@…`), DNS in `mexx` r389 (A statt
+CNAME, SPF `ip4:85.215.162.182 -all`, DMARC `p=none` strict, DKIM `clx`, kein
+MX, TTL 600) und `claw` sendet direkt über loopback-postfix
+(`127.0.0.1:25`, ohne Auth) mit OpenDKIM-Signatur; Doku
+`deploy/vps/mail/README.md`. **Verifiziert**: Zustellung an `georg@graf.priv.at`
+mit `dkim=pass` im empfangenden OpenDKIM, SpamAssassin `No, score=1.1`,
+`opendkim-testkey` `key OK`. **Offen:** (1) der zweite NS
+`a.ns.priesch.priv.at` muss den Rebuild noch ziehen (er liefert bis dahin den
+alten CNAME, deshalb `SPF_NONE`/`DMARC_NONE` im lokalen `murl`-Resolver);
+(2) die Dev-`.env` ist gesetzt, aber `NEXT_PUBLIC_APP_URL` ist Bake-in — der
+nächste Deploy auf `dev` bringt sie ins Release, danach „Passwort vergessen"
+einmal end-to-end; (3) Schüler-Sub-Issue zu #160 anlegen (App-Seite: Reset- und
+Reject-Mail belegen, Fehlerbehandlung dokumentieren); (4) nach ein bis zwei
+grünen Wochen DMARC auf `quarantine`/`reject` und die TTL auf 86400 heben;
+(5) der DKIM-Privatschlüssel (`/etc/dkimkeys/clx.private`, 0600
+`opendkim:opendkim`) gehört in eine Sicherung außerhalb der Maschine.
+
 **Stand 2026-11-10 (Off-site-Transport, #192):** Der Off-site-Weg des
 Prod-Backups läuft nicht mehr über den nginx-PUT-Endpoint, sondern über
 **`knock` + `rsync`** als User **`catchlogx`** nach **`~/backups`** auf `claw`;
