@@ -21,6 +21,8 @@ type Upload = {
   id: string;
   fileName: string;
   uploaded_by: string;
+  uploadedByUsername: string;
+  uploadedByName?: string | null;
   createdAt: string;
   updatedAt: string;
   state: string;
@@ -117,7 +119,8 @@ const AdminPageComponent = () => {
         search.length === 0 ||
         upload.id.toLowerCase().includes(search) ||
         upload.fileName.toLowerCase().includes(search) ||
-        upload.uploaded_by.toLowerCase().includes(search);
+        upload.uploadedByUsername.toLowerCase().includes(search) ||
+        (upload.uploadedByName ?? "").toLowerCase().includes(search);
 
       return stateMatch && searchMatch;
     });
@@ -444,7 +447,7 @@ const AdminPageComponent = () => {
                     type="text"
                     value={uploadSearch}
                     onChange={(event) => setUploadSearch(event.target.value)}
-                    placeholder="Search by file name, user ID, or upload ID"
+                    placeholder="Search by file name, username, or upload ID"
                     className="w-full sm:max-w-md px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
                   />
 
@@ -483,7 +486,10 @@ const AdminPageComponent = () => {
                                   Upload-ID: {upload.id}
                                 </p>
                                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                                  Uploaded by {upload.uploaded_by} on{" "}
+                                  Uploaded by {upload.uploadedByUsername}
+                                  {upload.uploadedByName &&
+                                    ` (${upload.uploadedByName})`}{" "}
+                                  on{" "}
                                   {upload.createdAt}
                                 </p>
                                 <p className="text-sm text-gray-500 dark:text-gray-400">

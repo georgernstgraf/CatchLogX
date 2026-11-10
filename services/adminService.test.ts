@@ -194,16 +194,38 @@ describe("fetchAllData", () => {
   it("returns users and uploads, newest uploads first", async () => {
     vi.mocked(prisma.user.findMany).mockResolvedValue([{ id: "u1" }] as any);
     vi.mocked(prisma.uploads.findMany).mockResolvedValue([
-      { id: "up1", blob: { fileName: "upload_1_u1.xlsx" } },
+      {
+        id: "up1",
+        uploaded_by: "u1",
+        blob: { fileName: "Ybbs_2026.xlsx" },
+        user: { username: "alice", name: "Alice Huber" },
+      },
     ] as any);
 
     expect(await fetchAllData()).toEqual({
       users: [{ id: "u1" }],
-      uploads: [{ id: "up1", fileName: "upload_1_u1.xlsx" }],
+      uploads: [
+        {
+          id: "up1",
+          uploaded_by: "u1",
+          fileName: "Ybbs_2026.xlsx",
+          // #83/#155: the admin panel shows the uploader's username, not the id.
+          uploadedByUsername: "alice",
+          uploadedByName: "Alice Huber",
+        },
+      ],
     });
     expect(vi.mocked(prisma.uploads.findMany).mock.calls[0][0]).toMatchObject({
       orderBy: { createdAt: "desc" },
     });
+  });
+
+  it("selects only username and name of the uploader", async () => {
+    vi.mocked(prisma.user.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.uploads.findMany).mockResolvedValue([]);
+    await fetchAllData();
+    const select = vi.mocked(prisma.uploads.findMany).mock.calls[0][0]!.select!;
+    expect(select.user).toEqual({ select: { username: true, name: true } });
   });
 
   it("never selects password hashes", async () => {

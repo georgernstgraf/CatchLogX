@@ -28,16 +28,20 @@ export async function fetchAllData() {
       createdAt: true,
       updatedAt: true,
       blob: { select: { fileName: true } },
+      // Only what the admin panel shows — never the uploader's hash or email (#83).
+      user: { select: { username: true, name: true } },
     },
     orderBy: {
       createdAt: "desc",
     },
   });
 
-  // Flatten the blob so API clients keep a single `fileName` field (#131).
-  const uploads = uploadRows.map(({ blob, ...upload }) => ({
+  // Flatten blob and uploader so API clients get flat fields (#131, #83).
+  const uploads = uploadRows.map(({ blob, user, ...upload }) => ({
     ...upload,
     fileName: blob.fileName,
+    uploadedByUsername: user.username,
+    uploadedByName: user.name,
   }));
 
   return { uploads, users };
