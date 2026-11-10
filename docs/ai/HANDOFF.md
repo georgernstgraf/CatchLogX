@@ -13,6 +13,14 @@ laufen als User-Timer von `catchlogx`. Details: `deploy/prod/backup/README.md`,
 Die Knock-Sequenz liegt ausschließlich in `/etc/catchlogx-backup.env`
 (0600 root) — sie gehört nicht ins Repo (#189).
 
+**Stand 2026-11-10 (Dev-Re-Seed, #188):** `catchlogx-dev-restore.sh` auf `claw`
+spielt das neueste Prod-Archiv in `clx` ein (Wipe + Restore + `prisma migrate
+deploy` + `clx_readonly`-Grants + Health-Check). **Kein Timer** — Aufruf von
+Hand als `catchlogx`: `~/catchlogx-dev-restore.sh [--force]`. Das alte `clx`
+bleibt bis zum grünen Health-Check als `clx_prev` erhalten. Voraussetzung ist
+ein Klartext-Archiv aus #192; `age`-Archive aus der Zeit davor kann das Skript
+nicht lesen.
+
 **Nachtrag 2026-10-30 (#121), Dev für die SQL-Rollen-Umstellung vorbereitet:**
 `clx_readonly` ist auf der Dev-Instanz jetzt die **einzige** lesende Rolle und
 eine **Whitelist** (`SELECT` nur auf `fish_catches`, `samplings`,

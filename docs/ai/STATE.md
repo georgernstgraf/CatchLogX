@@ -46,6 +46,7 @@ Kickoff 2026-09-19 (siehe `docs/meetings/2026-09-19-kickoff.md`, Protokoll + Auf
 - **Migration-only-Workflow etabliert** (#129): Die Migrations-History log bisher (`UserRoles`-Enum nie migriert); eine einzige Baseline `20261017190000_init` ist jetzt die Schema-Wahrheit, `db push` ist aus allen Deploy-Pfaden verbannt, CI prüft Drift (`migration-drift`-Job), Shadow-DB `clx_shadow` für `migrate dev`. **Dev-DB aus der Baseline neu aufgebaut** (nur Seed-Daten). Die BOKU-Prod-DB wird **nicht** neu aufgebaut: die Adoption (#139) erhält alle Daten — Sessions, Password-Resets, Upload-Metadaten — und wandelt die 19 MinIO-Objekte (56.337.761 Bytes) in `FileBlob`-Rows um; die Produktion wird migrationsgeführt, sobald der Cutover (#141) im Vor-Ort-Fenster (#122) dispatcht ist (vorher ein verifiziertes `pg_dump`).
 
 ## Completed (this cycle)
+- [x] Dev-Re-Seed als manuelles Skript `~/catchlogx-dev-restore.sh` auf `claw`: Wipe + Restore aus dem neuesten Prod-Archiv, Migrationsschritt auf das Release-Schema, `clx_readonly`-Grants, Health-Check (#188, 2026-11-10)
 - [x] Off-site-Backup über SSH+Port-Knocking statt nginx-PUT: Klartext-`tar.zst` in `~catchlogx/backups`, Empfangs-Key per `rrsync -wo` eingeschränkt, Rotation als User-Timer (#192, 2026-11-10)
 - [x] Privates Datenrepo `CatchLogX-Data` angelegt, Daten übernommen, im README verlinkt (#125)
 - [x] Custom cookie-based session auth (sign-in, session, logout)
