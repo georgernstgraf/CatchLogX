@@ -170,6 +170,23 @@ pg "$DB" -c 'REVOKE ALL ON ALL TABLES IN SCHEMA public FROM clx_readonly'
 pg "$DB" -c 'GRANT USAGE ON SCHEMA public TO clx_readonly'
 pg "$DB" -c 'GRANT SELECT ON fish_catches, samplings, river_sites, fish_species TO clx_readonly'
 
+# The dump carries `CREATE EXTENSION pg_stat_statements`, and the extension's own
+# install script grants SELECT on its views to PUBLIC — a restore silently re-opens
+# the query text of every role. `REVOKE … FROM clx_readonly` above does not touch a
+# PUBLIC grant, so this has to be its own step (#187, observed after the 2026-11-10
+# re-seed). Guarded because a dump without the extension must not abort the restore.
+log "schliesse pg_stat_statements-Views fuer PUBLIC"
+pg "$DB" -c "DO \$\$
+BEGIN
+  IF to_regclass('public.pg_stat_statements') IS NOT NULL THEN
+    EXECUTE 'REVOKE SELECT ON pg_stat_statements FROM PUBLIC';
+  END IF;
+  IF to_regclass('public.pg_stat_statements_info') IS NOT NULL THEN
+    EXECUTE 'REVOKE SELECT ON pg_stat_statements_info FROM PUBLIC';
+  END IF;
+END
+\$\$;"
+
 # ---- start, check, drop the old copy ---------------------------------------
 log "starte catchlogx.service"
 systemctl --user start catchlogx.service
