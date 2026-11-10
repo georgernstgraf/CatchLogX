@@ -224,11 +224,17 @@ else
 fi
 
 # Sequences: USAGE is the privilege that matters (nextval), and it is NOT covered by
-# the table check above because a sequence is not a table.
+# the table check above because a sequence is not a table. Read the ACL instead of
+# calling has_sequence_privilege(): the planner may evaluate that function before the
+# `relkind = 'S'` filter and then fail with "pg_toast_<oid> is not a sequence"
+# (hit on prod, 2026-11-10). grantee 0 is PUBLIC.
 SEQ_LEAK="$(pg -tAc "SELECT coalesce(string_agg(c.relname, ' '), '')
   FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
   WHERE n.nspname = 'public' AND c.relkind = 'S'
-    AND has_sequence_privilege('$ROLE', c.oid, 'USAGE,SELECT,UPDATE')")"
+    AND EXISTS (SELECT 1 FROM aclexplode(c.relacl) a
+                WHERE (a.grantee = 0
+                       OR a.grantee = (SELECT oid FROM pg_roles WHERE rolname = '$ROLE'))
+                  AND a.privilege_type = ANY (ARRAY['USAGE', 'SELECT', 'UPDATE']))")"
 if [ -n "$SEQ_LEAK" ]; then
   echo "   FEHLER: $ROLE hat Rechte auf Sequenzen: $SEQ_LEAK" >&2
   fail=1
