@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Both Prisma clients are mocked: no database — safe for `npm test` and the pre-push hook.
 // Since #121 the security boundary is the read-only DB role, not keyword heuristics.
 const queryRaw = vi.fn();
+const executeRaw = vi.fn();
+const transaction = vi.fn();
 vi.mock("@/lib/prisma", () => ({
   prisma: { $queryRawUnsafe: vi.fn(), queryLog: { create: vi.fn() } },
 }));
@@ -14,6 +16,7 @@ vi.mock("@/lib/queryPrisma", () => ({
 import { prisma } from "@/lib/prisma";
 import { getQueryPrisma } from "@/lib/queryPrisma";
 import {
+  QUERY_TIMEOUT_MS,
   executeQuery,
   isPermissionDenied,
   validateSQLQuery,
@@ -22,7 +25,13 @@ import {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(prisma.queryLog.create).mockResolvedValue({} as any);
-  vi.mocked(getQueryPrisma).mockReturnValue({ $queryRawUnsafe: queryRaw } as any);
+  // User SQL runs inside a transaction so that `SET LOCAL statement_timeout` applies to
+  // exactly the connection that executes it (see executeQuery).
+  executeRaw.mockResolvedValue(0);
+  transaction.mockImplementation(async (fn: any) =>
+    fn({ $executeRawUnsafe: executeRaw, $queryRawUnsafe: queryRaw }),
+  );
+  vi.mocked(getQueryPrisma).mockReturnValue({ $transaction: transaction } as any);
 });
 
 describe("validateSQLQuery", () => {
@@ -153,6 +162,50 @@ describe("executeQuery", () => {
     expect(result.result).toEqual([{ a: 1 }]);
     expect(consoleError).toHaveBeenCalled();
     consoleError.mockRestore();
+  });
+});
+
+// The research group uses `clx_readonly` in psql/R too, so a role-wide
+// `ALTER ROLE … SET statement_timeout` would cut their analyses. The cap belongs to the
+// web page, i.e. to the connection that runs the user's SQL (#187).
+describe("query timeout", () => {
+  it("sets a transaction-local statement_timeout before running the user SQL", async () => {
+    queryRaw.mockResolvedValue([{ a: 1 }]);
+
+    await executeQuery("SELECT 1", "user-1");
+
+    expect(executeRaw).toHaveBeenCalledWith(`SET LOCAL statement_timeout = ${QUERY_TIMEOUT_MS}`);
+    expect(executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      queryRaw.mock.invocationCallOrder[0],
+    );
+    expect(transaction).toHaveBeenCalledWith(expect.any(Function), {
+      timeout: expect.any(Number),
+    });
+    // Prisma must not abort before PostgreSQL's statement timeout fires.
+    expect(transaction.mock.calls[0][1].timeout).toBeGreaterThan(QUERY_TIMEOUT_MS);
+  });
+
+  it("is a bounded timeout, not an unlimited one", () => {
+    expect(QUERY_TIMEOUT_MS).toBeGreaterThan(0);
+    expect(QUERY_TIMEOUT_MS).toBeLessThanOrEqual(30_000);
+  });
+
+  it("logs a cancelled query with the PostgreSQL SQLSTATE 57014", async () => {
+    queryRaw.mockRejectedValue(
+      Object.assign(new Error("Invalid `prisma.$queryRawUnsafe()` invocation: ..."), {
+        code: "P2010",
+        meta: { code: "57014", message: "ERROR: canceling statement due to statement timeout" },
+      }),
+    );
+
+    await expect(executeQuery("SELECT pg_sleep(60)", "user-1")).rejects.toThrow();
+    expect(prisma.queryLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        query: "SELECT pg_sleep(60)",
+        success: false,
+        error: "57014: ERROR: canceling statement due to statement timeout",
+      }),
+    });
   });
 });
 

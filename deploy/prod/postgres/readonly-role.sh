@@ -34,6 +34,12 @@
 #
 # Re-running a rotating run is the rotation. The app does not read the value
 # until #121/#153 ship, so no restart is needed.
+#
+# READING THIS AS A HUMAN (#187): a table NAME is visible to every role in the
+# catalog — `psql \dt`, the RStudio/DBeaver tree and `information_schema` disagree
+# only about filtering. Seeing "User" or "Session" in a client is therefore NOT a
+# leak; only a successful SELECT is. `information_schema` lists the relations the
+# role holds a privilege on, `pg_catalog` lists everything.
 
 set -euo pipefail
 
@@ -94,13 +100,20 @@ for t in "${READ_TABLES[@]}"; do
 done
 READ_SQL_LIST="${READ_SQL_LIST#,}"
 
-# Everything else in schema public is denied. Derived from pg_tables, not
-# hardcoded, so a future table (QueryLog, ...) is denied by default and the
-# verification below covers it without a code change.
-DENY_LIST="$(pg -tAc "SELECT coalesce(string_agg(format('%I', tablename), ', '), '')
-  FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ($READ_SQL_LIST)")"
-DENY_TABLES="$(pg -tAc "SELECT coalesce(string_agg(tablename, ' '), '')
-  FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ($READ_SQL_LIST)")"
+# Everything else in schema public is denied. Derived from pg_class, not
+# hardcoded — and deliberately NOT from pg_tables: pg_tables lists BASE TABLES
+# only, so VIEWS were never verified. That is how `pg_stat_statements` (another
+# role's query text, granted by the #152 "SELECT on all tables" sweep, which
+# includes views) stayed readable on prod until #187. Views, materialized views,
+# partitioned and foreign tables are part of the check now.
+RELATION_FILTER="c.relkind IN ('r', 'p', 'v', 'm', 'f')
+  AND n.nspname = 'public' AND c.relname NOT IN ($READ_SQL_LIST)"
+DENY_LIST="$(pg -tAc "SELECT coalesce(string_agg(format('%I', c.relname), ', '), '')
+  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE $RELATION_FILTER")"
+DENY_TABLES="$(pg -tAc "SELECT coalesce(string_agg(c.relname, ' '), '')
+  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE $RELATION_FILTER")"
 
 echo "== 2/5 Passwort"
 if [ "$KEEP_PASSWORD" = "1" ]; then
@@ -138,6 +151,9 @@ GRANT USAGE ON SCHEMA public TO "$ROLE";
 -- rule (Uploads, FileBlob, UserQueries, _prisma_migrations).
 REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM "$ROLE";
 GRANT SELECT ON TABLE $READ_LIST TO "$ROLE";
+-- Sequences are not part of "ALL TABLES": USAGE would let the role burn IDs of a
+-- table it cannot read. Nothing grants it today, this keeps it that way.
+REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM "$ROLE";
 -- Older versions granted SELECT on all FUTURE tables. That must stop, or the
 -- next migration (QueryLog) becomes readable from the web UI by accident.
 ALTER DEFAULT PRIVILEGES FOR ROLE "$TBL_OWNER" IN SCHEMA public
@@ -205,6 +221,19 @@ if ext "$PW" -c 'CREATE TABLE public._readonly_probe(i int)' >/dev/null 2>&1; th
   fail=1
 else
   echo "   Schreiben: verweigert (CREATE TABLE)"
+fi
+
+# Sequences: USAGE is the privilege that matters (nextval), and it is NOT covered by
+# the table check above because a sequence is not a table.
+SEQ_LEAK="$(pg -tAc "SELECT coalesce(string_agg(c.relname, ' '), '')
+  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'public' AND c.relkind = 'S'
+    AND has_sequence_privilege('$ROLE', c.oid, 'USAGE,SELECT,UPDATE')")"
+if [ -n "$SEQ_LEAK" ]; then
+  echo "   FEHLER: $ROLE hat Rechte auf Sequenzen: $SEQ_LEAK" >&2
+  fail=1
+else
+  echo "   Sequenzen: keine Rechte (kein nextval)"
 fi
 
 ATTRS="$(pg -tAc "SELECT rolsuper||'|'||rolcreatedb||'|'||rolcreaterole||'|'||rolcanlogin||'|'||rolconnlimit FROM pg_roles WHERE rolname='$ROLE'")"

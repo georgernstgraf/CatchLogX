@@ -54,12 +54,27 @@ async function logQuery(entry: {
   }
 }
 
+// Hard cap for user SQL on the SQL page (#187). Deliberately NOT an
+// `ALTER ROLE clx_readonly SET statement_timeout`: the research group works in psql/R
+// with the same role and must not inherit the web page's limit. `SET LOCAL` applies to
+// the transaction that runs the query, so only the app path is capped.
+// Exported for unit tests (#112).
+export const QUERY_TIMEOUT_MS = 10_000;
+
 export async function executeQuery(query: string, userId: string) {
   const started = Date.now();
   let data: unknown;
 
   try {
-    data = await getQueryPrisma().$queryRawUnsafe(query);
+    data = await getQueryPrisma().$transaction(
+      async (tx) => {
+        await tx.$executeRawUnsafe(`SET LOCAL statement_timeout = ${QUERY_TIMEOUT_MS}`);
+        return tx.$queryRawUnsafe(query);
+      },
+      // Prisma's own transaction timeout must stay above PostgreSQL's, otherwise the
+      // client aborts first and the user gets a Prisma error instead of 57014.
+      { timeout: QUERY_TIMEOUT_MS + 5_000 },
+    );
   } catch (error) {
     await logQuery({
       userId,

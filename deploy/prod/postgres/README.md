@@ -316,6 +316,25 @@ later, add it to `READ_TABLES` in `readonly-role.sh` and re-run the script —
 privilege of the role, so a manual grant would silently disappear on the next
 run.
 
+**Table names are visible, rows are not.** `\dt`, the RStudio/DBeaver trees and
+`information_schema` disagree because they read different catalogs: `pg_catalog`
+lists every relation to every role, `information_schema` only what the role may
+use. A closed table answers `ERROR: permission denied`, it does not disappear
+from the tree — that is not a leak (#187).
+
+The grant set is auditable in one read-only query, from anywhere in the BOKUnet
+(and it is the check that found the 2026-11-10 drift, not the table list):
+
+```sql
+-- as clxadmin (or any role): which relations can clx_readonly read?
+SELECT c.relname, c.relkind,
+       has_table_privilege('clx_readonly', c.oid, 'SELECT') AS sel
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' AND c.relkind IN ('r','p','v','m','f')
+ORDER BY 1;
+-- and: SELECT * FROM pg_default_acl;   -- must be empty for clxadmin/public
+```
+
 ```sh
 # psql
 psql "host=141.244.222.191 port=5432 dbname=clx user=clx_readonly sslmode=require"
@@ -461,3 +480,9 @@ sudo -u clxadmin XDG_RUNTIME_DIR=/run/user/1000 \
 The app reads the env at start, hence the restart. Locally, `npm run db:readonly-role`
 (`scripts/create-readonly-role.ts`) creates the same role with the same whitelist in the
 compose database — keep both lists in sync.
+
+**The SQL page has a 10 s statement timeout, the research group does not.** It is
+`QUERY_TIMEOUT_MS` in `services/queryService.ts`, applied as `SET LOCAL statement_timeout`
+inside the transaction that runs the user's SQL — never as `ALTER ROLE … SET
+statement_timeout`, because the same role serves R analyses over 465k rows. That is also
+why the discarded `clx_query` role's setting has no successor on the role level (#187).

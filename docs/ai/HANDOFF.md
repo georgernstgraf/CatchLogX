@@ -37,13 +37,18 @@ sichtbar (Restart am 2026-10-30, Health-Check 200). **Stand 2026-11-04:** Jakobs
 `User`/`FileBlob`/`Uploads`/`QueryLog` sowie INSERT/CREATE/DROP → 403 mit sauberer Meldung,
 ohne Session 401. **`QueryLog` auf Dev bestätigt (2026-11-06, Jakob per SSH und read-only `psql`):**
 die Ablehnungen aus dem Rauchtest (`42501`, Mehrfach-Statement `42601`) und erfolgreiche SELECTs
-mit User, `rowCount` und `durationMs` sind geloggt. **Noch offen:** (2) **Prod (Georg)**: `KEEP_PASSWORD=1
-./deploy/prod/postgres/readonly-role.sh` und `QUERY_DATABASE_URL` in
-`~clxadmin/.config/catchlogx/.env` — geht schon vor dem `dev`→`master`-Merge, sonst antwortet die
-SQL-Seite auf Prod nach dem Merge bis zum Restart mit 500; der Forschungsgruppe vorher sagen, dass
-`Uploads`/`FileBlob`/`UserQueries`/`TemplateFiles` in R wegfallen; (3) Frage an Georg: das
-`statement_timeout = 10s` der verworfenen `clx_query` fehlt jetzt — im Code setzen (eigenes Issue)?
-#121 bleibt offen, bis Prod läuft.
+mit User, `rowCount` und `durationMs` sind geloggt. **Erledigt am 2026-11-10 (#187):** (2) die
+Prod-Grants sind verengt — **nicht** mit `./deploy/prod/postgres/readonly-role.sh` aus
+`/root/CatchLogX` (dieser Checkout trackt `master` und enthält die alte „alles außer Auth"-Regel),
+sondern mit der Datei aus `dev` (`git show origin/dev:… > /root/readonly-role-121.sh`,
+`KEEP_PASSWORD=1`, keine Rotation); von außen nachgeprüft: nur die vier Forschungs-Tabellen lesbar,
+`pg_default_acl` leer, `pg_stat_statements`/`_info` gesperrt, Sequenzen ohne Rechte. Der
+Forschungsgruppe ist noch zu sagen, dass `Uploads`/`FileBlob`/`UserQueries`/`TemplateFiles` in R
+weggefallen sind. (3) `statement_timeout` ist beantwortet und umgesetzt: **nicht** auf der Rolle
+(sie dient auch der Forschungsgruppe in R), sondern `SET LOCAL statement_timeout` mit
+`QUERY_TIMEOUT_MS = 10 s` im Query-Client (`services/queryService.ts`, Vitest). **Weiter offen:**
+`QUERY_DATABASE_URL` in `~clxadmin/.config/catchlogx/.env` + Unit-Restart, sonst antwortet die
+SQL-Seite auf Prod nach dem `dev`→`master`-Merge mit 500. #121 bleibt offen, bis das läuft.
 
 **Stand 2026-10-29 (Härtung, #122):** Der Produktions-Host ist auf eine Regel
 gebracht — **nichts von `clxadmin` außerhalb seines Homes, keine Erhöhung
@@ -241,9 +246,15 @@ Superuser-Slots.
 18. [ ] **#121 Rollout SQL-Seite auf `clx_readonly`**: Die SQL-Seite läuft nur mit
     `QUERY_DATABASE_URL` (Rolle `clx_readonly`, libpq-taugliche URL ohne `?connection_limit=`/`?schema=`),
     es gibt bewusst keinen Fallback auf die Admin-URL. **Dev:** Rolle verengt und Env gesetzt (Georg,
-    2026-10-30); Code deployt und Rauchtest grün (2026-11-04, `546ea84`). **Prod (Georg, um den `dev`→`master`-Merge):** `KEEP_PASSWORD=1 ./readonly-role.sh`, dann
-    `QUERY_DATABASE_URL` in `~clxadmin/.config/catchlogx/.env`, dann Unit-Restart
-    (Details: `deploy/prod/postgres/README.md`, Abschnitt „SQL query page").
+    2026-10-30); Code deployt und Rauchtest grün (2026-11-04, `546ea84`). **Prod-Grants sind seit
+    2026-11-10 erledigt (#187):** die Rolle war dort nie verengt (der Checkout `/root/CatchLogX`
+    trackt `master`, die Whitelist-Version lag nur auf `dev`) und konnte `FileBlob`, `Uploads`,
+    `UserQueries`, `TemplateFiles`, `_prisma_migrations` und beide `pg_stat_statements`-Views lesen;
+    behoben mit `git show origin/dev:deploy/prod/postgres/readonly-role.sh > /root/readonly-role-121.sh`
+    und `KEEP_PASSWORD=1`, danach von außen nachgeprüft (`pg_default_acl` leer, Sequenzen frei von
+    Rechten). **Offen bleibt, um den `dev`→`master`-Merge:** `QUERY_DATABASE_URL` in
+    `~clxadmin/.config/catchlogx/.env` + Unit-Restart (Details: `deploy/prod/postgres/README.md`,
+    Abschnitt „SQL query page").
 
 Kontext: Das Epic #125 bleibt offen, solange `CatchLogX-Data#2` offen ist. Vom
 Produktions-Upgrade-Pfad #137–#153 sind #138–#143 und #150/#152 erledigt; offen
