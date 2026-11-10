@@ -22,6 +22,9 @@
 set -euo pipefail
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
+# Never inherit a caller's cwd: `sudo -u catchlogx /path/script` from another
+# user's home makes find(1) fail when it restores the working directory.
+cd /
 
 DIR="${OFFSITE_DIR:-/home/catchlogx/backups}"
 KEEP_DAILY="${OFFSITE_KEEP_DAILY:-7}"
