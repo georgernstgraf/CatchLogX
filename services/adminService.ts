@@ -3,7 +3,7 @@ import bcrypt from "bcrypt";
 import * as XLSX from "xlsx";
 import { Uploads, UserRoles } from "@/app/generated/prisma";
 import { blobToBuffer } from "@/lib/fileBlobs";
-import { createMailerTransporter } from "@/lib/mailer";
+import { createMailerTransporter, mailFrom } from "@/lib/mailer";
 
 const adminRoles = new Set<UserRoles>(["ADMIN", "SUPER_ADMIN"]);
 
@@ -225,7 +225,7 @@ async function sendRejectEmail(upload: Uploads) {
   const htmlBody = buildRejectEmailHtml(upload, uploadWithUserInfo.user);
 
   const mailResult = await transporter.sendMail({
-    from: `"CatchLogX" <${process.env.NODEMAILER_USER}>`,
+    from: mailFrom(),
     to: userEmail,
     subject: "Your Upload Has Been Rejected",
     html: htmlBody,

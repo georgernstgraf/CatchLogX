@@ -47,4 +47,7 @@ Follow these without question. Do not deviate unless explicitly told.
 
 ## Environment Variables
 Required: `DATABASE_URL` (PostgreSQL connection string).
-Mailer vars: `NODEMAILER_HOST`, `NODEMAILER_PORT`, `NODEMAILER_USER`, `NODEMAILER_PASSWORD`, `NODEMAILER_SECURE`.
+Mailer vars: `NODEMAILER_HOST` (required), `NODEMAILER_PORT` (default 587), `NODEMAILER_SECURE`,
+`NODEMAILER_FROM` (sender address; falls back to `NODEMAILER_USER`), `NODEMAILER_USER` +
+`NODEMAILER_PASSWORD` (optional, but only **together** — both unset = auth-less relay, as on
+production via the loopback postfix, #160).

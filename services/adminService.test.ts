@@ -33,6 +33,7 @@ vi.mock("@/lib/prisma", () => ({
 }));
 vi.mock("@/lib/mailer", () => ({
   createMailerTransporter: vi.fn(() => ({ sendMail })),
+  mailFrom: vi.fn(() => '"CatchLogX" <catchlogx@boku.ac.at>'),
 }));
 vi.mock("bcrypt", () => ({
   default: { hash: vi.fn(async (pw: string) => `hashed:${pw}`) },
@@ -584,6 +585,8 @@ describe("updateUpload", () => {
       expect(result?.emailError).toBeUndefined();
       expect(sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
+          // #160: sender comes from the mailer (NODEMAILER_FROM).
+          from: '"CatchLogX" <catchlogx@boku.ac.at>',
           to: "u1@x.at",
           subject: "Your Upload Has Been Rejected",
         }),

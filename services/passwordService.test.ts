@@ -18,6 +18,7 @@ vi.mock("@/lib/prisma", () => ({
 }));
 vi.mock("@/lib/mailer", () => ({
   createMailerTransporter: vi.fn(() => ({ sendMail })),
+  mailFrom: vi.fn(() => '"CatchLogX" <catchlogx@boku.ac.at>'),
 }));
 vi.mock("bcrypt", () => ({
   default: { hash: vi.fn(async (pw: string) => `hashed:${pw}`) },
@@ -133,6 +134,8 @@ describe("initiatePasswordReset", () => {
 
     const mail = sendMail.mock.calls[0][0];
     expect(mail.to).toBe("a@x.at");
+    // #160: sender comes from the mailer (NODEMAILER_FROM), not NODEMAILER_USER.
+    expect(mail.from).toBe('"CatchLogX" <catchlogx@boku.ac.at>');
     expect(mail.html).toContain(buildResetLink(token));
     expect(mail.text).toContain(buildResetLink(token));
   });

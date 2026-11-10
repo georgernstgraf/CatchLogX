@@ -10,6 +10,7 @@ import nodemailer from "nodemailer";
 import {
   createMailerTransporter,
   getMailerConfig,
+  mailFrom,
   parseBoolean,
   parsePort,
 } from "@/lib/mailer";
@@ -47,6 +48,7 @@ describe("getMailerConfig / createMailerTransporter", () => {
     vi.stubEnv("NODEMAILER_PASSWORD", "secret");
     vi.stubEnv("NODEMAILER_SECURE", "true");
     vi.stubEnv("NODEMAILER_PORT", "465");
+    vi.stubEnv("NODEMAILER_FROM", "");
   });
 
   afterEach(() => {
@@ -59,17 +61,78 @@ describe("getMailerConfig / createMailerTransporter", () => {
       host: "smtp.example.com",
       port: 465,
       secure: true,
-      user: "bot@example.com",
-      password: "secret",
+      from: "bot@example.com",
+      auth: { user: "bot@example.com", pass: "secret" },
     });
   });
 
   it("lists every missing variable in the error", () => {
     vi.stubEnv("NODEMAILER_HOST", "");
+    vi.stubEnv("NODEMAILER_USER", "");
+    expect(() => getMailerConfig()).toThrow(
+      "Mailer configuration missing: NODEMAILER_HOST, NODEMAILER_FROM",
+    );
+  });
+
+  // #160: production relays through a loopback-only postfix on 127.0.0.1:25
+  // that holds the BOKU credential itself — the app must send without auth.
+  it("allows an auth-less relay when user and password are both unset", () => {
+    vi.stubEnv("NODEMAILER_HOST", "127.0.0.1");
+    vi.stubEnv("NODEMAILER_PORT", "25");
+    vi.stubEnv("NODEMAILER_SECURE", "");
+    vi.stubEnv("NODEMAILER_USER", "");
+    vi.stubEnv("NODEMAILER_PASSWORD", "");
+    vi.stubEnv("NODEMAILER_FROM", "catchlogx@boku.ac.at");
+    expect(getMailerConfig()).toEqual({
+      host: "127.0.0.1",
+      port: 25,
+      secure: false,
+      from: "catchlogx@boku.ac.at",
+      auth: undefined,
+    });
+  });
+
+  it("rejects a half-configured login (user without password)", () => {
     vi.stubEnv("NODEMAILER_PASSWORD", "");
     expect(() => getMailerConfig()).toThrow(
-      "Mailer configuration missing: NODEMAILER_HOST, NODEMAILER_PASSWORD",
+      "Mailer configuration incomplete: NODEMAILER_USER and NODEMAILER_PASSWORD must be set together",
     );
+  });
+
+  it("rejects a half-configured login (password without user)", () => {
+    vi.stubEnv("NODEMAILER_USER", "");
+    vi.stubEnv("NODEMAILER_FROM", "catchlogx@boku.ac.at");
+    expect(() => getMailerConfig()).toThrow(/must be set together/);
+  });
+
+  it("prefers NODEMAILER_FROM over NODEMAILER_USER as sender", () => {
+    vi.stubEnv("NODEMAILER_FROM", "catchlogx@boku.ac.at");
+    expect(getMailerConfig().from).toBe("catchlogx@boku.ac.at");
+  });
+
+  it("formats the sender with the display name", () => {
+    vi.stubEnv("NODEMAILER_FROM", "catchlogx@boku.ac.at");
+    expect(mailFrom()).toBe('"CatchLogX" <catchlogx@boku.ac.at>');
+  });
+
+  it("falls back to NODEMAILER_USER as sender for existing envs", () => {
+    expect(mailFrom()).toBe('"CatchLogX" <bot@example.com>');
+  });
+
+  it("creates a transport without auth for the loopback relay", () => {
+    vi.mocked(nodemailer.createTransport).mockClear();
+    vi.stubEnv("NODEMAILER_HOST", "127.0.0.1");
+    vi.stubEnv("NODEMAILER_PORT", "25");
+    vi.stubEnv("NODEMAILER_SECURE", "");
+    vi.stubEnv("NODEMAILER_USER", "");
+    vi.stubEnv("NODEMAILER_PASSWORD", "");
+    vi.stubEnv("NODEMAILER_FROM", "catchlogx@boku.ac.at");
+    createMailerTransporter("test");
+    expect(nodemailer.createTransport).toHaveBeenCalledWith({
+      host: "127.0.0.1",
+      port: 25,
+      secure: false,
+    });
   });
 
   it("creates a transport with the resolved config", () => {
@@ -85,7 +148,8 @@ describe("getMailerConfig / createMailerTransporter", () => {
   it("throws before creating a transport when config is missing", () => {
     vi.mocked(nodemailer.createTransport).mockClear();
     vi.stubEnv("NODEMAILER_USER", "");
-    expect(() => createMailerTransporter("test")).toThrow(/NODEMAILER_USER/);
+    // No user and no NODEMAILER_FROM → no sender left (#160).
+    expect(() => createMailerTransporter("test")).toThrow(/NODEMAILER_FROM/);
     expect(nodemailer.createTransport).not.toHaveBeenCalled();
   });
 });

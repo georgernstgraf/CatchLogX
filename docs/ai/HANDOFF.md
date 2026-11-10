@@ -85,8 +85,8 @@ grün (Details in `STATE.md`, Code in `deploy/prod/backup/` und
 lässt ausgehend nur Port 25 zu BOKUs Mailservern zu (Konto `ihyam_catchlogx`,
 verifiziert). Die Backup-Berichte gehen bewusst **lokal** in `/var/mail/root`
 (`mail -u root`), nicht über den Relay; der ist für App-Mail reserviert. Offen in
-#160 bleibt nur der Code-Teil: auth-loser Zweig für `127.0.0.1:25` plus
-`NODEMAILER_FROM` in `lib/mailer.ts`, dann Reset end-to-end testen.
+#160 bleibt nur noch: SMTP-Konto in postfix, `NODEMAILER_*` in der Prod-Env
+(der Code-Teil ist seit 2026-11-10 auf `dev`), dann Reset end-to-end testen.
 
 **Nachtrag 2026-10-27 (Nacht), Postgres-Exposition (#122/#152/#153):** Entscheidung
 in `DECISIONS.md` („Postgres bleibt BOKU-weit offen"): **keine Firewall**, weil 5432
@@ -121,9 +121,12 @@ Superuser-Slots.
 4. [ ] **#160 Passwort-Reset/Mail**: Host-Seite ist seit 2026-10-27 fertig
    (`deploy/prod/postfix/`: loopback-only postfix → `mailauth.boku.ac.at:25`,
    STARTTLS + SASL, Zertifikat verifiziert). Offen: (a) SMTP-Konto anlegen und per
-   `/root/set-mail-auth.sh` eintragen, (b) der auth-lose Zweig für
-   `127.0.0.1:25` plus `NODEMAILER_FROM` in `lib/mailer.ts` (heute wird
-   `NODEMAILER_USER` als Absender missbraucht), (c) `NEXT_PUBLIC_APP_URL` ist seit
+   `/root/set-mail-auth.sh` eintragen, (b) **Code erledigt (2026-11-10):**
+   `lib/mailer.ts` sendet ohne Auth, wenn `NODEMAILER_USER`/`NODEMAILER_PASSWORD`
+   beide fehlen, Absender ist `NODEMAILER_FROM` (Fallback `NODEMAILER_USER`) über
+   `mailFrom()`; auf Prod fehlt nur die Env (`NODEMAILER_HOST=127.0.0.1`,
+   `NODEMAILER_PORT=25`, `NODEMAILER_FROM=<BOKU-Konto>`, siehe
+   `deploy/prod/postfix/README.md`) plus Unit-Restart, (c) `NEXT_PUBLIC_APP_URL` ist seit
    #164 auf `http://141.244.222.191` (ohne Port) korrigiert, (d) Reset einmal
    end-to-end testen. `MAIL_TO`/`MAIL_FROM` in `/etc/catchlogx-backup.env` und der
    `root`-Alias in `/etc/aliases` hängen am selben Konto.
