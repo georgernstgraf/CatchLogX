@@ -39,10 +39,11 @@ command="/usr/bin/rrsync -wo -no-del -no-overwrite /home/catchlogx/backups",rest
   - `rsync --delete …` must be refused (no deletes),
   - a normal `rsync -c <file> catchlogx@claw:` must work.
 
-Why not plain `scp`: `catchlogx` has full passwordless sudo on this host
-(`/etc/sudoers.d/catchlogx`). A key that yields a shell as `catchlogx` is a key
-that yields root on the dev VPS. `rrsync` is the cheapest way to avoid that -
-it ships with the `rsync` package (`/usr/bin/rrsync`).
+Why not plain `scp`: a shell as `catchlogx` is not a privilege escalation to
+root (the user has no sudo on this host), but it is the account that runs the
+app, the CI runner and the dev database's superuser role. A key that only drops
+files into one directory is the smaller surface. `rrsync` is the cheapest way to
+get that - it ships with the `rsync` package (`/usr/bin/rrsync`).
 
 The old HTTPS path is gone with #192: the nginx `/backup/` location, its
 `dav_methods PUT`, and `/etc/nginx/catchlogx-backup.htpasswd` were removed. If

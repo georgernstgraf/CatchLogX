@@ -51,7 +51,7 @@ Any failure before step 9 leaves `clx_prev` in place and starts the app again
 (the exit trap). The way back is:
 
 ```sh
-sudo -u postgres psql -d postgres \
+psql -d postgres \
   -c 'DROP DATABASE IF EXISTS clx WITH (FORCE)' \
   -c 'ALTER DATABASE clx_prev RENAME TO clx'
 systemctl --user start catchlogx.service
@@ -61,10 +61,18 @@ systemctl --user start catchlogx.service
 
 - Plaintext archives from #192 (`catchlogx-backup` on the BOKU host). Before
   that change the archives were `*.tar.zst.age` and cannot be used here.
-- `catchlogx` needs `sudo` for the database steps:
-  `sudo -n -u postgres psql …` must work without a password
-  (`/etc/sudoers.d/catchlogx`). It is not needed for the files, the app unit or
-  the health check.
+- The OS user `catchlogx` authenticates to PostgreSQL as the **DB role
+  `catchlogx`**, created once as a superuser:
+
+  ```sh
+  sudo -u postgres psql -d postgres -c 'CREATE ROLE catchlogx LOGIN SUPERUSER'
+  ```
+
+  and mapped by `local all catchlogx peer` in `/etc/postgresql/16/main/pg_hba.conf`
+  (the default `local all all scram-sha-256` would ask for a password). After
+  the change: `systemctl reload postgresql@16-main`.
+  **No OS sudo is needed** — the app user has no root rights on this host, only
+  database superuser on the dev instance. The script checks both at start.
 - The Prisma CLI is not part of the standalone release. Install it once, pinned
   to the version in `package-lock.json`:
   ```sh

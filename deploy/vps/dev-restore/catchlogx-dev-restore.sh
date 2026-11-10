@@ -66,11 +66,21 @@ cleanup() {
 trap cleanup EXIT
 
 pg() {
-  # $1 = database, rest = psql arguments. Runs as the cluster superuser over the
-  # local socket (peer auth); the objects are created as clxadmin below.
+  # $1 = database, rest = psql arguments. The OS user `catchlogx` maps to the
+  # DB role `catchlogx` (SUPERUSER) via `local all catchlogx peer`; the objects
+  # are created as clxadmin below. No sudo: the app user has no OS privileges
+  # beyond its own home, only database superuser on this dev instance.
   local db="$1"; shift
-  sudo -n -u postgres psql -X -q -v ON_ERROR_STOP=1 -d "$db" "$@"
+  psql -X -q -v ON_ERROR_STOP=1 -w -d "$db" "$@"
 }
+
+# ---- preflight ---------------------------------------------------------------
+# The role comes from pg_hba (`local all catchlogx peer`) and must be a
+# superuser - DROP/CREATE DATABASE and `pg_restore --role=clxadmin` need it.
+psql -w -d postgres -tAc 'select 1' >/dev/null 2>&1 \
+  || die "keine Datenbankverbindung als $(id -un) - Rolle/peer-Regel in pg_hba.conf prüfen"
+[ "$(psql -w -d postgres -tAc "select usesuper from pg_user where usename = current_user")" = "t" ] \
+  || die "die DB-Rolle $(id -un) ist kein Superuser - Restore kann clx nicht ersetzen"
 
 # ---- pick the archive -------------------------------------------------------
 [ -d "$BACKUP_DIR" ] || die "$BACKUP_DIR fehlt"
@@ -120,7 +130,7 @@ pg postgres -c "CREATE DATABASE \"$DB\" OWNER $PG_OWNER TEMPLATE template0 ENCOD
 log "spiele db.dump ein (Owner $PG_OWNER)"
 # Read the dump through stdin: `postgres` cannot enter the 0700 temp directory
 # of `catchlogx` (and the dump must not be world-readable in /var/tmp either).
-sudo -n -u postgres pg_restore -w --exit-on-error --no-owner --no-privileges \
+pg_restore -w --exit-on-error --no-owner --no-privileges \
   --role="$PG_OWNER" -d "$DB" < "$setdir/db.dump" \
   || die "pg_restore fehlgeschlagen - $DB_PREV bleibt erhalten"
 
