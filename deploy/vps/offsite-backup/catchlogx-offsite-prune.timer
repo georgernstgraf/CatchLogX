@@ -1,3 +1,5 @@
+# User unit: install as ~catchlogx/.config/systemd/user/catchlogx-offsite-prune.timer
+# and `systemctl --user enable --now catchlogx-offsite-prune.timer` as catchlogx.
 [Unit]
 Description=Daily rotation of off-site CatchLogX backups
 

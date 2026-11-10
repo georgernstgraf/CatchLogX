@@ -2,6 +2,17 @@
 
 Offene Aufgaben für die nächste Session.
 
+**Stand 2026-11-10 (Off-site-Transport, #192):** Der Off-site-Weg des
+Prod-Backups läuft nicht mehr über den nginx-PUT-Endpoint, sondern über
+**`knock` + `rsync`** als User **`catchlogx`** nach **`~/backups`** auf `claw`;
+das Archiv ist ein **Klartext-`tar.zst`** (nur `env.age` bleibt verschlüsselt).
+Der Empfangs-Key ist auf `rrsync -wo -no-del -no-overwrite` eingeschränkt, der
+nginx-`/backup/`-Endpunkt samt htpasswd ist entfernt, Rotation/Integrität
+laufen als User-Timer von `catchlogx`. Details: `deploy/prod/backup/README.md`,
+`deploy/vps/offsite-backup/README.md`, `DECISIONS.md` 2026-11-10, `PITFALLS.md`.
+Die Knock-Sequenz liegt ausschließlich in `/etc/catchlogx-backup.env`
+(0600 root) — sie gehört nicht ins Repo (#189).
+
 **Nachtrag 2026-10-30 (#121), Dev für die SQL-Rollen-Umstellung vorbereitet:**
 `clx_readonly` ist auf der Dev-Instanz jetzt die **einzige** lesende Rolle und
 eine **Whitelist** (`SELECT` nur auf `fish_catches`, `samplings`,
