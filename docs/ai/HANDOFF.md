@@ -9,16 +9,15 @@ MX, TTL 600) und `claw` sendet direkt über loopback-postfix
 (`127.0.0.1:25`, ohne Auth) mit OpenDKIM-Signatur; Doku
 `deploy/vps/mail/README.md`. **Verifiziert**: Zustellung an `georg@graf.priv.at`
 mit `dkim=pass` im empfangenden OpenDKIM, SpamAssassin `No, score=1.1`,
-`opendkim-testkey` `key OK`. **Offen:** (1) der zweite NS
-`a.ns.priesch.priv.at` muss den Rebuild noch ziehen (er liefert bis dahin den
-alten CNAME, deshalb `SPF_NONE`/`DMARC_NONE` im lokalen `murl`-Resolver);
-(2) die Dev-`.env` ist gesetzt, aber `NEXT_PUBLIC_APP_URL` ist Bake-in — der
-nächste Deploy auf `dev` bringt sie ins Release, danach „Passwort vergessen"
-einmal end-to-end; (3) Schüler-Sub-Issue zu #160 anlegen (App-Seite: Reset- und
-Reject-Mail belegen, Fehlerbehandlung dokumentieren); (4) nach ein bis zwei
-grünen Wochen DMARC auf `quarantine`/`reject` und die TTL auf 86400 heben;
-(5) der DKIM-Privatschlüssel (`/etc/dkimkeys/clx.private`, 0600
-`opendkim:opendkim`) gehört in eine Sicherung außerhalb der Maschine.
+`opendkim-testkey` `key OK`, beide NS liefern die neuen Records; die Dev-`.env`
+ist gesetzt und mit Release `a0ad6bc` gebaut, „Passwort vergessen" läuft mit
+einem temporären Nutzer end-to-end (Link + Token geprüft, Testdaten entfernt).
+**Offen:** (1) Schüler-Aufgabe #194 (App-Seite: Reset-/Reject-Mail belegen,
+Fehlerbehandlung, `timestamp`-Robustheit in `POST /api/forgot-password`);
+(2) nach ein bis zwei grünen Wochen DMARC auf `quarantine`/`reject` und die TTL
+von 600 auf 86400 heben; (3) der DKIM-Privatschlüssel
+(`/etc/dkimkeys/clx.private`, 0600 `opendkim:opendkim`) gehört in eine
+Sicherung außerhalb der Maschine.
 
 **Stand 2026-11-10 (Off-site-Transport, #192):** Der Off-site-Weg des
 Prod-Backups läuft nicht mehr über den nginx-PUT-Endpoint, sondern über
