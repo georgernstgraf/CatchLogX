@@ -70,6 +70,14 @@ working copy, commit, and wait for the pipeline — do **not** run `make`
 elsewhere: `axfrzones.sh` would write empty zone files when the AXFR is refused
 (only `78.41.116.*`, `193.238.157.*`, `137.208.89.122` are allowed).
 
+After a `data` change, `murl`'s working copy shows the regenerated
+`nsd/zones/*.zone` as modified (every zone gets a new SOA serial). Commit those
+too, otherwise the tree stays dirty and a later commit of zones collides:
+`sudo -u georg svn commit -m "nsd zones rebuilt" /home/georg/svn/mexx/nsd`.
+The working copy on `murl` belongs to **`georg`** while `ssh murl` logs in as
+`graf`, so the commit needs `sudo -u georg`; the edit/`make`/`reload` itself
+runs as the cron user.
+
 ## Host configuration
 
 Effective `postconf -n` and the OpenDKIM configuration are in this directory
