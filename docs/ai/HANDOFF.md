@@ -14,11 +14,11 @@ ist gesetzt und mit Release `a0ad6bc` gebaut, „Passwort vergessen" läuft mit
 einem temporären Nutzer end-to-end (Link + Token geprüft, Testdaten entfernt).
 **Verschärft am 2026-11-11** (mexx r391): DMARC `p=quarantine`, TTL 86400 —
 nachdem Gmail eine Testmail mit `dkim=pass`/`spf=pass`/`dmarc=pass` in den
-Posteingang gelegt hatte. **Offen:** (1) Schüler-Aufgabe #194 (App-Seite:
-Reset-/Reject-Mail belegen, Fehlerbehandlung, `timestamp`-Robustheit in
-`POST /api/forgot-password`); (2) der DKIM-Privatschlüssel
-(`/etc/dkimkeys/clx.private`, 0600 `opendkim:opendkim`) gehört in eine
-Sicherung außerhalb der Maschine.
+Posteingang gelegt hatte. **Der DKIM-Privatschlüssel ist gesichert**
+(`pass show claw/dkim-clx-private`, privater SVN-Store r7808, verschlüsselt auf
+`EC23CFDFDDA530BD`; Restore-Anleitung in `deploy/vps/mail/README.md`).
+**Offen:** Schüler-Aufgabe #194 (App-Seite: Reset-/Reject-Mail belegen,
+Fehlerbehandlung, `timestamp`-Robustheit in `POST /api/forgot-password`).
 
 **Stand 2026-11-10 (Off-site-Transport, #192):** Der Off-site-Weg des
 Prod-Backups läuft nicht mehr über den nginx-PUT-Endpoint, sondern über

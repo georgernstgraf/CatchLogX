@@ -152,6 +152,33 @@ Why the individual pieces matter:
 - **`/etc/aliases` is local-only** (only `postmaster: root`): host reports stay
   in `/var/mail/<user>` and never leave the machine, like on production.
 
+## DKIM key backup
+
+The private key exists in exactly two places: `/etc/dkimkeys/clx.private` on
+`claw` (0600 `opendkim:opendkim`) and the operator's **password store**:
+
+```sh
+export PASSWORD_STORE_DIR="$HOME/svn/georg/private/password-store"   # set in ~/.bashrc
+pass show claw/dkim-clx-private
+```
+
+The store is an SVN working copy of the private `georg` repository
+(`~/svn/georg/private/password-store`), so the key is versioned but encrypted
+to the operator's GPG key (`EC23CFDFDDA530BD`); the entry is the raw
+`clx.private` file, byte for byte.
+
+- **Restoring after a lost host**: `pass show claw/dkim-clx-private >
+  /etc/dkimkeys/clx.private`, `chown opendkim:opendkim`,
+  `chmod 600`, `systemctl restart opendkim`. The published DNS record stays
+  valid, so no DNS change and no mail outage.
+- **The backup is only as good as the GPG key.** Without the secret key of
+  `EC23CFDFDDA530BD` the entry is unreadable; that key needs its own offline
+  backup.
+- **Rotating**: generate a new key, replace the `p=` value in `mexx/data` for
+  the same selector (`clx` is fine), commit, wait for the zone rebuild, restart
+  the milter. Between those steps the published old key no longer matches the
+  signing key — do it when no mail is expected.
+
 ## App side (#193 student part)
 
 `lib/mailer.ts` supports an auth-less relay since #160. On `claw` the runtime
