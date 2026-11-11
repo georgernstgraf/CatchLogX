@@ -3,19 +3,20 @@
 Offene Aufgaben für die nächste Session.
 
 **Stand 2026-11-10 (Send-Only-Mail Dev, #193):** `catchlogx.graf.priv.at` ist
-als reine Sende-Domain eingerichtet (`noreply@…`), DNS in `mexx` r389 (A statt
-CNAME, SPF `ip4:85.215.162.182 -all`, DMARC `p=none` strict, DKIM `clx`, kein
-MX, TTL 600) und `claw` sendet direkt über loopback-postfix
+als reine Sende-Domain eingerichtet (`noreply@…`), DNS in `mexx` (A statt
+CNAME, SPF `ip4:85.215.162.182 -all`, DMARC strict, DKIM `clx`, kein MX) und
+`claw` sendet direkt über loopback-postfix
 (`127.0.0.1:25`, ohne Auth) mit OpenDKIM-Signatur; Doku
 `deploy/vps/mail/README.md`. **Verifiziert**: Zustellung an `georg@graf.priv.at`
 mit `dkim=pass` im empfangenden OpenDKIM, SpamAssassin `No, score=1.1`,
 `opendkim-testkey` `key OK`, beide NS liefern die neuen Records; die Dev-`.env`
 ist gesetzt und mit Release `a0ad6bc` gebaut, „Passwort vergessen" läuft mit
 einem temporären Nutzer end-to-end (Link + Token geprüft, Testdaten entfernt).
-**Offen:** (1) Schüler-Aufgabe #194 (App-Seite: Reset-/Reject-Mail belegen,
-Fehlerbehandlung, `timestamp`-Robustheit in `POST /api/forgot-password`);
-(2) nach ein bis zwei grünen Wochen DMARC auf `quarantine`/`reject` und die TTL
-von 600 auf 86400 heben; (3) der DKIM-Privatschlüssel
+**Verschärft am 2026-11-11** (mexx r391): DMARC `p=quarantine`, TTL 86400 —
+nachdem Gmail eine Testmail mit `dkim=pass`/`spf=pass`/`dmarc=pass` in den
+Posteingang gelegt hatte. **Offen:** (1) Schüler-Aufgabe #194 (App-Seite:
+Reset-/Reject-Mail belegen, Fehlerbehandlung, `timestamp`-Robustheit in
+`POST /api/forgot-password`); (2) der DKIM-Privatschlüssel
 (`/etc/dkimkeys/clx.private`, 0600 `opendkim:opendkim`) gehört in eine
 Sicherung außerhalb der Maschine.
 

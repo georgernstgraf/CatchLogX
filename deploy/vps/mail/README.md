@@ -36,10 +36,10 @@ cannot coexist with the TXT records at the same name, and SPF/DKIM/DMARC all
 live there.
 
 ```
-+catchlogx.graf.priv.at:85.215.162.182:600
-'catchlogx.graf.priv.at:v=spf1 ip4\07285.215.162.182 -all:600
-'_dmarc.catchlogx.graf.priv.at:v=DMARC1; p=none; adkim=s; aspf=s; rua=mailto\072postmaster@graf.priv.at:600
-'clx._domainkey.catchlogx.graf.priv.at:v=DKIM1; h=sha256; k=rsa; p=<public key>:600
++catchlogx.graf.priv.at:85.215.162.182:86400
+'catchlogx.graf.priv.at:v=spf1 ip4\07285.215.162.182 -all:86400
+'_dmarc.catchlogx.graf.priv.at:v=DMARC1; p=quarantine; adkim=s; aspf=s; rua=mailto\072postmaster@graf.priv.at:86400
+'clx._domainkey.catchlogx.graf.priv.at:v=DKIM1; h=sha256; k=rsa; p=<public key>:86400
 ```
 
 - **SPF** `ip4:85.215.162.182 -all` — hard fail for everything else. It is
@@ -50,13 +50,17 @@ live there.
 - **DKIM** selector `clx`, RSA 2048, `d=catchlogx.graf.priv.at`. The key lives
   on the host (`/etc/dkimkeys/clx.private`), never in this repository; only the
   public key is published.
-- **DMARC** `p=none` with **strict** alignment (`adkim=s; aspf=s`) — the sender
-  domain is fixed, so strict is safe. Reports go to the existing
-  `postmaster@graf.priv.at`. Tighten to `quarantine`/`reject` once a couple of
-  weeks of reports and mail-tester runs are clean.
-- **TTL 600** for the rollout: the old `CNAME` record had TTL 86400 and stays in
-  resolver caches for up to a day, during which SPF/DMARC lookups at this name
-  still see the alias. Raise all four records to 86400 afterwards.
+- **DMARC** `p=quarantine` with **strict** alignment (`adkim=s; aspf=s`) — the
+  sender domain is fixed, so strict is safe, and the only sender is the app,
+  which always goes through the milter. Reports go to the existing
+  `postmaster@graf.priv.at`. The rollout started at `p=none` on 2026-11-10 and
+  was tightened on 2026-11-11 after Gmail reported
+  `spf=pass dkim=pass dmarc=pass` for a real message. Consequence to keep in
+  mind: if OpenDKIM is down, unsigned mail is now quarantined by receivers.
+- **TTL 86400.** During the rollout the four records ran at TTL 600, because the
+  old `CNAME` (TTL 86400) kept SPF/DMARC lookups at this name pointing at the
+  alias for up to a day; the TTL was raised after that window closed
+  (2026-11-10 22:44).
 - **No MX record** — on purpose. djbdns cannot express a null MX (RFC 7505):
   generic `:` records reject type 15, and `@domain:.` synthesizes
   `mx.<domain>`. Without an MX, RFC 5321 falls back to the A record, where
@@ -178,7 +182,7 @@ dig +short TXT catchlogx.graf.priv.at @1.1.1.1
 dig +short TXT clx._domainkey.catchlogx.graf.priv.at @1.1.1.1
 ```
 
-For a full check, send to a **mail-tester.com** address and read the report:
-`spf=pass dkim=pass dmarc=pass` is the goal. Until the old `CNAME` has aged out
-of the resolver caches, SPF can still show `fail` while DKIM already passes —
-DMARC passes in that window because of the DKIM alignment.
+For a full check, send to a real mailbox you control. Gmail's "Show original"
+is the reference used on 2026-11-10: `Authentication-Results` showed
+`dkim=pass header.s=clx`, `spf=pass` with `client-ip=85.215.162.182` and
+`dmarc=pass (p=NONE)`, over TLS 1.3 — the message landed in the inbox.
