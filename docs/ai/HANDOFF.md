@@ -241,8 +241,17 @@ nachdem Gmail eine Testmail mit `dkim=pass`/`spf=pass`/`dmarc=pass` in den
 Posteingang gelegt hatte. **Der DKIM-Privatschlüssel ist gesichert**
 (`pass show claw/dkim-clx-private`, privater SVN-Store r7808, verschlüsselt auf
 `EC23CFDFDDA530BD`; Restore-Anleitung in `deploy/vps/mail/README.md`).
-**Offen:** Schüler-Aufgabe #194 (App-Seite: Reset-/Reject-Mail belegen,
-Fehlerbehandlung, `timestamp`-Robustheit in `POST /api/forgot-password`).
+**Stand 2026-11-12 (#194, Code-Seite auf `dev` lokal, Jakob):** `POST /api/forgot-password`
+ist ein dünner Adapter um `handleForgotPassword()` in `services/passwordService.ts`.
+Verhaltensänderungen, die **Georg im Issue absegnen soll, bevor gepusht wird**: unbekannter
+Benutzer bekommt **200 mit neutraler Meldung** statt 404 „User not found.“ (keine
+Enumeration, eine `console.info`-Zeile unterscheidet im Log); der Reset-Zeitstempel ist
+die **Server-Uhr**, der Client-`timestamp` wird ignoriert (fehlender Wert ergab vorher
+`new Date(undefined)` → verschluckter Prisma-Fehler → Mail mit totem Link; ein Zukunftswert
+hebelte die 10-Minuten-Grenze aus); scheitert das Speichern des Tokens, geht **keine Mail**
+raus (500); Mail-/DB-Fehler gehen nicht mehr als `error_message` an den Client.
+**Offen:** Reset- und Reject-Mail auf Dev nach dem Deploy belegen (`journalctl --user -u
+catchlogx.service | grep -E "forgot-password|admin-reject-upload"`, Beleg in #194).
 
 **Stand 2026-11-10 (Off-site-Transport, #192):** Der Off-site-Weg des
 Prod-Backups läuft nicht mehr über den nginx-PUT-Endpoint, sondern über
