@@ -230,6 +230,67 @@ export async function initiatePasswordReset(username: string, email: string) {
   }
 }
 
+type ForgotPasswordResult = {
+  status: 200 | 400 | 500;
+  body: { message: string };
+};
+
+const FORGOT_PASSWORD_NEUTRAL_MESSAGE =
+  "If an account with this username exists, a reset link has been sent. Please check your emails.";
+
+/**
+ * Decision logic of POST /api/forgot-password (#194). The route handler only
+ * parses the body and wraps the result in a NextResponse.
+ *
+ * Unknown users get the same 200 as known ones so that anonymous callers
+ * cannot enumerate usernames; the difference is one log line. Only genuine
+ * server errors (DB, SMTP) answer 500, and the error itself stays in the log.
+ */
+// Exported for unit tests (see services/passwordService.test.ts, #112).
+export async function handleForgotPassword(
+  username: unknown,
+): Promise<ForgotPasswordResult> {
+  // A missing username must not reach Prisma: `where: { username: undefined }`
+  // drops the filter and matches the first user.
+  if (typeof username !== "string" || username === "") {
+    return { status: 400, body: { message: "Username must not be empty." } };
+  }
+
+  const user = await findUserOrThrow(username);
+
+  if (user.exists === null) {
+    return {
+      status: 500,
+      body: {
+        message:
+          "There was an issue while initiating your password reset. Please try again later.",
+      },
+    };
+  }
+
+  if (!user.exists || user.data === null) {
+    console.info(
+      `[forgot-password] unknown user "${username}" requested a reset; answering neutrally`,
+    );
+    return { status: 200, body: { message: FORGOT_PASSWORD_NEUTRAL_MESSAGE } };
+  }
+
+  try {
+    await initiatePasswordReset(username, user.data.email);
+  } catch {
+    // Already logged by initiatePasswordReset; never echo the error to the client.
+    return {
+      status: 500,
+      body: {
+        message:
+          "There was an issue while initiating your password reset. Please try again later.",
+      },
+    };
+  }
+
+  return { status: 200, body: { message: FORGOT_PASSWORD_NEUTRAL_MESSAGE } };
+}
+
 export async function validateResetToken(token: string) {
   const resetRequest = await prisma.passwordResets.findFirst({
     where: {

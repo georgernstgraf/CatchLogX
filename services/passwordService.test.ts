@@ -31,6 +31,7 @@ import {
   changePassword,
   createResetToken,
   findUserOrThrow,
+  handleForgotPassword,
   initiatePasswordReset,
   validateResetToken,
 } from "@/services/passwordService";
@@ -195,6 +196,88 @@ describe("initiatePasswordReset", () => {
     await expect(initiatePasswordReset("alice", "a@x.at")).rejects.toThrow(
       "smtp down",
     );
+  });
+});
+
+// #194: decision logic of POST /api/forgot-password, lifted out of the route
+// handler so it can be tested without jsdom. The route is a thin adapter.
+describe("handleForgotPassword", () => {
+  const neutral =
+    "If an account with this username exists, a reset link has been sent. Please check your emails.";
+
+  it("rejects an empty or missing username with 400", async () => {
+    for (const bad of ["", null, undefined, 42]) {
+      const res = await handleForgotPassword(bad);
+      expect(res.status).toBe(400);
+      expect(res.body.message).toBe("Username must not be empty.");
+    }
+    // `where: { username: undefined }` would match the first user.
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it("answers 200 with the neutral message for a known user and mails the link", async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({
+      email: "a@x.at",
+    } as any);
+
+    const res = await handleForgotPassword("alice");
+
+    expect(res).toEqual({ status: 200, body: { message: neutral } });
+    expect(sendMail).toHaveBeenCalledOnce();
+    expect(sendMail.mock.calls[0][0].to).toBe("a@x.at");
+  });
+
+  it("answers 200 with the same message for an unknown user (no enumeration)", async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue(null);
+
+    const res = await handleForgotPassword("bob");
+
+    expect(res).toEqual({ status: 200, body: { message: neutral } });
+    expect(sendMail).not.toHaveBeenCalled();
+    expect(prisma.passwordResets.create).not.toHaveBeenCalled();
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining('[forgot-password] unknown user "bob"'),
+    );
+  });
+
+  it("answers 500 without the error object when the mail cannot be sent", async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({
+      email: "a@x.at",
+    } as any);
+    sendMail.mockRejectedValue(new Error("connect ECONNREFUSED 127.0.0.1:1"));
+
+    const res = await handleForgotPassword("alice");
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({
+      message:
+        "There was an issue while initiating your password reset. Please try again later.",
+    });
+    expect(JSON.stringify(res.body)).not.toContain("ECONNREFUSED");
+  });
+
+  it("answers 500 when the token cannot be stored", async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({
+      email: "a@x.at",
+    } as any);
+    vi.mocked(prisma.passwordResets.create).mockRejectedValue(
+      new Error("down"),
+    );
+
+    const res = await handleForgotPassword("alice");
+
+    expect(res.status).toBe(500);
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it("answers 500 when the user lookup fails", async () => {
+    vi.mocked(prisma.user.findFirst).mockRejectedValue(new Error("down"));
+
+    const res = await handleForgotPassword("alice");
+
+    expect(res.status).toBe(500);
+    expect(sendMail).not.toHaveBeenCalled();
   });
 });
 

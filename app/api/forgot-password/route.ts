@@ -1,55 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findUserOrThrow, initiatePasswordReset } from "@/services/passwordService";
+import { handleForgotPassword } from "@/services/passwordService";
 
+// Thin adapter: the decision logic lives in handleForgotPassword (#194) so it
+// can be unit-tested without jsdom.
 export async function POST(req: NextRequest) {
-  const { username } = await req.json();
+  const payload = await req.json().catch(() => ({}));
+  const { status, body } = await handleForgotPassword(payload?.username);
 
-  if (username === "" || username === null) {
-    return NextResponse.json(
-      {
-        message: "Username must not be empty.",
-        timestamp: new Date(),
-      },
-      {
-        status: 400,
-      },
-    );
-  }
-
-  const { exists, error, error_message, data } =
-    await findUserOrThrow(username);
-
-  if (!exists || data === null) {
-    return NextResponse.json(
-      {
-        message: error_message,
-        timestamp: new Date(),
-      },
-      { status: error },
-    );
-  }
-
-  try {
-    if (exists && data !== null) {
-      await initiatePasswordReset(username, data.email);
-    }
-  } catch (e) {
-    return NextResponse.json(
-      {
-        message:
-          "There was an issue while initiating your password reset. Please try again later.",
-        error_message: e,
-        timestamp: new Date(),
-      },
-      { status: 500 },
-    );
-  }
-  return NextResponse.json(
-    {
-      message:
-        "Password Reset successfully initiated. Please check your emails.",
-      timestamp: new Date(),
-    },
-    { status: 200 },
-  );
+  return NextResponse.json({ ...body, timestamp: new Date() }, { status });
 }
