@@ -145,6 +145,15 @@ describe("getMailerConfig / createMailerTransporter", () => {
     });
   });
 
+  // #194: when SMTP is unreachable this line is the first thing to read in
+  // `journalctl` — it must name the context and the effective target.
+  it("logs context, host, port and auth mode for diagnosis", () => {
+    createMailerTransporter("forgot-password");
+    expect(console.info).toHaveBeenCalledWith(
+      "[mailer] (forgot-password) using SMTP host=smtp.example.com port=465 secure=true auth=yes",
+    );
+  });
+
   it("throws before creating a transport when config is missing", () => {
     vi.mocked(nodemailer.createTransport).mockClear();
     vi.stubEnv("NODEMAILER_USER", "");
