@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { findUserOrThrow, initiatePasswordReset } from "@/services/passwordService";
 
 export async function POST(req: NextRequest) {
-  const { username, timestamp } = await req.json();
+  const { username } = await req.json();
 
   if (username === "" || username === null) {
     return NextResponse.json(
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 
   try {
     if (exists && data !== null) {
-      await initiatePasswordReset(username, timestamp, data.email);
+      await initiatePasswordReset(username, data.email);
     }
   } catch (e) {
     return NextResponse.json(

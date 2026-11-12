@@ -47,6 +47,9 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   sendMail.mockResolvedValue({ messageId: "m1" });
   vi.mocked(prisma.passwordResets.findMany).mockResolvedValue([]);
+  // clearAllMocks keeps implementations; a rejected create from one test
+  // must not leak into the next.
+  vi.mocked(prisma.passwordResets.create).mockResolvedValue({} as any);
 });
 
 afterEach(() => {
@@ -118,15 +121,12 @@ describe("findUserOrThrow", () => {
 });
 
 describe("initiatePasswordReset", () => {
-  const timestamp = "2025-01-15T12:00:00.000Z";
-
   it("stores a REQUESTED reset and mails the link", async () => {
-    await initiatePasswordReset("alice", timestamp, "a@x.at");
+    await initiatePasswordReset("alice", "a@x.at");
 
     const created = vi.mocked(prisma.passwordResets.create).mock.calls[0][0];
     expect(created.data).toMatchObject({
       username: "alice",
-      timestamp: new Date(timestamp),
       state: "REQUESTED",
     });
     const token = created.data.token as string;
@@ -140,8 +140,18 @@ describe("initiatePasswordReset", () => {
     expect(mail.text).toContain(buildResetLink(token));
   });
 
+  // #194: the reset time is the server clock. The client used to send it,
+  // which let a caller pick a future timestamp (token never expires) and
+  // produced `new Date(undefined)` when the field was missing.
+  it("stamps the reset with the server clock, not a client value", async () => {
+    await initiatePasswordReset("alice", "a@x.at");
+
+    const created = vi.mocked(prisma.passwordResets.create).mock.calls[0][0];
+    expect(created.data.timestamp).toEqual(NOW);
+  });
+
   it("states the same 10-minute validity in the plain-text mail", async () => {
-    await initiatePasswordReset("alice", timestamp, "a@x.at");
+    await initiatePasswordReset("alice", "a@x.at");
 
     const mail = sendMail.mock.calls[0][0];
     expect(mail.text).toContain("expire in 10 minutes");
@@ -152,7 +162,7 @@ describe("initiatePasswordReset", () => {
     vi.mocked(prisma.passwordResets.findMany).mockResolvedValue([
       { id: 1 },
     ] as any);
-    await initiatePasswordReset("alice", timestamp, "a@x.at");
+    await initiatePasswordReset("alice", "a@x.at");
     expect(prisma.passwordResets.updateMany).toHaveBeenCalledWith({
       data: { state: "EXPIRED" },
       where: { username: "alice" },
@@ -160,23 +170,31 @@ describe("initiatePasswordReset", () => {
   });
 
   it("does not touch resets when there are none", async () => {
-    await initiatePasswordReset("alice", timestamp, "a@x.at");
+    await initiatePasswordReset("alice", "a@x.at");
     expect(prisma.passwordResets.updateMany).not.toHaveBeenCalled();
   });
 
-  it("still sends the mail when the DB write fails", async () => {
+  // #194: previously the DB error was swallowed and a mail with a dead link
+  // went out anyway. Without a stored token there is nothing to mail.
+  it("does not send a mail when the DB write fails", async () => {
     vi.mocked(prisma.passwordResets.create).mockRejectedValue(
       new Error("down"),
     );
-    await initiatePasswordReset("alice", timestamp, "a@x.at");
-    expect(sendMail).toHaveBeenCalledOnce();
+    await expect(initiatePasswordReset("alice", "a@x.at")).rejects.toThrow(
+      "down",
+    );
+    expect(sendMail).not.toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("[forgot-password] reset not stored for alice"),
+      expect.any(Error),
+    );
   });
 
   it("rethrows mail errors", async () => {
     sendMail.mockRejectedValue(new Error("smtp down"));
-    await expect(
-      initiatePasswordReset("alice", timestamp, "a@x.at"),
-    ).rejects.toThrow("smtp down");
+    await expect(initiatePasswordReset("alice", "a@x.at")).rejects.toThrow(
+      "smtp down",
+    );
   });
 });
 

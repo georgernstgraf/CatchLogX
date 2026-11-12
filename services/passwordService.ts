@@ -163,11 +163,15 @@ export function buildResetEmailHtml(username: string, resetLink: string) {
       `;
 }
 
-export async function initiatePasswordReset(
-  username: string,
-  timestamp: string,
-  email: string,
-) {
+/**
+ * Stores a fresh reset token and mails the link.
+ *
+ * The timestamp is the server clock (#194): a client-supplied value let a
+ * caller pick a date in the future and sidestep the TTL, and a missing value
+ * produced `new Date(undefined)`. If the token cannot be stored, no mail is
+ * sent — a mail with a dead link is worse than an error.
+ */
+export async function initiatePasswordReset(username: string, email: string) {
   const resetToken = createResetToken();
 
   try {
@@ -189,16 +193,14 @@ export async function initiatePasswordReset(
     await prisma.passwordResets.create({
       data: {
         username: username,
-        timestamp: new Date(timestamp),
+        timestamp: new Date(),
         state: "REQUESTED",
         token: resetToken,
       },
     });
   } catch (e) {
-    console.error(
-      "Error while creating password reset entry in DB. Error: ",
-      e,
-    );
+    console.error(`[forgot-password] reset not stored for ${username}:`, e);
+    throw e;
   }
 
   const transporter = createMailerTransporter("forgot-password");
