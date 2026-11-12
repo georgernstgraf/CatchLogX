@@ -167,6 +167,26 @@ describe("readLists / buildSchema", () => {
     expect(valid.success).toBe(true);
     expect(invalid.success).toBe(false);
   });
+
+  // #182: the template lists `project` as mandatory, but the schema only had
+  // `.max(150)` and let empty cells through.
+  it("rejects an empty project cell (#182)", () => {
+    const schema = buildSchema({});
+
+    expect(schema.safeParse(validRow).success).toBe(true);
+    expect(schema.safeParse({ ...validRow, project: undefined }).success).toBe(
+      false,
+    );
+
+    const blank = schema.safeParse({ ...validRow, project: "" });
+    expect(blank.success).toBe(false);
+    if (!blank.success) {
+      expect(blank.error.issues[0]).toMatchObject({
+        path: ["project"],
+        message: "Project name is required",
+      });
+    }
+  });
 });
 
 // --- validateWorkbook -------------------------------------------------------

@@ -139,6 +139,7 @@ export function buildSchema(
       project: emptyIfNullish(
         z.coerce
           .string({ message: "Project name must be a text value" })
+          .min(1, { message: "Project name is required" })
           .max(150, {
             message: "Project name must be less than 150 characters long",
           }),
