@@ -154,9 +154,13 @@ whose samplings still carry `NULL`.
 > uploads into synthetic `Imports` rows) was rejected with the cutover
 > decision: the fresh database has one state only.
 >
-> **Done on dev on 2026-11-15:** pre-wipe dump, wipe, then the #202 push; the
-> deploy applied `20261114230855_imports_model` on the empty database. The
-> numbers below are the state *before* the wipe (127 179 catches).
+> **Done on dev on 2026-11-15:** dump `~/backups/pre-imports-model-20261114T231621Z.dump`
+> (56 MB), then wipe — **464 654 catches / 10 497 samplings / 6 260 sites /
+> 18 uploads / 18 upload blobs** removed, 3 template blobs kept, sequences
+> reset — then `fish_species` emptied and reloaded from the JSON master (165).
+> The #202 push deployed and applied `20261114230855_imports_model` on the
+> empty database (release `8a0f1f0`, app 200). Dev now holds 0 catches, 165
+> species, 9 users, 3 templates.
 
 ### 1. Wipe the fish data, keep the masters
 
@@ -175,8 +179,15 @@ SELECT setval('river_sites_id_seq', 1, false);
 COMMIT;
 ```
 
-- **`fish_species` stays** (165 entries) — the import validates every species
-  against it, and a missing entry rejects the whole file (#80).
+- **`fish_species` is the 165-entry master from `assets/species.json`**, not
+  the old 125-entry seed — the import validates every species against it, and a
+  missing entry rejects the whole file (#80). A prod clone still carries the
+  seed, and `insert-fish.ts` cannot upgrade it in place (`P2002`: the master
+  renames id 93 to a name id 94 already holds, see `PITFALLS.md`), so the table
+  is **emptied and reloaded** while no catch references it:
+  `DELETE FROM fish_species;` then `npx tsx scripts/demo/insert-fish.ts` →
+  165 rows. On the fresh production database the table starts empty anyway, so
+  this is the same step there.
 - **`FileBlob` rows behind `Uploads`:** the #202 migration drops `Uploads`, so
   those blobs become orphans. They are already archived in
   `legacy-uploads-2026-06/` (Phase 0), so delete them explicitly rather than

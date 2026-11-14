@@ -11,17 +11,26 @@ status: stable
 
 Offene Aufgaben für die nächste Session.
 
-**Stand 2026-11-15 (Arten-Validierung, #80 erledigt):** Die Validierung prüft
-`species` gegen `fish_species` (nicht mehr gegen das `List`-Blatt der Datei),
-ein fehlendes `List`-Blatt ist ein struktureller Fehler, und eine unbekannte Art
-lehnt die ganze Datei mit allen Namen und Zeilen ab. Damit importieren
-`2026_D`, `2026_E_F`, `2026_I` und `2026_S` weiterhin **nichts** — jetzt aber
-sichtbar in der Validierung statt als Teilimport beim Accept. **Nächster
-Schritt: #202** (Imports-Modell, `importId NOT NULL`, ein Schreibpfad,
-`deleteImport`) — Reihenfolge: implementieren → **Dev-Wipe von Hand** (Dump
-davor) → Push. Der Wipe muss vor dem Push liegen, weil der Deploy-Job
-`prisma migrate deploy` fährt und `NOT NULL` auf bestehenden Samplings
-scheitert.
+**Stand 2026-11-15 (Arten-Validierung #80 und Imports-Modell #202 erledigt):** Die
+Validierung prüft `species` gegen `fish_species` (nicht mehr gegen das
+`List`-Blatt der Datei), ein fehlendes `List`-Blatt ist ein struktureller
+Fehler, und eine unbekannte Art lehnt die ganze Datei mit allen Namen und
+Zeilen ab. **#202 ist deployt** (Release `8a0f1f0`, Migration
+`20261114230855_imports_model`): `Uploads` ist weg, `Imports` + `Sampling.importId
+NOT NULL` sind da, der Upload importiert direkt, `deleteImport` nimmt Fänge,
+Samplings und die Originaldatei mit. **Dev ist gewiped und neu aufgesetzt:**
+0 Fänge / 0 Samplings / 0 Sites, 165 Arten aus `assets/species.json`, 9 User,
+3 Templates; der Pre-Wipe-Dump liegt als
+`~/backups/pre-imports-model-20261114T231621Z.dump` (56 MB) auf `claw`.
+**Nächster Schritt: Phase 1 des Trockenlaufs (#204)** — 9 der 13 Dateien
+importieren, die vier artenblockierten (`2026_D`, `2026_E_F`, `2026_I`,
+`2026_S`) müssen hart abgelehnt werden, dann `deleteImport` und die
+Rollback-Übung mit dem Dump. **Befund für den Trockenlauf:** gegen die 165
+Arten aus dem JSON sind es **vier** blockierte Dateien wie geplant; gegen den
+alten 125er-Seed wäre `Salvelinus fontinalis × Salvelinus umbla` durchgegangen
+(der Seed trägt den Namen, der Master hat ihn auf `Salvelinus alpinus x
+Salvelinus fontinalis` umbenannt) — die Dev-DB ist deshalb auf den
+JSON-Master gebracht, damit sie wie die frische Prod-DB aussieht.
 
 **Stand 2026-11-14 (Cutover-Entscheidung, #200):** Die Prod-DB wird **neu
 aufgebaut** statt migriert — `prisma migrate deploy` auf eine leere DB, dann
