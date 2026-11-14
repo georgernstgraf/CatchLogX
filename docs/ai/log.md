@@ -1,5 +1,31 @@
 # Persistenz-Log
 
+## 2026-11-14 — Fischarten-Verwaltung im Admin-Panel (#201) und schnelleres Lint-Gate (#195)
+
+* **Creation**: `services/fishSpeciesService.ts`, `app/api/admin/fish-species/`
+  (GET/POST, PATCH/DELETE), `lib/fish-species-client.ts`,
+  `components/AdminFishSpeciesManager.tsx` — Arten anlegen, umbenennen,
+  löschen; Löschen wird bei vorhandenen Fängen mit 409 und Fangzahl
+  abgelehnt. `lib/fish-species-client.ts` heißt bewusst **nicht**
+  `lib/fish-species.ts`: das kollidiert auf macOS/Windows mit
+  `lib/fishSpecies.ts` (#183).
+* **Update**: `prisma/schema.prisma` (`FishCatch.species` explizit
+  `onDelete: Restrict`, nachgewiesen migrationsfrei per `prisma migrate diff`),
+  `ARCHITECTURE.md` (Komponente/Service/Client ergänzt), `STATE.md`,
+  `HANDOFF.md` (#201 erledigt, #202 als nächster Schritt), `DECISIONS.md`
+  (harte Löschung ohne Tombstone), `eslint.config.mjs` + `package.json`
+  (`.claude/**` ignoriert, `--cache`).
+* **Reason**: Die strittigen Artnamen (id 44, 85, Rutilus-Dublette) müssen vor
+  dem Cutover eingeloggt in der App geklärt werden, nicht per
+  Excel-Roundtrip. Server-seitig normalisiert `cleanSpeciesName` zusätzlich
+  U+00A0, damit ein direkter API-Aufruf die Near-Duplikate aus #80 nicht neu
+  anlegen kann.
+* **Verifikation**: 25 Dateien / 346 Tests, Lint 0 Fehler / 12 Warnungen,
+  Typecheck sauber; `prisma migrate diff` → „This is an empty migration.",
+  `prisma generate` grün. Lint-Gate: 6,29 s kalt, 1,75 s warm (vorher ~16 s).
+  **Offen:** die React-Komponente hat keinen Unit-Test (kein jsdom im
+  Projekt) und wurde nicht im Browser durchgeklickt.
+
 ## 2026-11-14 — Cutover statt Migration, Epic #200 mit sechs Untersissues
 
 * **Creation**: `deploy/prod/cutover/README.md` — Runbook-Gerüst mit
