@@ -15,9 +15,9 @@ Offene Aufgaben für die nächste Session.
 aufgebaut** statt migriert — `prisma migrate deploy` auf eine leere DB, dann
 reiner Datei-Import aus `CatchLogX-Data` mit allen Validierungen aktiv, ids neu
 vergeben. Runbook: `deploy/prod/cutover/README.md`. **Reihenfolge:** #203
-(Blob-Inventur read-only; Werkzeug steht als
-`deploy/prod/cutover/export-upload-blobs.sh`, der Lauf braucht SSH/VPN) → #80 +
-#201 (Arten-Validierung gegen `fish_species`, GUI-Fischarten) → #202
+(Blob-Inventur **erledigt 2026-11-14**: 18 Uploads, 0 unmatched, alle 18 als
+Upload-Objekte im Datenrepo, `legacy-uploads-2026-06/inventur-prod-uploads.tsv`)
+→ #80 + #201 (Arten-Validierung gegen `fish_species`, GUI-Fischarten) → #202
 (`Imports`-Modell für die frische DB) → Excel-Reparaturen im -data-Repo (18
 Zeilen, 2 Namen; `Salvelinus fontinalis × Salvelinus umbla` braucht Lenas
 Zielnamen) → #204 (Runbook + Dev-Trockenlauf) → Prod-Fenster.
@@ -27,12 +27,17 @@ Duplikate. **M ist nicht geparkt, sondern kommt nach dem Fenster als regulärer
 Upload** (#206, 63 385 Fänge, 1 638 `site_name`-Zellen offen — blockiert
 nichts). **Die 13 Juni-Uploads sind nicht verschollen:** sie sind byte-identisch
 mit Repo-Dateien (`CatchLogX-Data#6`), die Rechnung „≈ 39 000" ist
-zurückgenommen (Datei- vs. DB-Zeilenzahlen). Von den 5 Legacy-Dateien sind zwei
-content-identisch mit `2026_E_F`/`2026_S`; die drei Juni-23-Dateien sind eine
-**eigene Lieferung** (45 380 Zeilen, Donaukanal/Drau/Donau) — offene
-Entscheidung, siehe Runbook. **#80 lehnt eine Datei mit unbekannter Art
-komplett ab**, damit sind `2026_D`, `2026_E_F`, `2026_I`, `2026_S` bis zur
-Reparatur aus `CatchLogX-Data#7` hart blockiert.
+zurückgenommen (Datei- vs. DB-Zeilenzahlen). Die Inventur vom 2026-11-14 hat es
+bestätigt: **18 Uploads, 0 unmatched**; alle 18 liegen jetzt als Upload-Objekt
+im Datenrepo (`legacy-uploads-2026-06/`, Manifest
+`inventur-prod-uploads.tsv`). Zwei Befunde daraus: die Uploads liefen **im Juni**
+(2026-06-18…24), nicht im Oktober, und **`2026_M` war in der Produktion**
+(`DB_ERROR`) — ihre Zeilen stecken also im heutigen Bestand. Von den 5
+Legacy-Dateien sind zwei content-identisch mit `2026_E_F`/`2026_S`; die drei
+Juni-23-Dateien sind eine **eigene Lieferung** (45 380 Zeilen,
+Donaukanal/Drau/Donau) — Nachimport als #207 angelegt. **#80 lehnt eine Datei
+mit unbekannter Art komplett ab**, damit sind `2026_D`, `2026_E_F`, `2026_I` und
+`2026_S` bis zur Reparatur aus `CatchLogX-Data#7` hart blockiert.
 
 **Stand 2026-11-14 (#198, P1 erledigt):** `scripts/` ist nach Risikoklasse
 getrennt (`demo/`, `data/`, `prod/`, `ops/`) und `lib/seedGuard.ts` verweigert
