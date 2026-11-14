@@ -152,8 +152,8 @@ const MapComponent: React.FC<MapComponentProps> = ({ locations }) => {
             <button
               onClick={() => setIsExpanded(false)}
               className="absolute top-4 right-4 z-[1000] h-10 w-10 rounded-full bg-white text-gray-700 shadow-lg border border-gray-200 hover:bg-gray-50 flex items-center justify-center text-xl font-bold"
-              title="Schließen"
-              aria-label="Schließen"
+              title="Close"
+              aria-label="Close"
             >
               ×
             </button>

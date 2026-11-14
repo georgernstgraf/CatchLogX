@@ -9,7 +9,7 @@ import {
 export async function POST(req: NextRequest) {
   const session = await getSessionUser(req);
   if (!session) {
-    return NextResponse.json({ error: "Nicht authentifiziert" }, { status: 401 });
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
   let query: string = "";
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const data = await executeQuery(query, session.user.id);
 
     return NextResponse.json({
-      message: "Query erfolgreich ausgeführt.",
+      message: "Query executed successfully.",
       data,
     });
   } catch (error) {
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
 
     if (isPermissionDenied(error)) {
       const message =
-        "Keine Berechtigung für diese Tabelle/Operation – nur Lesezugriff auf Fangdaten.";
+        "No permission for this table or operation — read-only access to catch data.";
       return NextResponse.json(
         {
           error: message,
@@ -54,8 +54,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(
       {
-        error: "Datenbankfehler beim Ausführen der Query",
-        details: error instanceof Error ? error.message : "Unbekannter Fehler",
+        error: "Database error while running the query",
+        details: error instanceof Error ? error.message : "Unknown error",
         query: query,
       },
       { status: 500 },

@@ -171,8 +171,8 @@ function statusMeta(state: string): {
       };
     default:
       return {
-        label: "Unbekannt",
-        hint: "Status konnte nicht zugeordnet werden.",
+        label: "Unknown",
+        hint: "Status could not be determined.",
         badgeClass:
           "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200",
         icon: AlertTriangle,

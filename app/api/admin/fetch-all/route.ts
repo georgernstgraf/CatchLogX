@@ -19,9 +19,9 @@ export async function GET(request: NextRequest) {
       { status: 200 },
     );
   } catch (error) {
-    console.error("[ADMIN] Fehler beim Fetchen der Daten:", error);
+    console.error("[ADMIN] Failed to fetch data:", error);
     return NextResponse.json(
-      { error: "Upload- und Nutzerdaten konnten nicht geladen werden" },
+      { error: "Could not load upload and user data" },
       { status: 500 },
     );
   }

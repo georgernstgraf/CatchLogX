@@ -234,7 +234,7 @@ const SqlQueryUIDesign: React.FC = () => {
         setSavedQueries(data.data || []);
       }
     } catch (err) {
-      console.error("Fehler beim Laden der gespeicherten Queries:", err);
+      console.error("Failed to load saved queries:", err);
     }
   }, []);
 
@@ -281,7 +281,7 @@ const SqlQueryUIDesign: React.FC = () => {
         showToast("Query saved successfully.", "success");
       }
     } catch (err) {
-      console.error("Fehler beim Speichern:", err);
+      console.error("Failed to save:", err);
       showToast("Error while saving the query.", "error");
     } finally {
       setIsSaving(false);
@@ -337,7 +337,7 @@ const SqlQueryUIDesign: React.FC = () => {
           setEditingName("");
         }
       } catch (err) {
-        console.error("Fehler beim Umbenennen:", err);
+        console.error("Failed to rename:", err);
       }
     },
     [editingName, fetchSavedQueries],
@@ -355,7 +355,7 @@ const SqlQueryUIDesign: React.FC = () => {
           await fetchSavedQueries();
         }
       } catch (err) {
-        console.error("Fehler beim Löschen:", err);
+        console.error("Failed to delete:", err);
       }
     },
     [fetchSavedQueries],
@@ -397,7 +397,7 @@ const SqlQueryUIDesign: React.FC = () => {
   fs."speciesName" AS "Fish Species",
   fs."germanName" AS "German Name",
   COUNT(fc.id) AS "Count",
-  ROUND(AVG(fc."lengthMm")::numeric, 1) AS "Ø Länge (mm)",
+  ROUND(AVG(fc."lengthMm")::numeric, 1) AS "Avg Length (mm)",
   MIN(fc."lengthMm") AS "Min Length (mm)",
   MAX(fc."lengthMm") AS "Max Length (mm)",
   ROUND(AVG(fc."totalWeightGr")::numeric, 1) AS "Ø Mass (g)"
@@ -454,7 +454,7 @@ ORDER BY "Count" DESC;`;
 
       if (!response.ok) {
         // Handle error response
-        setError(data.details || data.error || "Ein Fehler ist aufgetreten");
+        setError(data.details || data.error || "Something went wrong");
         setResults([]);
       } else {
         // Handle success response
