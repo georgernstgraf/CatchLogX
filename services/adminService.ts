@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import { Uploads, UserRoles } from "@/app/generated/prisma";
 import { blobToBuffer } from "@/lib/fileBlobs";
 import { createMailerTransporter, mailFrom } from "@/lib/mailer";
+import { buildSpeciesIndex, resolveSpecies } from "@/lib/fishSpecies";
 
 const adminRoles = new Set<UserRoles>(["ADMIN", "SUPER_ADMIN"]);
 
@@ -305,6 +306,34 @@ async function acceptUploadAndPushToDb(upload: Uploads) {
     `[acceptUploadAndPushToDb] Schema detected: ${hasLegacySiteCode ? "legacy (site_code)" : "new (no site_code)"}`,
   );
 
+  // Pre-flight (#80): resolve every species before the first write. The upload
+  // validation already checked the file against the master, but a rename or
+  // delete in the admin GUI between upload and accept must reject the whole
+  // file — a per-row skip would write a partial import, which is exactly how
+  // the production duplicates happened.
+  const speciesIndex = buildSpeciesIndex(
+    await prisma.fishSpecies.findMany({
+      select: { id: true, speciesName: true },
+    }),
+  );
+  const unknownSpecies = [
+    ...new Set(
+      rows
+        .map((row) => String(row["species"] ?? "").trim())
+        .filter(
+          (name) => name && resolveSpecies(speciesIndex, name) === undefined,
+        ),
+    ),
+  ];
+  if (unknownSpecies.length > 0) {
+    const note = `Unknown species (not in fish_species): ${unknownSpecies.join(", ")}`;
+    await prisma.uploads.update({
+      where: { id: upload.id },
+      data: { state: "DB_ERROR", note },
+    });
+    throw new Error(note);
+  }
+
   // Vorab: PIT DEC in dieser Datei zählen und recapture bestimmen
   const pitDecCounts = new Map<string, number>();
 
@@ -571,24 +600,13 @@ async function acceptUploadAndPushToDb(upload: Uploads) {
       continue;
     }
 
-    let fishSpecies;
-    try {
-      fishSpecies = await prisma.fishSpecies.findUnique({
-        where: { speciesName: String(speciesName) },
-      });
-      if (!fishSpecies) {
-        errors.push(
-          `Row ${rowNum}: Fish species "${speciesName}" not found in database, skipping fish catch.`,
-        );
-        continue;
-      }
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error(
-        `[acceptUploadAndPushToDb] Row ${rowNum}: Failed to find FishSpecies (${speciesName}): ${msg}`,
+    // Guaranteed by the pre-flight above; a miss here is a bug, not a data
+    // problem, so it must not be swallowed as a per-row skip.
+    const fishSpecies = resolveSpecies(speciesIndex, String(speciesName));
+    if (!fishSpecies) {
+      throw new Error(
+        `Species "${speciesName}" disappeared from fish_species during the import.`,
       );
-      errors.push(`Row ${rowNum}: Failed to lookup fish species: ${msg}`);
-      continue;
     }
 
     // PIT DEC für recapture bestimmen

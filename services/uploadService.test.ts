@@ -6,7 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Prisma is mocked; workbooks are built in memory, nothing is stored.
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    fishCatch: { findFirst: vi.fn() },
+    fishCatch: { findFirst: vi.fn(), findMany: vi.fn() },
+    fishSpecies: { findMany: vi.fn() },
     uploads: { create: vi.fn() },
     $transaction: vi.fn(),
   },
@@ -14,6 +15,7 @@ vi.mock("@/lib/prisma", () => ({
 
 import { prisma } from "@/lib/prisma";
 import { getArchive } from "@/lib/errorArchive";
+import { buildSpeciesIndex } from "@/lib/fishSpecies";
 import {
   buildAnnotatedWorkbook,
   buildSchema,
@@ -68,6 +70,9 @@ function buildWorkbook(sheets: Record<string, unknown[][]>): Buffer {
 function dataFile(rows: Row[], extraSheets: Record<string, unknown[][]> = {}) {
   return buildWorkbook({
     DATA: [headers, ...rows.map(toCells)],
+    // Every real file carries a List sheet; a missing one is a structural
+    // error since #80, so the helper always writes one.
+    List: [["country"], ["Austria"]],
     ...extraSheets,
   });
 }
@@ -85,9 +90,19 @@ async function readErrorNotes(fileBuffer: Buffer) {
   return notes;
 }
 
+// The species master the validator checks against (#80). `validRow` uses
+// "Brown trout"; "Pike" exists so a PIT/species mismatch can be expressed.
+const masterSpecies = [
+  { id: 1, speciesName: "Brown trout" },
+  { id: 2, speciesName: "Pike" },
+];
+const speciesIndex = buildSpeciesIndex(masterSpecies);
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(prisma.fishCatch.findFirst).mockResolvedValue(null);
+  vi.mocked(prisma.fishCatch.findMany).mockResolvedValue([]);
+  vi.mocked(prisma.fishSpecies.findMany).mockResolvedValue(masterSpecies as any);
   vi.mocked(prisma.$transaction).mockImplementation((async (ops: any) =>
     Promise.all(ops)) as any);
   vi.mocked(prisma.uploads.create).mockImplementation((async ({
@@ -204,6 +219,7 @@ describe("validateWorkbook", () => {
           headers.map(() => ""),
           toCells({ ...validRow, year: 1800 }),
         ],
+        List: [["country"], ["Austria"]],
       }),
     );
     expect(file.errors).toEqual([]);
@@ -218,9 +234,120 @@ describe("validateWorkbook", () => {
         { ...validRow, pit_dec: "123", species: "Pike" },
       ]),
     );
+    // Both rows are marked: a PIT tag is unique, so the second occurrence is
+    // as wrong as the first (#80).
+    expect(file.errors).toHaveLength(2);
+    expect(file.errors[0]).toMatchObject({ row: 2, column: "pit_dec", value: "123" });
+    expect(file.errors[1]).toMatchObject({ row: 3, column: "pit_dec", value: "123" });
+    expect(file.errors[1].message).toMatch(/PIT DEC 123.*row 2.*different species.*Brown trout/);
+  });
+
+  it("flags the same PIT tag twice in one file, even with the same species", () => {
+    const file = validateWorkbook(
+      "x.xlsx",
+      dataFile([
+        { ...validRow, pit_dec: "123" },
+        { ...validRow, pit_dec: "123" },
+      ]),
+    );
+    expect(file.errors).toHaveLength(2);
+    expect(file.errors[0]).toMatchObject({ row: 2, column: "pit_dec", value: "123" });
+    expect(file.errors[1]).toMatchObject({ row: 3, column: "pit_dec", value: "123" });
+    // Both rows point at the other occurrence; the later row carries the
+    // "unique" wording.
+    expect(file.errors[0].message).toMatch(/PIT DEC 123 already appears in row 3 of this file/);
+    expect(file.errors[1].message).toMatch(/PIT DEC 123 already appears in row 2 of this file/);
+    expect(file.errors[1].message).toMatch(/a PIT tag is unique per sampling/);
+  });
+
+  it("accepts the same PIT tag on a different catch date (recapture)", () => {
+    // One file is a delivery for a river over many dates; the same individual
+    // may be caught again later — only the same date is a copy error (#184).
+    const file = validateWorkbook(
+      "x.xlsx",
+      dataFile([
+        { ...validRow, pit_dec: "123", date: new Date("2024-05-01") },
+        { ...validRow, pit_dec: "123", date: new Date("2024-06-01") },
+      ]),
+      speciesIndex,
+    );
+
+    expect(file.errors).toEqual([]);
+  });
+
+  it("rejects a species that is not in the master, with the row and the value", () => {
+    const file = validateWorkbook(
+      "x.xlsx",
+      dataFile([validRow, { ...validRow, species: "Neogobius sp." }]),
+      speciesIndex,
+    );
+
     expect(file.errors).toHaveLength(1);
-    expect(file.errors[0]).toMatchObject({ row: 3, column: "pit_dec", value: "123" });
-    expect(file.errors[0].message).toMatch(/PIT DEC 123.*row 2.*Brown trout/);
+    expect(file.errors[0]).toMatchObject({
+      row: 3,
+      column: "species",
+      value: "Neogobius sp.",
+    });
+    expect(file.errors[0].message).toMatch(/not in the species master/);
+  });
+
+  it("names every unknown species, not just the first", () => {
+    const file = validateWorkbook(
+      "x.xlsx",
+      dataFile([
+        { ...validRow, species: "Ballerus sp." },
+        validRow,
+        { ...validRow, species: "Salvelinus namaycush" },
+        { ...validRow, species: "Ballerus sp." },
+      ]),
+      speciesIndex,
+    );
+
+    const groups = groupErrors(file.errors);
+    expect(groups).toHaveLength(2);
+    expect(groups.map((g) => [g.value, g.rows])).toEqual([
+      ["Ballerus sp.", [2, 5]],
+      ["Salvelinus namaycush", [4]],
+    ]);
+  });
+
+  it("matches the master tolerantly (NBSP, trailing spaces, case)", () => {
+    const file = validateWorkbook(
+      "x.xlsx",
+      dataFile([
+        { ...validRow, species: "Brown\u00A0trout" },
+        { ...validRow, species: "  brown trout   " },
+      ]),
+      speciesIndex,
+    );
+
+    expect(file.errors).toEqual([]);
+  });
+
+  it("ignores the file's own List sheet for species when a master is given", () => {
+    // The file claims "Unlisted fish" is a species; the master does not.
+    const file = validateWorkbook(
+      "x.xlsx",
+      dataFile([{ ...validRow, species: "Unlisted fish" }], {
+        List: [
+          ["country", "name of species"],
+          ["Austria", "Unlisted fish"],
+        ],
+      }),
+      speciesIndex,
+    );
+
+    expect(file.errors).toHaveLength(1);
+    expect(file.errors[0].message).toMatch(/not in the species master/);
+  });
+
+  it("reports a missing List sheet as a structural error", () => {
+    const file = validateWorkbook(
+      "x.xlsx",
+      buildWorkbook({ DATA: [headers, toCells(validRow)] }),
+    );
+
+    expect(file.structuralError?.details).toMatch(/List/);
   });
 });
 
@@ -337,6 +464,25 @@ describe("processBulkUpload", () => {
     expect(prisma.uploads.create).not.toHaveBeenCalled();
   });
 
+  it("loads the species master once and rejects a file with an unknown species", async () => {
+    const result = await processBulkUpload(
+      [
+        { fileName: "a.xlsx", buffer: dataFile([validRow]) },
+        { fileName: "b.xlsx", buffer: dataFile([{ ...validRow, species: "Ballerus sp." }]) },
+      ],
+      "u1",
+    );
+
+    expect(prisma.fishSpecies.findMany).toHaveBeenCalledTimes(1);
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.report.map((r) => r.status)).toEqual(["passed", "failed"]);
+    expect(result.report[1].errors[0].message).toMatch(/not in the species master.*Ballerus sp\./);
+    // A file with an unknown species imports nothing — not even the good file.
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.uploads.create).not.toHaveBeenCalled();
+  });
+
   it("puts only the failed files in the error archive", async () => {
     const files = [
       { fileName: "good.xlsx", buffer: dataFile([validRow]) },
@@ -355,9 +501,9 @@ describe("processBulkUpload", () => {
   });
 
     it("runs the database PIT check even when the bulk has other errors (#102)", async () => {
-    vi.mocked(prisma.fishCatch.findFirst).mockResolvedValue({
-      species: { speciesName: "Pike" },
-    } as any);
+    vi.mocked(prisma.fishCatch.findMany).mockResolvedValue([
+      { pitDec: "123", species: { speciesName: "Pike" } },
+    ] as any);
 
     const files = [
       { fileName: "bad.xlsx", buffer: dataFile([{ ...validRow, year: 1800, pit_dec: "123" }]) },
@@ -365,8 +511,10 @@ describe("processBulkUpload", () => {
 
     const result = await processBulkUpload(files, "u1");
 
-    expect(prisma.fishCatch.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { pitDec: "123", recapture: false } }),
+    // One lookup for the whole bulk, and no `recapture: false` filter: a PIT
+    // belongs to the same individual whether or not it was a recapture (#184).
+    expect(prisma.fishCatch.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { pitDec: { in: ["123"] } } }),
     );
     expect(result.success).toBe(false);
     if (result.success) return;
@@ -395,9 +543,9 @@ describe("processBulkUpload", () => {
   });
 
   it("flags a PIT DEC already stored with another species", async () => {
-    vi.mocked(prisma.fishCatch.findFirst).mockResolvedValue({
-      species: { speciesName: "Pike" },
-    } as any);
+    vi.mocked(prisma.fishCatch.findMany).mockResolvedValue([
+      { pitDec: "123", species: { speciesName: "Pike" } },
+    ] as any);
 
     const result = await processBulkUpload(
       [{ fileName: "a.xlsx", buffer: dataFile([{ ...validRow, pit_dec: "123" }]) }],
@@ -407,12 +555,13 @@ describe("processBulkUpload", () => {
     expect(result.success).toBe(false);
     if (result.success) return;
     expect(result.report[0].errors[0].message).toMatch(/already exists.*\(Pike\)/);
+    expect(result.report[0].errors[0].message).toMatch(/always belongs to the same individual/);
   });
 
   it("accepts a known PIT tag of the same species", async () => {
-    vi.mocked(prisma.fishCatch.findFirst).mockResolvedValue({
-      species: { speciesName: "Brown trout" },
-    } as any);
+    vi.mocked(prisma.fishCatch.findMany).mockResolvedValue([
+      { pitDec: "123", species: { speciesName: "Brown trout" } },
+    ] as any);
 
     const result = await processBulkUpload(
       [{ fileName: "a.xlsx", buffer: dataFile([{ ...validRow, pit_dec: "123" }]) }],

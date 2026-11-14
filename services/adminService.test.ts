@@ -27,7 +27,7 @@ vi.mock("@/lib/prisma", () => ({
     fileBlob: { findUnique: vi.fn() },
     riverSite: { upsert: vi.fn() },
     sampling: { create: vi.fn() },
-    fishSpecies: { findUnique: vi.fn() },
+    fishSpecies: { findUnique: vi.fn(), findMany: vi.fn() },
     fishCatch: { findFirst: vi.fn(), create: vi.fn() },
   },
 }));
@@ -670,6 +670,9 @@ describe("updateUpload", () => {
       vi.mocked(prisma.fishSpecies.findUnique).mockResolvedValue({
         id: 5,
       } as any);
+      vi.mocked(prisma.fishSpecies.findMany).mockResolvedValue([
+        { id: 5, speciesName: "Brown trout" },
+      ] as any);
       vi.mocked(prisma.fishCatch.findFirst).mockResolvedValue(null);
     });
 
@@ -769,14 +772,7 @@ describe("updateUpload", () => {
     });
 
     it("collects row errors and marks the upload DB_ERROR", async () => {
-      vi.mocked(prisma.fishSpecies.findUnique)
-        .mockResolvedValueOnce(null)
-        .mockResolvedValue({ id: 5 } as any);
-      givenExcel([
-        { ...newRow, species: "Nessie" },
-        { ...newRow, river_name: "" },
-        newRow,
-      ]);
+      givenExcel([{ ...newRow, river_name: "" }, newRow]);
 
       await updateUpload("up1", "accept", undefined);
 
@@ -784,9 +780,37 @@ describe("updateUpload", () => {
       const { state, note } = finalState();
       expect(state).toBe("DB_ERROR");
       expect(note?.split("\n")).toEqual([
-        'Row 2: Fish species "Nessie" not found in database, skipping fish catch.',
-        "Row 3: Missing river_name, skipping row.",
+        "Row 2: Missing river_name, skipping row.",
       ]);
+    });
+
+    it("rejects the whole file when a species is not in the master (#80)", async () => {
+      // A rename or delete in the admin GUI after the upload: the pre-flight
+      // aborts before the first write instead of skipping the affected rows.
+      vi.mocked(prisma.fishSpecies.findMany).mockResolvedValue([
+        { id: 5, speciesName: "Pike" },
+      ] as any);
+      givenExcel([newRow, { ...newRow, species: "Nessie" }]);
+
+      await updateUpload("up1", "accept", undefined);
+
+      expect(finalState()).toEqual({
+        state: "DB_ERROR",
+        note: "Unknown species (not in fish_species): Brown trout, Nessie",
+      });
+      expect(prisma.riverSite.upsert).not.toHaveBeenCalled();
+      expect(prisma.sampling.create).not.toHaveBeenCalled();
+      expect(prisma.fishCatch.create).not.toHaveBeenCalled();
+    });
+
+    it("matches the master tolerantly, like the upload validation (#80)", async () => {
+      // NBSP in the cell, plain space in the master: same species.
+      givenExcel([{ ...newRow, species: "Brown\u00A0trout" }]);
+
+      await updateUpload("up1", "accept", undefined);
+
+      expect(finalState().state).toBe("SAVED_IN_DB");
+      expect(prisma.fishCatch.create).toHaveBeenCalledOnce();
     });
 
     it("keeps going when a single DB write fails", async () => {

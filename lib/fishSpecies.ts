@@ -59,6 +59,43 @@ export function normalizeSpeciesName(name: string): string {
     .toLowerCase();
 }
 
+/** The part of a species row that matching needs (id + canonical name). */
+export type SpeciesMasterEntry = { id: number; speciesName: string };
+
+/**
+ * Normalized name → master entry, built once per upload (#80).
+ *
+ * The species master in `fish_species` is the authority for the upload
+ * validation; the `List` sheet of an uploaded file is not. Building the index
+ * once keeps the per-row check a Map lookup instead of a query.
+ */
+export function buildSpeciesIndex(
+  entries: readonly SpeciesMasterEntry[],
+): Map<string, SpeciesMasterEntry> {
+  const index = new Map<string, SpeciesMasterEntry>();
+
+  for (const entry of entries) {
+    const key = normalizeSpeciesName(entry.speciesName);
+    // First entry wins: the unique index on `speciesName` guarantees one
+    // canonical spelling, and a normalized duplicate must not silently
+    // re-point an id that catches already reference.
+    if (key && !index.has(key)) {
+      index.set(key, entry);
+    }
+  }
+
+  return index;
+}
+
+/** Resolves a cell value against the index; `undefined` means "not in master". */
+export function resolveSpecies(
+  index: Map<string, SpeciesMasterEntry>,
+  name: string,
+): SpeciesMasterEntry | undefined {
+  const key = normalizeSpeciesName(name ?? "");
+  return key ? index.get(key) : undefined;
+}
+
 export function mergeArtliste(
   current: SpeciesMasterRow[],
   excelRows: ArtlisteRow[],

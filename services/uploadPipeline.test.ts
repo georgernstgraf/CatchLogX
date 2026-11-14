@@ -14,7 +14,7 @@ vi.mock("@/lib/prisma", () => ({
     fileBlob: { findUnique: vi.fn() },
     riverSite: { upsert: vi.fn() },
     sampling: { create: vi.fn() },
-    fishSpecies: { findUnique: vi.fn() },
+    fishSpecies: { findUnique: vi.fn(), findMany: vi.fn() },
     fishCatch: { findFirst: vi.fn(), create: vi.fn() },
   },
 }));
@@ -22,6 +22,7 @@ vi.mock("@/lib/mailer", () => ({ createMailerTransporter: vi.fn() }));
 vi.mock("bcrypt", () => ({ default: { hash: vi.fn() } }));
 
 import { prisma } from "@/lib/prisma";
+import { buildSpeciesIndex } from "@/lib/fishSpecies";
 import { updateUpload } from "@/services/adminService";
 import {
   buildSchema,
@@ -42,7 +43,7 @@ const template = readRepoFile("assets", TEMPLATE_FILE);
 // clarification with Lena) — exactly what the template's List sheet carries.
 const masterSpecies = JSON.parse(
   readRepoFile("assets", "species.json").toString("utf8"),
-) as { speciesName: string; notInArtliste?: boolean }[];
+) as { id: number; speciesName: string; notInArtliste?: boolean }[];
 const templateSpecies = masterSpecies
   .filter((s) => !s.notInArtliste)
   .map((s) => s.speciesName);
@@ -53,10 +54,13 @@ const templateLists = () =>
     Set<string>
   >;
 
+// The database master the validator checks against since #80.
+const speciesIndex = buildSpeciesIndex(masterSpecies);
+
 describe(`template (assets/${TEMPLATE_FILE})`, () => {
   it("passes the structural validation and provides every schema column", () => {
     // An extra or missing column would send the accept into the wrong branch.
-    const file = validateWorkbook(TEMPLATE_FILE, template);
+    const file = validateWorkbook(TEMPLATE_FILE, template, speciesIndex);
 
     expect(file.structuralError).toBeUndefined();
     expect(file.headers).toEqual(allColumns);
@@ -66,13 +70,15 @@ describe(`template (assets/${TEMPLATE_FILE})`, () => {
   });
 
   it("has a List sheet with every list the validator checks against", () => {
-    // A missing list is not an error: the column is then accepted unchecked.
+    // A missing List sheet is a structural error since #80; a list that is
+    // missing *within* the sheet leaves that column unchecked.
     const lists = templateLists();
 
     for (const name of ["country", "method", "sampling time", "assessment"]) {
       expect(lists[name]?.size, name).toBeGreaterThan(0);
     }
-    // A species outside the master would pass here and fail at the accept.
+    // The file's own species list must still agree with the master: since #80
+    // the master decides, and a drift here would reject every upload.
     expect([...lists["name of species"]].map(normalize).sort()).toEqual(
       templateSpecies.map(normalize).sort(),
     );
@@ -148,14 +154,15 @@ describe("upload pipeline (in-memory fixture)", () => {
     vi.mocked(prisma.sampling.create).mockResolvedValue({ id: 100 } as any);
     vi.mocked(prisma.fishCatch.findFirst).mockResolvedValue(null);
     // Exact match, like the unique index on speciesName.
-    vi.mocked(prisma.fishSpecies.findUnique).mockImplementation((async ({
-      where,
-    }: any) =>
-      templateSpecies.includes(where.speciesName) ? { id: 5 } : null) as any);
+    vi.mocked(prisma.fishSpecies.findMany).mockImplementation((async () =>
+      templateSpecies.map((speciesName, index) => ({
+        id: index + 1,
+        speciesName,
+      }))) as any);
   });
 
   it("passes the upload validation", () => {
-    const file = validateWorkbook("fixture.xlsx", fixture);
+    const file = validateWorkbook("fixture.xlsx", fixture, speciesIndex);
 
     expect(file.structuralError).toBeUndefined();
     expect(file.errors).toEqual([]);
@@ -173,5 +180,27 @@ describe("upload pipeline (in-memory fixture)", () => {
     expect(
       vi.mocked(prisma.sampling.create).mock.calls[0][0].data,
     ).toMatchObject({ catchDate: new Date("2020-10-02") });
+  });
+
+  it("aborts without writing when a species vanished between upload and accept", async () => {
+    // A rename/delete in the admin GUI after the upload (#80): the accept must
+    // reject the whole file, not skip the affected rows.
+    vi.mocked(prisma.fishSpecies.findMany).mockImplementation((async () =>
+      templateSpecies
+        .filter((name) => name !== "Rutilus rutilus")
+        .map((speciesName, index) => ({ id: index + 1, speciesName }))) as any);
+
+    await updateUpload("up1", "accept", undefined);
+
+    expect(
+      vi.mocked(prisma.uploads.update).mock.calls.at(-1)![0].data,
+    ).toMatchObject({ state: "DB_ERROR" });
+    expect(
+      vi.mocked(prisma.uploads.update).mock.calls.at(-1)![0].data.note,
+    ).toMatch(/Rutilus rutilus/);
+    // Nothing was written — not even the sites or the one valid species.
+    expect(prisma.riverSite.upsert).not.toHaveBeenCalled();
+    expect(prisma.sampling.create).not.toHaveBeenCalled();
+    expect(prisma.fishCatch.create).not.toHaveBeenCalled();
   });
 });

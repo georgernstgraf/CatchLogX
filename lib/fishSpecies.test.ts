@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildSpeciesIndex,
   mergeArtliste,
   normalizeSpeciesName,
+  resolveSpecies,
   type SpeciesMasterRow,
 } from "./fishSpecies";
 
@@ -37,6 +39,43 @@ describe("normalizeSpeciesName", () => {
     expect(normalizeSpeciesName("Rutilus rutilus x Abramis brama (hybrid)")).toBe(
       normalizeSpeciesName("Rutilus rutilus x Abramis brama"),
     );
+  });
+});
+
+describe("buildSpeciesIndex / resolveSpecies", () => {
+  const master = [
+    { id: 1, speciesName: "Silurus glanis" },
+    { id: 2, speciesName: "Salvelinus fontinalis x Salvelinus umbla" },
+    { id: 3, speciesName: "Salmo trutta" },
+  ];
+
+  it("resolves a name that only differs in invisible characters", () => {
+    const index = buildSpeciesIndex(master);
+
+    // The exact production case from #80: NBSP pasted out of Word.
+    expect(resolveSpecies(index, "Silurus\u00A0glanis")).toEqual({
+      id: 1,
+      speciesName: "Silurus glanis",
+    });
+    // Trailing spaces and a different case are the other two observed variants.
+    expect(resolveSpecies(index, "  salmo trutta   ")?.id).toBe(3);
+    expect(resolveSpecies(index, "Salvelinus fontinalis\u00D7Salvelinus umbla")?.id).toBe(2);
+  });
+
+  it("returns undefined for a name that is not in the master", () => {
+    const index = buildSpeciesIndex(master);
+
+    expect(resolveSpecies(index, "Neogobius sp.")).toBeUndefined();
+    expect(resolveSpecies(index, "")).toBeUndefined();
+  });
+
+  it("keeps the first entry when two master rows normalize to the same name", () => {
+    const index = buildSpeciesIndex([
+      { id: 7, speciesName: "Salmo trutta" },
+      { id: 8, speciesName: "Salmo  trutta" },
+    ]);
+
+    expect(resolveSpecies(index, "Salmo trutta")?.id).toBe(7);
   });
 });
 
