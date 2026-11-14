@@ -30,41 +30,56 @@ Supersedes P4/P5 of #198 and the migration path of #184.
 | Block | Files | Rows | Imported |
 |---|---|---|---|
 | `should_work/` (A … W_Y_Z) | 13 | 183 855 | **yes** |
-| `should_not_work/2026_M_final.xlsx` | 1 | 63 385 | no — parked (#206) |
-| `legacy-uploads-2026-06/` | 5 | 178 011 | no — earlier versions of the same deliveries |
-| missing June uploads (prod only) | 13 | ~39 000 | **export first** (#203) |
+| `should_not_work/2026_M_final.xlsx` | 1 | 63 385 | no — after the cutover as a regular upload (#206) |
+| `legacy-uploads-2026-06/` | 5 | 178 011 | no — see the note below |
+| the 13 June uploads (prod only) | 13 | — | already archived — byte-identical to repo files (#203) |
 
-Production holds 464 654 catches, the archive 426 251. The difference is
-explained: 464 654 − 247 240 (the 14-file bulk from #132) − 178 011 (the five
-archived June files) ≈ 39 000 = the 13 June blobs that were never exported.
+Production holds 464 654 catches, the archive 426 251. **The difference is not
+explained by a row-count subtraction**: `178 011` is the *file* row count of the
+five legacy files, and those were `DB_ERROR` partial imports, not complete
+imports. What is established instead (sha256, `CatchLogX-Data#6`, 2026-11-14):
+
+- 13 of the 18 production uploads are **byte-identical** to files in the repo —
+  12 under `should_work/` plus `2026_M_final.xlsx`. `2026_S_valid_final.xlsx` was
+  never uploaded.
+- The other 5 are the legacy folder: two are content-identical to `2026_E_F` and
+  `2026_S` (verified row by row, 2026-11-14), and three are variants of one
+  delivery that is **not** in the 13-file set — see "Open decisions".
+
 
 ### Validation state of the 13 cutover files (2026-11-14)
 
 - **Structure:** all green. (`2026_M_final.xlsx` fails with 1 638 rows without
-  `site_name` — parked.)
+  `site_name`; it is not part of the window and comes back as a regular upload.)
 - **Species:** 6 distinct strings do not match the 165 master entries. Three
   are pure normalisation (NBSP in 171 rows, `(hybrid)` suffix in 2) and are
   caught by `normalizeSpeciesName`; two need an Excel repair now (18 rows in
   4 files, `CatchLogX-Data#7`). The third (`Leuciscus aspius hyb`) only occurs
-  in the parked M file.
+  in the M file and is normalised to `Leuciscus aspius hybrid`.
 - **PIT:** no duplicate `pit_dec` within any file, in none of the 19 files.
 
 ## Phase 0 — archive completeness (read-only) — #203
 
 Nothing may be deleted before every original file exists in `CatchLogX-Data`.
 
-```sql
-SELECT u.id, u."fileName", u.state, u."createdAt",
-       length(b.data) AS bytes, encode(sha256(b.data), 'hex') AS sha256
-FROM "Uploads" u JOIN "FileBlob" b ON b.id = u."blobId"
-ORDER BY u."createdAt";
+`deploy/prod/cutover/export-upload-blobs.sh` does the three steps. It only ever
+issues `SELECT`s, inside a read-only transaction (`default_transaction_read_only=on`):
+
+```bash
+./export-upload-blobs.sh inventory   # → ~/blob-export/inventory.tsv, 18 rows
+./export-upload-blobs.sh compare     # prod sha256 → path in CatchLogX-Data
+./export-upload-blobs.sh export      # fetch the UNMATCHED blobs, verify sha256
 ```
 
-Compare the `sha256` values with the five files already archived, export the
-remaining 13 with `scripts/prod/export-upload-blobs.ts` (read-only), verify each
-hash, and commit them into `CatchLogX-Data` (append-only).
+The inventory is one row per upload: `id, fileName, state, createdAt,
+sizeBytes, sha256, uploadedBy`. `compare` hashes every `.xlsx` in the data repo
+and prints the matching path, or `UNMATCHED`. Only `UNMATCHED` blobs are
+exported; each sha256 is verified against the database value before the file is
+kept, and an existing file with a different hash is never overwritten.
 
-**Gate:** 18 of 18 blobs archived and hash-verified.
+**Gate:** every one of the 18 uploads is either byte-identical to an archived
+file or exported and committed. `CatchLogX-Data#6` verified 13 of 18 by sha256
+on 2026-11-14; the inventory re-proves it before the old database is replaced.
 
 ## Phase 1 — dev dry run — TODO (#204)
 
@@ -86,7 +101,8 @@ On the dev instance (a production clone since #188):
 1. Announce the window; the app is read-only or stopped during the import.
 2. Fresh dump of the old database (`deploy/prod/backup/`), kept off-host.
 3. Empty database, `prisma migrate deploy`.
-4. Import the 13 files (plus the exported June files that hold unique content).
+4. Import the 13 files (no legacy variant, no `2026_M` — both come back later as
+   regular uploads, see "Announcement").
 5. Recreate users, re-upload templates, restore saved SQL queries if exported.
 6. `deploy/prod/postgres/readonly-role.sh` (with `KEEP_PASSWORD=1`).
 7. Health check: `127.0.0.1:3001`, nginx on port 80, sign-in, one download.
@@ -110,16 +126,35 @@ database, so rollback is a restore, not an undo.
 Tell the research group before the window, and state explicitly what is **not**
 coming back yet:
 
-- `2026_M_final.xlsx` (63 385 catches) stays out until the `site_name` question
-  is decided (#206) — production will hold ~401 269 catches instead of 464 654.
+- Production will hold **183 855 catches instead of 464 654**. The rebuild
+  imports files, not rows: everything that production accumulated from repeated
+  imports of the same deliveries (the June uploads of the 13 files, the three
+  variants of one June delivery, and the earlier `E_F`/`S` versions) does not
+  come back as a duplicate. `2026_M` (63 385) follows as a regular upload once
+  its `site_name` cells are filled (#206).
 - ids have changed; joins must use content (`siteCode`, `pit_dec`, date), not
   `samplings.id` / `fish_catches.id`.
 
 ## Open decisions
 
+- **The three June-23 files are a delivery of their own, not an earlier `M`.**
+  Verified 2026-11-14: 46 216 rows each, 45 380 distinct rows, identical across
+  all three variants, covering Donaukanal (1 959), Drau (19 454) and Donau
+  (24 803). Zero site overlap with all 13 `should_work` files and zero with
+  `2026_M`; the raw `Bulk import/2026_D.xlsx` (1 022 183 rows, deleted in
+  `e9a6f4b`) does contain `Donaukanal` and `Drau`. So the data is a slice of the
+  raw D delivery that the curated `2026_D_valid_final_DaniohnePIT.xlsx` does not
+  contain. **Open:** does it come back as a post-cutover upload, or did Lena
+  drop it deliberately? Until that is answered, the 13-file set is not provably
+  content-complete. (Method: site key `river_name|lat_up|long_up` and a row
+  fingerprint over 15 columns, compared against all 13 `should_work` files and
+  `2026_M`; the raw D file was checked via its `sharedStrings`.)
 - `Salvelinus fontinalis × Salvelinus umbla` (16 rows in 3 files) has no
   counterpart in the master. Either a mis-entry for id 106
   (`Salvelinus alpinus x Salvelinus fontinalis`) or a genuinely missing hybrid —
-  Lena decides; the Excel repair follows from that.
+  Lena decides; the Excel repair follows from that. **Hard gate:** #80 rejects a
+  whole file on an unknown species, so `2026_E_F`, `2026_I` and `2026_S` import
+  nothing until this is repaired.
 - `Proterorhinus marmoratus` (2 rows, one file) is a taxonomic synonym of
-  `Proterorhinus semilunaris` (id 80) — repair the file.
+  `Proterorhinus semilunaris` (id 80) — repair the file. Same hard gate:
+  `2026_D` imports nothing until then.
