@@ -127,6 +127,19 @@ overwritten.
 file or exported and committed. `CatchLogX-Data#6` verified 13 of 18 by sha256
 on 2026-11-14; the inventory re-proves it before the old database is replaced.
 
+**Result (2026-11-14, run against `clx` on the production host):** 18 uploads,
+**0 unmatched** — every blob maps to a file in the data repo. All 18 were
+exported anyway (see the decision above) and committed to
+`legacy-uploads-2026-06/` with `inventur-prod-uploads.tsv`. Two findings from
+the inventory:
+
+- The uploads ran **2026-06-18 … 2026-06-24**, not in October. The test-data
+  catalog's October date is the validation run, not the production import.
+- **`2026_M_final.xlsx` was uploaded** (2026-06-19 11:26, `DB_ERROR`), so its
+  rows are part of today's 464 654 catches.
+- `2026_S_valid_final.xlsx` was **never** uploaded — its hash does not occur in
+  production.
+
 ## Phase 1 — dev dry run — TODO (#204)
 
 On the dev instance (a production clone since #188):

@@ -85,12 +85,12 @@ prod_psql() {
 guard_target() {
   local got
   got=$(prod_psql <<'SQL'
-SELECT current_database() || E'\t' || coalesce(inet_server_addr()::text, 'local')
-       || E'\t' || (SELECT count(*) FROM "Uploads");
+SELECT current_database() || E'|' || coalesce(inet_server_addr()::text, 'local')
+       || E'|' || (SELECT count(*) FROM "Uploads");
 SQL
 )
   local db addr uploads
-  IFS=$'\t' read -r db addr uploads <<<"$got"
+  IFS='|' read -r db addr uploads <<<"$got"
   printf 'target: %s on %s, %s uploads\n' "$db" "$addr" "$uploads"
   [ "$db" = "$EXPECT_DB" ] || die "expected database '$EXPECT_DB', got '$db' (override with EXPECT_DB)"
 }
@@ -101,9 +101,9 @@ cmd_inventory() {
   local file="$OUT/inventory.tsv"
   guard_target
   {
-    printf 'id\tfileName\tstate\tcreatedAt\tsizeBytes\tsha256\tuploadedBy\n'
+    printf 'uploadId|blobId|fileName|state|createdAt|sizeBytes|sha256|uploadedBy\n'
     prod_psql <<'SQL'
-SELECT u.id, b."fileName", u.state,
+SELECT u.id, b.id, b."fileName", u.state,
        to_char(u."createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
        b."sizeBytes", encode(sha256(b.data), 'hex'), u.uploaded_by
 FROM "Uploads" u JOIN "FileBlob" b ON b.id = u."blobId"
@@ -126,26 +126,26 @@ index_archive() {
   [ "${#ARCHIVE_BY_HASH[@]}" -gt 0 ] || die "no .xlsx files under $ARCHIVE"
 }
 
-# Prints one line per upload: id, fileName, sha256, archive path or UNMATCHED.
+# Prints one line per upload: uploadId, blobId, fileName, state, sha256, archive path or UNMATCHED.
 classify() {
   local file="$1"
-  local id name state created sha
-  while IFS=$'\t' read -r id name state created _ sha _; do
-    [ "$id" = "id" ] && continue
+  local id blob name state created sha
+  while IFS='|' read -r id blob name state created _ sha _; do
+    [ "$id" = "uploadId" ] && continue
     if [ -n "${ARCHIVE_BY_HASH[$sha]:-}" ]; then
-      printf '%s\t%s\t%s\t%s\t%s\n' "$id" "$name" "$state" "$sha" "${ARCHIVE_BY_HASH[$sha]}"
+      printf '%s|%s|%s|%s|%s|%s\n' "$id" "$blob" "$name" "$state" "$sha" "${ARCHIVE_BY_HASH[$sha]}"
     else
-      printf '%s\t%s\t%s\t%s\t%s\n' "$id" "$name" "$state" "$sha" "UNMATCHED"
+      printf '%s|%s|%s|%s|%s|%s\n' "$id" "$blob" "$name" "$state" "$sha" "UNMATCHED"
     fi
   done <"$file"
 }
 
 cmd_compare() {
   index_archive
-  local id name state sha path unmatched=0
-  printf '%-28s %-38s %-10s %-12s %s\n' ID FILE STATE SHA256 ARCHIVE
-  while IFS=$'\t' read -r id name state sha path; do
-    printf '%-28s %-38s %-10s %-12s %s\n' "$id" "$name" "$state" "${sha:0:12}…" "$path"
+  local id blob name state sha path unmatched=0
+  printf '%-26s %-40s %-10s %-12s %s\n' UPLOAD FILE STATE SHA256 ARCHIVE
+  while IFS='|' read -r id blob name state sha path; do
+    printf '%-26s %-40s %-10s %-12s %s\n' "$id" "$name" "$state" "${sha:0:12}…" "$path"
     [ "$path" = "UNMATCHED" ] && unmatched=$((unmatched + 1))
   done < <(classify "$INVENTORY")
   printf '\n%s unmatched\n' "$unmatched"
@@ -153,32 +153,32 @@ cmd_compare() {
 
 # --- export ----------------------------------------------------------------
 export_one() {
-  local id="$1" name="$2" created="$3" want="$4"
+  local blob="$1" name="$2" created="$3" want="$4"
   local target="$OUT/${created%%T*}_${name}"
   if [ -f "$target" ]; then
     local have
     have=$(sha256sum "$target" | cut -d' ' -f1)
     if [ "$have" = "$want" ]; then
-      printf '  %-44s already exported, hash ok\n' "$(basename "$target")"
+      printf '  %-58s already exported, hash ok\n' "$(basename "$target")"
       return 0
     fi
     die "$target exists with a different hash — refusing to overwrite"
   fi
-  printf '  %-44s fetching…' "$(basename "$target")"
+  printf '  %-58s fetching…' "$(basename "$target")"
   local tmp="$target.part"
   rm -f "$tmp"
   if ! prod_psql <<SQL | base64 -d >"$tmp"
-SELECT encode(data, 'base64') FROM "FileBlob" WHERE id = '$id';
+SELECT encode(data, 'base64') FROM "FileBlob" WHERE id = '$blob';
 SQL
   then
     rm -f "$tmp"
-    die "fetch failed for $id"
+    die "fetch failed for $blob"
   fi
   local got
   got=$(sha256sum "$tmp" | cut -d' ' -f1)
   if [ "$got" != "$want" ]; then
     rm -f "$tmp"
-    die "hash mismatch for $id: expected $want, got $got"
+    die "hash mismatch for $blob: expected $want, got $got"
   fi
   mv "$tmp" "$target"
   printf ' ok (%s bytes)\n' "$(stat -c%s "$target")"
@@ -188,28 +188,28 @@ cmd_export() {
   mkdir -p "$OUT"
   guard_target
   local -A wanted=()
-  local id
+  local id blob
   if [ "$ALL" = 1 ]; then
-    while IFS=$'\t' read -r id _; do
-      [ "$id" = "id" ] && continue
-      wanted[$id]=1
+    while IFS='|' read -r id blob _; do
+      [ "$id" = "uploadId" ] && continue
+      wanted[$blob]=1
     done <"$INVENTORY"
   elif [ "${#IDS[@]}" -gt 0 ]; then
     for id in "${IDS[@]}"; do wanted[$id]=1; done
   else
     index_archive
-    while IFS=$'\t' read -r id _ _ _ path; do
-      [ "$path" = "UNMATCHED" ] && wanted[$id]=1
+    while IFS='|' read -r id blob _ _ _ path; do
+      [ "$path" = "UNMATCHED" ] && wanted[$blob]=1
     done < <(classify "$INVENTORY")
   fi
   [ "${#wanted[@]}" -gt 0 ] || { printf 'nothing to export — every blob matches the archive\n'; return 0; }
 
   printf 'exporting %s blob(s) to %s\n' "${#wanted[@]}" "$OUT"
   local name state created sha
-  while IFS=$'\t' read -r id name state created _ sha _; do
-    [ "$id" = "id" ] && continue
-    [ -n "${wanted[$id]:-}" ] || continue
-    export_one "$id" "$name" "$created" "$sha"
+  while IFS='|' read -r id blob name state created _ sha _; do
+    [ "$id" = "uploadId" ] && continue
+    [ -n "${wanted[$blob]:-}" ] || continue
+    export_one "$blob" "$name" "$created" "$sha"
   done <"$INVENTORY"
 }
 
