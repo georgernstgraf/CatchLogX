@@ -3,7 +3,7 @@ type: Handoff
 title: Handoff
 description: Offene Aufgaben fuer die naechste Session.
 tags: [catchlogx, handoff]
-generated: { by: opencode/knowledge-persistence, at: 2026-11-14T20:13:37Z }
+generated: { by: opencode/knowledge-persistence, at: 2026-11-14T22:34:25Z }
 status: stable
 ---
 
@@ -17,8 +17,9 @@ reiner Datei-Import aus `CatchLogX-Data` mit allen Validierungen aktiv, ids neu
 vergeben. Runbook: `deploy/prod/cutover/README.md`. **Reihenfolge:** #203
 (Blob-Inventur **erledigt 2026-11-14**: 18 Uploads, 0 unmatched, alle 18 als
 Upload-Objekte im Datenrepo, `legacy-uploads-2026-06/inventur-prod-uploads.tsv`)
-→ #80 + #201 (Arten-Validierung gegen `fish_species`, GUI-Fischarten) → #202
-(`Imports`-Modell für die frische DB) → Excel-Reparaturen im -data-Repo (18
+→ #80 (Arten-Validierung gegen `fish_species`) + #201 (**GUI-Fischarten seit
+2026-11-14 erledigt**, `4ee3113`…`090bd3a`) → #202 (`Imports`-Modell für die
+frische DB, **nächster Schritt**) → Excel-Reparaturen im -data-Repo (18
 Zeilen, 2 Namen; `Salvelinus fontinalis × Salvelinus umbla` braucht Lenas
 Zielnamen) → #204 (Runbook + Dev-Trockenlauf) → Prod-Fenster.
 **Cutover-Satz: 13 Dateien / 183 855 Fänge** (464 654 → −60 %). Die früher
@@ -44,7 +45,7 @@ getrennt (`demo/`, `data/`, `prod/`, `ops/`) und `lib/seedGuard.ts` verweigert
 Seeds auf jeder DB, die Fänge enthält; `wipe-*` braucht
 `ALLOW_DESTRUCTIVE_SEED=<hostname>/<db>`. Einstieg für eine neue DB ist
 `npm run db:init`; `docker-compose.yml` seedet nicht mehr. **Offen in #198:**
-P2 (GUI-Fischarten) läuft als #201, P3 (Coverage-Check) geht in #204 auf,
+P2 (GUI-Fischarten) ist als #201 am 2026-11-14 **erledigt**, P3 (Coverage-Check) geht in #204 auf,
 P4/P5 sind durch den Cutover #200 ersetzt.
 **Geparkte Frage (Entscheidung durch Georg, bewusst kein Ticket) — aufgelöst
 2026-11-14:** Bestandsaufnahme Prod ↔ Excel-Archiv. Die Lücke ist **keine
