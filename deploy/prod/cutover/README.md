@@ -25,14 +25,46 @@ Consequences:
 
 Supersedes P4/P5 of #198 and the migration path of #184.
 
-## Scope
+## Scope — the import list
 
-| Block | Files | Rows | Imported |
-|---|---|---|---|
-| `should_work/` (A … W_Y_Z) | 13 | 183 855 | **yes** |
-| `should_not_work/2026_M_final.xlsx` | 1 | 63 385 | no — after the cutover as a regular upload (#206) |
-| `legacy-uploads-2026-06/` | 5 | 178 011 | no — see the note below |
-| the 13 June uploads (prod only) | 13 | — | already archived — byte-identical to repo files (#203) |
+**In the window — 13 files, 183 855 rows** (import order = file name order):
+
+| # | File | Rows |
+|---|---|---:|
+| 1 | `2026_A_valid_final.xlsx` | 1 939 |
+| 2 | `2026_B_valid_final.xlsx` | 13 454 |
+| 3 | `2026_D_valid_final_DaniohnePIT.xlsx` | 9 655 |
+| 4 | `2026_E_F_valid_final.xlsx` | 11 593 |
+| 5 | `2026_G_valid_final.xlsx` | 7 304 |
+| 6 | `2026_I_valid_final.xlsx` | 5 243 |
+| 7 | `2026_K_valid_final.xlsx` | 15 492 |
+| 8 | `2026_L_valid_final.xlsx` | 3 162 |
+| 9 | `2026_N_O_P_valid_final.xlsx` | 26 980 |
+| 10 | `2026_R_valid_final.xlsx` | 1 914 |
+| 11 | `2026_S_valid_final.xlsx` | 28 770 |
+| 12 | `2026_T_valid_final.xlsx` | 35 413 |
+| 13 | `2026_W_Y_Z_valid_final.xlsx` | 22 936 |
+| | **total** | **183 855** |
+
+**After the window, as regular uploads** (the new database has a real import path
+with provenance, so neither needs a cutover special case):
+
+| What | Rows | Why not in the window |
+|---|---:|---|
+| `2026_M_final.xlsx` | 63 385 | 1 638 rows without `site_name`; repaired with Lena first (#206) |
+| the June-23 delivery (one of the three variants) | 46 216 (45 380 distinct) | own delivery, not in the 13 files; see "Open decisions" |
+
+The June-23 file has 836 rows that share all compared columns with another row
+in the same file. The import path does not deduplicate — those rows land twice.
+
+**Not imported, and why:**
+
+| What | Rows | Why |
+|---|---:|---|
+| `2026-06-18_upload_1781790617525.xlsx` | 11 593 | content-identical to `2026_E_F` (full-row fingerprint 100 % both ways) |
+| `2026-06-19_upload_1781868482406.xlsx` | 28 770 | content-identical to `2026_S` (28 769 of 28 770 rows) |
+| the other two June-23 variants | 46 216 each | same 45 380 distinct rows as the third variant; only whitespace in species names differs |
+| the 13 June uploads of the files above | — | byte-identical to the delivery files (`CatchLogX-Data#6`); they are archived as upload objects, not as deliveries |
 
 Production holds 464 654 catches, the archive 426 251. **The difference is not
 explained by a row-count subtraction**: `178 011` is the *file* row count of the
@@ -68,8 +100,16 @@ issues `SELECT`s, inside a read-only transaction (`default_transaction_read_only
 ```bash
 ./export-upload-blobs.sh inventory   # → ~/blob-export/inventory.tsv, 18 rows
 ./export-upload-blobs.sh compare     # prod sha256 → path in CatchLogX-Data
-./export-upload-blobs.sh export      # fetch the UNMATCHED blobs, verify sha256
+./export-upload-blobs.sh export --all # fetch all 18, verify sha256
 ```
+
+**Decision (2026-11-14): all 18 upload objects are archived as files**, not just
+the unmatched ones — duplicates included. After the cutover the old database is
+gone, and the upload objects (with the names the client gave them, their state
+and timestamp) are the only record of what was actually uploaded. The 13 that
+are byte-identical to a delivery are kept as `legacy-uploads-2026-06/` entries
+next to the five that are unique; the manifest in that folder maps each upload
+to the delivery file with the same sha256.
 
 Set `PROD_DSN='postgresql://clxadmin:…@141.244.222.191:5432/clx'` to connect
 directly (Postgres is reachable from the BOKU net and the VPN). Without it the
@@ -78,9 +118,10 @@ Either way the session is read-only.
 
 The inventory is one row per upload: `id, fileName, state, createdAt,
 sizeBytes, sha256, uploadedBy`. `compare` hashes every `.xlsx` in the data repo
-and prints the matching path, or `UNMATCHED`. Only `UNMATCHED` blobs are
-exported; each sha256 is verified against the database value before the file is
-kept, and an existing file with a different hash is never overwritten.
+and prints the matching path, or `UNMATCHED`. `export` without `--all` fetches
+only the unmatched blobs; each sha256 is verified against the database value
+before the file is kept, and an existing file with a different hash is never
+overwritten.
 
 **Gate:** every one of the 18 uploads is either byte-identical to an archived
 file or exported and committed. `CatchLogX-Data#6` verified 13 of 18 by sha256

@@ -20,11 +20,13 @@
 #       Map every prod sha256 to a file in the data repo. Prints MATCH or
 #       UNMATCHED per upload — the UNMATCHED rows are the export candidates.
 #
-#   ./export-upload-blobs.sh export [--inventory FILE] [--out DIR] [ID...]
+#   ./export-upload-blobs.sh export [--inventory FILE] [--out DIR] [--all] [ID...]
 #       Fetch the given blob ids (default: every UNMATCHED upload), verify the
 #       sha256 against the database value and write
 #       DIR/<upload-date>_<fileName>. Idempotent: an existing file with the
-#       right hash is skipped.
+#       right hash is skipped. `--all` exports every upload, including the ones
+#       that are byte-identical to a delivery file — the forensic archive keeps
+#       the upload objects themselves, under the names the client gave them.
 #
 # Environment:
 #   SSH_HOST   SSH config alias of the production host (default: catchlogx-boku)
@@ -57,6 +59,7 @@ READONLY_OPTS='-c default_transaction_read_only=on -c statement_timeout=120s'
 INVENTORY=""
 IDS=()
 ARGS=()
+ALL=0
 
 usage() {
   sed -n '2,48p' "$0" | sed 's/^# \{0,1\}//'
@@ -186,7 +189,12 @@ cmd_export() {
   guard_target
   local -A wanted=()
   local id
-  if [ "${#IDS[@]}" -gt 0 ]; then
+  if [ "$ALL" = 1 ]; then
+    while IFS=$'\t' read -r id _; do
+      [ "$id" = "id" ] && continue
+      wanted[$id]=1
+    done <"$INVENTORY"
+  elif [ "${#IDS[@]}" -gt 0 ]; then
     for id in "${IDS[@]}"; do wanted[$id]=1; done
   else
     index_archive
@@ -215,6 +223,7 @@ while [ $# -gt 0 ]; do
   --out) OUT="$2"; shift 2 ;;
   --inventory) INVENTORY="$2"; shift 2 ;;
   --archive) ARCHIVE="$2"; shift 2 ;;
+  --all) ALL=1; shift ;;
   -h | --help) usage 0 ;;
   *) ARGS+=("$1"); shift ;;
   esac
