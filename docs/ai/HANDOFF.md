@@ -14,15 +14,25 @@ Offene Aufgaben für die nächste Session.
 **Stand 2026-11-14 (Cutover-Entscheidung, #200):** Die Prod-DB wird **neu
 aufgebaut** statt migriert — `prisma migrate deploy` auf eine leere DB, dann
 reiner Datei-Import aus `CatchLogX-Data` mit allen Validierungen aktiv, ids neu
-vergeben. Runbook: `deploy/prod/cutover/README.md`. **Reihenfolge:** #203 (13
-fehlende Juni-Blobs exportieren, read-only, kann sofort) → #80 + #201
-(Arten-Validierung gegen `fish_species`, GUI-Fischarten) → #202
+vergeben. Runbook: `deploy/prod/cutover/README.md`. **Reihenfolge:** #203
+(Blob-Inventur read-only; Werkzeug steht als
+`deploy/prod/cutover/export-upload-blobs.sh`, der Lauf braucht SSH/VPN) → #80 +
+#201 (Arten-Validierung gegen `fish_species`, GUI-Fischarten) → #202
 (`Imports`-Modell für die frische DB) → Excel-Reparaturen im -data-Repo (18
 Zeilen, 2 Namen; `Salvelinus fontinalis × Salvelinus umbla` braucht Lenas
-Zielnamen) → #204 (Runbook + Dev-Trockenlauf) → Prod-Fenster. **M bleibt
-geparkt** (#206): Prod hat danach ~401 269 statt 464 654 Fänge. Die 5
-Juni-Dateien im Archiv sind frühere Fassungen und werden **nicht** importiert.
-Cutover-Satz: 13 Dateien / 183 855 Zeilen.
+Zielnamen) → #204 (Runbook + Dev-Trockenlauf) → Prod-Fenster.
+**Cutover-Satz: 13 Dateien / 183 855 Fänge** (464 654 → −60 %). Die früher
+genannten „~401 269" sind falsch: ein reiner Datei-Import reproduziert keine
+Duplikate. **M ist nicht geparkt, sondern kommt nach dem Fenster als regulärer
+Upload** (#206, 63 385 Fänge, 1 638 `site_name`-Zellen offen — blockiert
+nichts). **Die 13 Juni-Uploads sind nicht verschollen:** sie sind byte-identisch
+mit Repo-Dateien (`CatchLogX-Data#6`), die Rechnung „≈ 39 000" ist
+zurückgenommen (Datei- vs. DB-Zeilenzahlen). Von den 5 Legacy-Dateien sind zwei
+content-identisch mit `2026_E_F`/`2026_S`; die drei Juni-23-Dateien sind eine
+**eigene Lieferung** (45 380 Zeilen, Donaukanal/Drau/Donau) — offene
+Entscheidung, siehe Runbook. **#80 lehnt eine Datei mit unbekannter Art
+komplett ab**, damit sind `2026_D`, `2026_E_F`, `2026_I`, `2026_S` bis zur
+Reparatur aus `CatchLogX-Data#7` hart blockiert.
 
 **Stand 2026-11-14 (#198, P1 erledigt):** `scripts/` ist nach Risikoklasse
 getrennt (`demo/`, `data/`, `prod/`, `ops/`) und `lib/seedGuard.ts` verweigert
@@ -31,12 +41,14 @@ Seeds auf jeder DB, die Fänge enthält; `wipe-*` braucht
 `npm run db:init`; `docker-compose.yml` seedet nicht mehr. **Offen in #198:**
 P2 (GUI-Fischarten) läuft als #201, P3 (Coverage-Check) geht in #204 auf,
 P4/P5 sind durch den Cutover #200 ersetzt.
-**Geparkte Frage (Entscheidung durch Georg, bewusst kein Ticket):**
-Bestandsaufnahme Prod ↔ Excel-Archiv — auf Prod read-only
-`SELECT date_trunc('month', "createdAt"), count(*) FROM fish_catches GROUP BY 1 ORDER BY 1;`
-gegen die **426 251** archivierten Datenzeilen im Datenrepo. Die Lücke
-(≥ 38 000, je nach Teilimporten größer) ist unerklärt; solange sie offen ist,
-ist P5 (Prod wipen und re-importieren) nicht vertretbar.
+**Geparkte Frage (Entscheidung durch Georg, bewusst kein Ticket) — aufgelöst
+2026-11-14:** Bestandsaufnahme Prod ↔ Excel-Archiv. Die Lücke ist **keine
+fehlende Datei**, sondern Duplikat: Prod hat 464 654 Fänge, die 13 Cutover-Dateien
+haben 183 855 Zeilen; der Rest sind Juni-Teilimporte derselben Dateien, die drei
+Varianten der Juni-23-Lieferung und die früheren `E_F`/`S`-Fassungen. Die
+sha256-Prüfung (`CatchLogX-Data#6`) zeigt, dass 13 der 18 Prod-Uploads
+byte-identisch mit Repo-Dateien sind. P5 (Prod wipen und re-importieren) ist
+durch den Cutover #200 ersetzt.
 **#184 ist umentschieden und noch nicht im Ticket nachgezogen:** die
 Originaldatei wird dauerhaft als `FileBlob` gespeichert (`Imports.blobId`),
 beim Löschen eines Imports werden Fänge, Samplings **und** der Blob gelöscht
