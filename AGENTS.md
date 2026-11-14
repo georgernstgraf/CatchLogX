@@ -43,6 +43,8 @@ npm run lint          # ESLint directly (eslint .) — Next 16 removed `next lin
 npm run typecheck     # tsc --noEmit
 npm test              # Vitest, single run (vitest run) — pure service-logic tests, no DB needed
 npm run create-user   # create admin user (hardcoded admin/admin, dev only)
+npm run db:init       # migrate deploy + demo seed — the entry point for a new database
+npm run seed:demo     # demo seed only; one-shot per DB (the seed guard refuses once a catch exists)
 npm run prisma:generate  # regenerate Prisma client (required after schema changes; also runs via postinstall)
 npm run prisma:migrate -- --name <name>  # schema change (dev): create + apply a migration
 npm run prisma:deploy   # apply pending migrations (dev instance, production)
@@ -170,6 +172,7 @@ Uploaded files and template files are stored as **PostgreSQL blobs** (`FileBlob`
 - `@/*` path alias resolves to project root
 - Files using hooks or browser APIs need `"use client"` directive
 - `no-explicit-any` ESLint rule is disabled (`@typescript-eslint/no-explicit-any: off`)
+- `scripts/` is split by risk class — `demo/` (seed + wipe, guarded by `lib/seedGuard.ts`), `data/`, `prod/`, `ops/` (#198). Anything that writes base data lives in `demo/` and imports the guard.
 
 ## Key Files
 

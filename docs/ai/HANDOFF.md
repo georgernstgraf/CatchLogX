@@ -3,13 +3,33 @@ type: Handoff
 title: Handoff
 description: Offene Aufgaben fuer die naechste Session.
 tags: [catchlogx, handoff]
-generated: { by: opencode/knowledge-persistence, at: 2026-11-14T19:40:00Z }
+generated: { by: opencode/knowledge-persistence, at: 2026-11-14T20:13:37Z }
 status: stable
 ---
 
 # Handoff
 
 Offene Aufgaben für die nächste Session.
+
+**Stand 2026-11-14 (#198, P1 erledigt):** `scripts/` ist nach Risikoklasse
+getrennt (`demo/`, `data/`, `prod/`, `ops/`) und `lib/seedGuard.ts` verweigert
+Seeds auf jeder DB, die Fänge enthält; `wipe-*` braucht
+`ALLOW_DESTRUCTIVE_SEED=<hostname>/<db>`. Einstieg für eine neue DB ist
+`npm run db:init`; `docker-compose.yml` seedet nicht mehr. **Offen in #198:**
+P2 (GUI-Fischarten, #183 Teil 3+4), P3 (Coverage-Check Excels ↔
+`fish_species`), P4 (Wipe + Re-Import auf Dev), P5 (Prod-Fenster).
+**Geparkte Frage (Entscheidung durch Georg, bewusst kein Ticket):**
+Bestandsaufnahme Prod ↔ Excel-Archiv — auf Prod read-only
+`SELECT date_trunc('month', "createdAt"), count(*) FROM fish_catches GROUP BY 1 ORDER BY 1;`
+gegen die **426 251** archivierten Datenzeilen im Datenrepo. Die Lücke
+(≥ 38 000, je nach Teilimporten größer) ist unerklärt; solange sie offen ist,
+ist P5 (Prod wipen und re-importieren) nicht vertretbar.
+**#184 ist umentschieden und noch nicht im Ticket nachgezogen:** die
+Originaldatei wird dauerhaft als `FileBlob` gespeichert (`Imports.blobId`),
+beim Löschen eines Imports werden Fänge, Samplings **und** der Blob gelöscht
+(Tombstone bleibt), der Dialog bietet vorher „Download a copy"; der
+Altbestand (18 Juni-Uploads) bekommt Download, aber keinen Delete, weil seine
+Fänge `importId = NULL` haben. Details im Issue-Verlauf von #184.
 
 **Stand 2026-11-10 (Send-Only-Mail Dev, #193):** `catchlogx.graf.priv.at` ist
 als reine Sende-Domain eingerichtet (`noreply@…`), DNS in `mexx` (A statt

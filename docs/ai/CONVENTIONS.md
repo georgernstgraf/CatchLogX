@@ -3,7 +3,7 @@ type: Conventions
 title: Conventions
 description: Coding-Muster, Namensregeln und Stilvereinbarungen.
 tags: [catchlogx, conventions]
-generated: { by: opencode/knowledge-persistence, at: 2026-11-14T19:40:00Z }
+generated: { by: opencode/knowledge-persistence, at: 2026-11-14T20:13:37Z }
 status: stable
 ---
 
@@ -53,6 +53,19 @@ Follow these without question. Do not deviate unless explicitly told.
 - PostgreSQL 16 via Docker (`docker compose up -d db`)
 - Schema changes: `npm run prisma:migrate -- --name <name>` (creates + applies a migration; needs `SHADOW_DATABASE_URL`); deploy with `npm run prisma:deploy`. **Never `prisma db push`** (#129)
 - Run `npm run prisma:generate` after any schema change, before `next dev` or `next build` (also runs automatically via the `postinstall` script, #151)
+
+## Scripts
+- `scripts/` is split by **risk class**, not by host (#198):
+  - `demo/` — seed and wipe scripts. Guarded by `lib/seedGuard.ts`: they refuse on any database that already holds catches; `wipe-*` additionally needs `ALLOW_DESTRUCTIVE_SEED=<hostname>/<current_database()>`.
+  - `data/` — data maintenance that needs no database (e.g. the species-list generator, `--write`/`--check`).
+  - `prod/` — one-off runbooks for the production machine.
+  - `ops/` — harmless operational helpers (create-user, readonly-role, release, hooks, icons).
+- A new script that writes base data belongs in `demo/` and imports the guard; the test in `lib/seedGuard.test.ts` fails otherwise.
+
+## Local Entry Point
+- New database: `docker compose up -d db db-shadow-init`, then `npm run db:init` (migrate deploy + demo seed), then `npm run dev`.
+- The `app` service in `docker-compose.yml` is **not** the entry point and no longer seeds anything.
+- `npm run db:init` is one-shot per database: the seed guard refuses as soon as a catch exists. For a fresh demo dataset wipe first (`scripts/demo/wipe-and-seed.ts`).
 
 ## Environment Variables
 Required: `DATABASE_URL` (PostgreSQL connection string).
