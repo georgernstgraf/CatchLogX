@@ -3,12 +3,21 @@ import type { FileErrorGroup, FileReport } from "@/lib/uploadReport";
 /**
  * Client-side wrappers for the bulk upload API (#88). Also exports the report
  * normalisers so a malformed payload never reaches the UI.
+ *
+ * Since #202 an upload imports directly: the response lists the created
+ * `Imports` rows (one per file) instead of pending upload records.
  */
 
-export type UploadedFile = { id: string; fileName: string; state: string };
+export type ImportedFile = { id: string; fileName: string; rowCount: number };
 
 export type UploadOutcome =
-  | { ok: true; report: FileReport[]; uploads: UploadedFile[] }
+  | {
+      ok: true;
+      report: FileReport[];
+      imports: ImportedFile[];
+      samplings: number;
+      catches: number;
+    }
   | {
       ok: false;
       error: string;
@@ -51,6 +60,27 @@ function isFileReport(value: unknown): value is FileReport {
     typeof report.passedRows === "number" &&
     typeof report.failedRows === "number"
   );
+}
+
+// Exported for unit tests (see lib/upload-client.test.ts, #112).
+export function normalizeImports(value: unknown): ImportedFile[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isImportedFile);
+}
+
+function isImportedFile(value: unknown): value is ImportedFile {
+  if (!value || typeof value !== "object") return false;
+  const imported = value as Record<string, unknown>;
+  return (
+    typeof imported.id === "string" &&
+    typeof imported.fileName === "string" &&
+    typeof imported.rowCount === "number"
+  );
+}
+
+/** Counts default to 0 so a missing field never renders as `undefined`. */
+function countOrZero(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 /**
@@ -99,7 +129,9 @@ export async function uploadFiles(files: File[]): Promise<UploadOutcome> {
     details?: string;
     report?: unknown;
     zipToken?: string;
-    uploads?: UploadedFile[];
+    imports?: unknown;
+    samplings?: unknown;
+    catches?: unknown;
   } = {};
 
   if (raw.trim().length > 0) {
@@ -126,7 +158,9 @@ export async function uploadFiles(files: File[]): Promise<UploadOutcome> {
   return {
     ok: true,
     report: normalizeReports(payload.report),
-    uploads: Array.isArray(payload.uploads) ? payload.uploads : [],
+    imports: normalizeImports(payload.imports),
+    samplings: countOrZero(payload.samplings),
+    catches: countOrZero(payload.catches),
   };
 }
 

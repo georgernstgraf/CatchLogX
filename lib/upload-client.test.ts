@@ -2,11 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   describeHttpFailure,
   normalizeErrorGroups,
+  normalizeImports,
   normalizeReports,
   uploadFiles,
 } from "@/lib/upload-client";
 
-// Tests for the client-side bulk upload wrapper (#88).
+// Tests for the client-side bulk upload wrapper (#88, import model since #202).
 // fetch is stubbed: no request leaves the test.
 // downloadErrorArchive is not covered (needs a DOM).
 
@@ -72,9 +73,27 @@ describe("normalizeErrorGroups", () => {
   });
 });
 
+describe("normalizeImports", () => {
+  it("keeps well-formed imports and drops garbage", () => {
+    const imported = { id: "i1", fileName: "a.xlsx", rowCount: 3 };
+    expect(normalizeImports([imported, { id: "i2" }, null])).toEqual([
+      imported,
+    ]);
+  });
+
+  it("returns an empty list for a non-array", () => {
+    expect(normalizeImports(undefined)).toEqual([]);
+  });
+});
+
 describe("uploadFiles", () => {
   it("posts the files as multipart form data", async () => {
-    respond({ report: [validReport], uploads: [{ id: "u1", fileName: "a.xlsx", state: "UPLOADED" }] });
+    respond({
+      report: [validReport],
+      imports: [{ id: "i1", fileName: "a.xlsx", rowCount: 3 }],
+      samplings: 2,
+      catches: 3,
+    });
 
     const outcome = await uploadFiles([new File(["x"], "a.xlsx")]);
 
@@ -84,7 +103,46 @@ describe("uploadFiles", () => {
     expect(outcome).toEqual({
       ok: true,
       report: [validReport],
-      uploads: [{ id: "u1", fileName: "a.xlsx", state: "UPLOADED" }],
+      imports: [{ id: "i1", fileName: "a.xlsx", rowCount: 3 }],
+      samplings: 2,
+      catches: 3,
+    });
+  });
+
+  it("defaults missing counts and imports to empty values", async () => {
+    respond({ report: [validReport] });
+
+    const outcome = await uploadFiles([new File(["x"], "a.xlsx")]);
+
+    expect(outcome).toEqual({
+      ok: true,
+      report: [validReport],
+      imports: [],
+      samplings: 0,
+      catches: 0,
+    });
+  });
+
+  // A duplicate file is rejected with 409 and only an `error` field: the server
+  // text is the message, nothing crashes (#202).
+  it("surfaces a duplicate file (409) as a plain error message", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      text: async () =>
+        JSON.stringify({
+          error: "This file has already been imported.",
+        }),
+    });
+
+    const outcome = await uploadFiles([new File(["x"], "a.xlsx")]);
+
+    expect(outcome).toEqual({
+      ok: false,
+      error: "This file has already been imported.",
+      details: undefined,
+      report: [],
+      zipToken: undefined,
     });
   });
 

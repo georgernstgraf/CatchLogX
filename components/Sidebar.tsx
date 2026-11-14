@@ -40,7 +40,7 @@ const Sidebar = () => {
       protected: false,
     },
     {
-      title: "My Uploads",
+      title: "My Imports",
       path: "/my-uploads",
       icon: FileInputIcon,
       protected: false,
