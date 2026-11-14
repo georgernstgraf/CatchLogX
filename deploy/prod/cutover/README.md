@@ -44,8 +44,9 @@ archived June files) ≈ 39 000 = the 13 June blobs that were never exported.
   `site_name` — parked.)
 - **Species:** 6 distinct strings do not match the 165 master entries. Three
   are pure normalisation (NBSP in 171 rows, `(hybrid)` suffix in 2) and are
-  caught by `normalizeSpeciesName`; three need an Excel repair (18 rows in 3
-  files, see #200).
+  caught by `normalizeSpeciesName`; two need an Excel repair now (18 rows in
+  4 files, `CatchLogX-Data#7`). The third (`Leuciscus aspius hyb`) only occurs
+  in the parked M file.
 - **PIT:** no duplicate `pit_dec` within any file, in none of the 19 files.
 
 ## Phase 0 — archive completeness (read-only) — #203
