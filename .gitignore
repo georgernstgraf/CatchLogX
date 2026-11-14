@@ -41,6 +41,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# eslint cache (#195)
+.eslintcache
+
 /app/generated/prisma
 /prisma/prisma/test_db.sqlite
 
