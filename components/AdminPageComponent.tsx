@@ -7,6 +7,7 @@ import {
   Users,
   FileSpreadsheet,
   Files,
+  Fish,
   Download,
   Check,
   X,
@@ -15,6 +16,7 @@ import {
   Edit,
 } from "lucide-react";
 import AdminTemplateFilesManager from "./AdminTemplateFilesManager";
+import AdminFishSpeciesManager from "./AdminFishSpeciesManager";
 import { useAuth } from "./AuthProvider";
 
 type Upload = {
@@ -415,6 +417,17 @@ const AdminPageComponent = () => {
               <Files className="mr-2" size={20} />
               Template Files
             </button>
+            <button
+              onClick={() => setActiveTab("fish-species")}
+              className={`flex items-center px-4 py-2 border-b-2 transition-colors ${
+                activeTab === "fish-species"
+                  ? "border-[#357174] text-[#357174]"
+                  : "border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+              }`}
+            >
+              <Fish className="mr-2" size={20} />
+              Fish Species
+            </button>
           </div>
 
           {/* Tab Content */}
@@ -674,6 +687,8 @@ const AdminPageComponent = () => {
             )}
 
             {activeTab === "template-files" && <AdminTemplateFilesManager />}
+
+            {activeTab === "fish-species" && <AdminFishSpeciesManager />}
           </div>
         </div>
       </div>
