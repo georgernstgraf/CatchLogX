@@ -11,13 +11,26 @@ status: stable
 
 Offene Aufgaben für die nächste Session.
 
+**Stand 2026-11-14 (Cutover-Entscheidung, #200):** Die Prod-DB wird **neu
+aufgebaut** statt migriert — `prisma migrate deploy` auf eine leere DB, dann
+reiner Datei-Import aus `CatchLogX-Data` mit allen Validierungen aktiv, ids neu
+vergeben. Runbook: `deploy/prod/cutover/README.md`. **Reihenfolge:** #203 (13
+fehlende Juni-Blobs exportieren, read-only, kann sofort) → #80 + #201
+(Arten-Validierung gegen `fish_species`, GUI-Fischarten) → #202
+(`Imports`-Modell für die frische DB) → Excel-Reparaturen im -data-Repo (18
+Zeilen, 2 Namen; `Salvelinus fontinalis × Salvelinus umbla` braucht Lenas
+Zielnamen) → #204 (Runbook + Dev-Trockenlauf) → Prod-Fenster. **M bleibt
+geparkt** (#206): Prod hat danach ~401 269 statt 464 654 Fänge. Die 5
+Juni-Dateien im Archiv sind frühere Fassungen und werden **nicht** importiert.
+Cutover-Satz: 13 Dateien / 183 855 Zeilen.
+
 **Stand 2026-11-14 (#198, P1 erledigt):** `scripts/` ist nach Risikoklasse
 getrennt (`demo/`, `data/`, `prod/`, `ops/`) und `lib/seedGuard.ts` verweigert
 Seeds auf jeder DB, die Fänge enthält; `wipe-*` braucht
 `ALLOW_DESTRUCTIVE_SEED=<hostname>/<db>`. Einstieg für eine neue DB ist
 `npm run db:init`; `docker-compose.yml` seedet nicht mehr. **Offen in #198:**
-P2 (GUI-Fischarten, #183 Teil 3+4), P3 (Coverage-Check Excels ↔
-`fish_species`), P4 (Wipe + Re-Import auf Dev), P5 (Prod-Fenster).
+P2 (GUI-Fischarten) läuft als #201, P3 (Coverage-Check) geht in #204 auf,
+P4/P5 sind durch den Cutover #200 ersetzt.
 **Geparkte Frage (Entscheidung durch Georg, bewusst kein Ticket):**
 Bestandsaufnahme Prod ↔ Excel-Archiv — auf Prod read-only
 `SELECT date_trunc('month', "createdAt"), count(*) FROM fish_catches GROUP BY 1 ORDER BY 1;`

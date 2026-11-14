@@ -1,5 +1,26 @@
 # Persistenz-Log
 
+## 2026-11-14 — Cutover statt Migration, Epic #200 mit sechs Untersissues
+
+* **Creation**: `deploy/prod/cutover/README.md` — Runbook-Gerüst mit
+  Entscheidung, Input-Menge (13 Dateien / 183 855 Zeilen), Validierungsstand,
+  Phase 0 (Blob-Export, read-only), Phase 1 (Dev-Trockenlauf), Phase 2
+  (Prod-Fenster), Verifikation, Rollback, Ankündigung. Unverifizierte Schritte
+  sind als `TODO (#204)` markiert.
+* **Update**: `DECISIONS.md` (Cutover-Entscheidung, ids neu, M geparkt),
+  `STATE.md` (Epic + Untersissues, beantwortete 38k-Lücke), `HANDOFF.md`
+  (Reihenfolge der nächsten Schritte; P4/P5 aus #198 als ersetzt markiert).
+* **Reason**: Die Prod-DB hat keine Herkunft (kein `importId`, kein
+  `Imports`-Modell, kein Unique-Key auf `samplings`), deshalb ist ein
+  Import-Löschen heute nicht möglich und ein Re-Import nicht wiederholbar.
+  Neuaufbau statt Migration macht die Herkunft per Konstruktion wahr.
+* **Verifikation**: Zahlen gegen die 19 Dateien im -data-Repo geprüft
+  (Summe 426 251 Zeilen, `should_work` 13 = 183 855, M = 63 385, Legacy 5 =
+  178 011); Validator-Lauf gegen `2026_M_final.xlsx` (1 638 ×
+  `site_name` fehlt); Arten-Abgleich gegen `assets/species.json` (6 Strings,
+  davon 3 NBSP/`(hybrid)`); PIT-Dublettenprüfung über alle 19 Dateien (0).
+  Kein Code geändert, Gate nicht nötig.
+
 ## 2026-11-14 — GUI-Sprache: deutsche Reststrings entfernt (#199)
 
 * **Update**: 24 deutsche Strings in sechs Dateien übersetzt (`app/api/query/route.ts`,
