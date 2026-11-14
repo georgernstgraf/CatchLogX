@@ -58,13 +58,13 @@ app/                    Next.js App Router pages + API routes
   globals.css           Tailwind import + dark mode CSS variables
   login/page.jsx        Login page
   upload/page.tsx       File upload page
-  admin/page.tsx        Admin panel (user/upload management)
+  admin/page.tsx        Admin panel (user/import management)
   about/page.tsx        About page with contact info
-  my-uploads/page.tsx   User's uploaded files list
+  my-uploads/page.tsx   User's own imports (with delete + download)
   reset-password/page.tsx   Password reset page
   first-login/page.tsx      First-login password change page
   api/auth/             Sign-in, logout, session, change-initial-password
-  api/admin/            Admin CRUD (users, uploads, files)
+  api/admin/            Admin CRUD (users, imports, files)
   api/query/            SQL query execution + save
   api/upload/           Excel upload (new = bulk 1..N files, my, error-report, template-file)
   api/forgot-password/  Forgot password request
@@ -102,7 +102,8 @@ lib/                    Server-side utilities
 services/               Business logic layer (API routes delegate here)
   authService.ts        Sign-in, session validation
   passwordService.ts    Forgot-password, reset, change-initial-password
-  adminService.ts       User CRUD, upload approval/rejection, file downloads
+  adminService.ts       User CRUD + the admin panel aggregate (users + imports)
+  importService.ts      The one import write path, deleteImport, list, download (#202)
   templateFileService.ts  Template file list, upload, visibility, soft delete, download
   fishSpeciesService.ts Fish species list, create, rename, delete (delete refused while catches exist, #201)
   queryService.ts       SQL query execution as clx_readonly + QueryLog audit
@@ -127,18 +128,25 @@ docker-compose.prod.yml Production override (#143): disables the base `app` serv
 ## Data Model
 ```
 User ──< Session             (custom auth)
-User ──< Uploads             (excel upload tracking)
+User ──< Imports             (one row per imported Excel file, #202)
+User ──< Imports             (as deletedBy: who deleted it)
 User ──< UserQueries          (saved SQL queries)
 User ──< QueryLog             (audit log of executed SQL, #121)
-UploadStates: UPLOADED | ACCEPTED | REJECTED | DB_ERROR | SAVED_IN_DB
 PasswordResetStates: REQUESTED | EXPIRED | DONE
 
 TemplateFiles ── FileBlob       (template bytes + metadata, #131)
-Uploads ── FileBlob             (uploaded Excel bytes, #131)
+Imports ── FileBlob             (the original Excel file; null after deletion, #184)
 
 RiverSite ──< Sampling ──< FishCatch ── FishSpecies
-FishCatch: added pitDec, pitHex, recapture fields for PIT tag tracking
+Sampling.importId NOT NULL ──> Imports   (provenance by construction, #202)
+FishCatch: pitDec, pitHex, recapture; @@index([pitDec])
 ```
+
+`Uploads` and the `UploadStates` enum are gone (#202): an upload imports
+directly, there is no admin review step. Deleting an import removes its
+catches, its samplings and the stored file, and leaves the `Imports` row as a
+tombstone (`deletedAt`, `deletedByUserId`, `blobId = null`) — the fingerprint
+(name, sha256, row count, who, when) stays, the content goes.
 
 ## Upload Validation (#80, #88)
 
@@ -159,6 +167,19 @@ erroring file rejects the whole bulk.
   a repeated tag is allowed; a different species for the same tag is not.
 - The database PIT check runs in one batched lookup per bulk (not one query per
   tag) and runs even when the file already has other errors (#102).
+- **Duplicate bytes** are rejected globally: the sha256 of the received file is
+  checked against active imports (`deletedAt: null`) and within the bulk, and
+  re-checked under an advisory lock inside the write transaction (#184, #202).
+
+## Import Write Path (#202)
+
+`writeImports` (services/importService.ts) is the only writer of catch data.
+One transaction for the whole bulk: per file an `Imports` row plus the stored
+original file, then one `RiverSite` upsert per distinct synthetic site code
+(`river__site__lat__long`), one `Sampling` per site and catch date (carrying
+`importId`), and the catches as `createMany` batches. `recapture` is computed
+from earlier PITs — the database first, then the files of the same bulk in
+file order. A failure rolls back the whole bulk, including the stored files.
 
 ## Auth Flow
 ```

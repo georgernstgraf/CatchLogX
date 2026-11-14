@@ -153,6 +153,10 @@ whose samplings still carry `NULL`.
 > fails on the `NOT NULL` alter. The alternative (backfilling the 18 legacy
 > uploads into synthetic `Imports` rows) was rejected with the cutover
 > decision: the fresh database has one state only.
+>
+> **Done on dev on 2026-11-15:** pre-wipe dump, wipe, then the #202 push; the
+> deploy applied `20261114230855_imports_model` on the empty database. The
+> numbers below are the state *before* the wipe (127 179 catches).
 
 ### 1. Wipe the fish data, keep the masters
 
@@ -191,6 +195,14 @@ in the deploy job; run it by hand only if the release is already published.
 Through the **real upload/import path** — no script, no bypass — file by file
 in name order. Record per file: rows in the source, rows imported, samplings,
 river sites created.
+
+Since #202 the upload **imports directly**: `POST /api/upload/new` validates
+and writes in one transaction, there is no admin accept step, and a file whose
+bytes are already imported (sha256, active imports only) is refused with 409.
+Each file lands as one `Imports` row with its original file stored; the
+samplings it creates carry that `importId`, so `deleteImport` can remove a
+file's data again (catches, samplings, blob; the `Imports` row stays as a
+tombstone).
 
 **Today 9 of the 13 import** (128 594 rows): `2026_A`, `B`, `G`, `K`, `L`,
 `N_O_P`, `R`, `T`, `W_Y_Z`. The other four are rejected outright until the
