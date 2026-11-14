@@ -203,7 +203,7 @@ model FishCatch {
     sampling      Sampling    @relation(fields: [samplingId], references: [id])
     // excel erst ab/unterhalb von hier!!!
     fishId        String? // WAS IS DAS? Wir brauchen die nicht (weil wir eh id haben)
-    species       FishSpecies @relation(fields: [speciesId], references: [id])
+    species       FishSpecies @relation(fields: [speciesId], references: [id], onDelete: Restrict)
     speciesId     Int
     lengthMm      Int?
     totalWeightGr Float?
