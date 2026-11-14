@@ -1,3 +1,12 @@
+---
+type: Pitfalls
+title: Pitfalls
+description: Was nicht funktioniert, subtile Bugs und nicht offensichtliche Randbedingungen.
+tags: [catchlogx, pitfalls]
+generated: { by: opencode/knowledge-persistence, at: 2026-11-14T19:40:00Z }
+status: stable
+---
+
 # Pitfalls
 
 Things that do not work, subtle bugs, and non-obvious constraints.

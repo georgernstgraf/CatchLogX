@@ -1,3 +1,12 @@
+---
+type: State
+title: Project State
+description: Aktueller Projektstand.
+tags: [catchlogx, state]
+generated: { by: opencode/knowledge-persistence, at: 2026-11-14T19:40:00Z }
+status: stable
+---
+
 # Project State
 
 Current status as of 2026-11-10.

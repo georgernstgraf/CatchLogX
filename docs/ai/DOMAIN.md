@@ -1,3 +1,12 @@
+---
+type: Domain Notes
+title: Domain Knowledge
+description: Fachliche Regeln und Domaenenzusammenhaenge, die nicht aus dem Code hervorgehen.
+tags: [catchlogx, domain-notes]
+generated: { by: opencode/knowledge-persistence, at: 2026-11-14T19:40:00Z }
+status: stable
+---
+
 # Domain Knowledge
 
 Business rules and domain relationships not obvious from code.

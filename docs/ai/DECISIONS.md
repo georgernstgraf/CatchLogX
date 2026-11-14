@@ -1,3 +1,12 @@
+---
+type: Decisions
+title: Decisions
+description: Architektur- und Technikentscheidungen mit Begruendung (WAS und WARUM).
+tags: [catchlogx, decisions]
+generated: { by: opencode/knowledge-persistence, at: 2026-11-14T19:40:00Z }
+status: stable
+---
+
 # Decisions
 
 Architectural and technical decisions made in this project.

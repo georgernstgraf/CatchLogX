@@ -1,3 +1,12 @@
+---
+type: Architecture
+title: Architecture
+description: Lebende Strukturkarte des Systems; wird bei strukturellen Aenderungen ueberschrieben.
+tags: [catchlogx, architecture]
+generated: { by: opencode/knowledge-persistence, at: 2026-11-14T19:40:00Z }
+status: stable
+---
+
 # Architecture
 
 Living structural map of the system as of 2026-10-17.

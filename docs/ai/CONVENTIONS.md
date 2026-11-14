@@ -1,3 +1,12 @@
+---
+type: Conventions
+title: Conventions
+description: Coding-Muster, Namensregeln und Stilvereinbarungen.
+tags: [catchlogx, conventions]
+generated: { by: opencode/knowledge-persistence, at: 2026-11-14T19:40:00Z }
+status: stable
+---
+
 # Conventions
 
 Coding patterns, naming rules, and style agreements for this project.

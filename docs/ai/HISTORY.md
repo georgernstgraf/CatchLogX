@@ -1,3 +1,12 @@
+---
+type: History Archive
+title: History
+description: Append-only-Archiv ueberholter Wissenseintraege.
+tags: [catchlogx, history-archive]
+generated: { by: opencode/knowledge-persistence, at: 2026-11-14T19:40:00Z }
+status: stable
+---
+
 # History
 
 Append-only archive of superseded knowledge entries.

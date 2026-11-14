@@ -1,3 +1,12 @@
+---
+type: Handoff
+title: Handoff
+description: Offene Aufgaben fuer die naechste Session.
+tags: [catchlogx, handoff]
+generated: { by: opencode/knowledge-persistence, at: 2026-11-14T19:40:00Z }
+status: stable
+---
+
 # Handoff
 
 Offene Aufgaben für die nächste Session.
