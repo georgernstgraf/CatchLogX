@@ -5,129 +5,133 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-    provider = "prisma-client-js"
-    output   = "../app/generated/prisma"
+  provider = "prisma-client-js"
+  output   = "../app/generated/prisma"
 }
 
 datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 enum UserRoles {
-    SUPER_ADMIN
-    ADMIN
-    VIEWER
+  SUPER_ADMIN
+  ADMIN
+  VIEWER
 }
 
 model User {
-  id             String   @id @default(cuid())
-  username       String   @unique
+  id             String        @id @default(cuid())
+  username       String        @unique
   hashedPassword String
   name           String?
-  email          String     @unique
-  role           UserRoles  @default(VIEWER)
-  isActive       Boolean    @default(true)
-  isFirstLogin   Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  email          String        @unique
+  role           UserRoles     @default(VIEWER)
+  isActive       Boolean       @default(true)
+  isFirstLogin   Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
   sessions       Session[]
-  uploads        Uploads[]
+  imports        Imports[]     @relation("ImportOwner")
+  deletedImports Imports[]     @relation("ImportDeleter")
   userQueries    UserQueries[]
   queryLogs      QueryLog[]
 }
 
 model UserQueries {
-    id          String    @id @default(uuid())
-    createdAt   DateTime  @default(now())
-    updatedAt   DateTime? @updatedAt
-    userId      String
-    query       String
-    name        String
+  id        String    @id @default(uuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
+  userId    String
+  query     String
+  name      String
 
-    // relations
-    user        User      @relation(fields: [userId], references: [id])
+  // relations
+  user User @relation(fields: [userId], references: [id])
 }
 
 // Audit log of every query run through the SQL query UI (#121).
 model QueryLog {
-    id          String    @id @default(uuid())
-    createdAt   DateTime  @default(now())
-    userId      String
-    query       String
-    success     Boolean
-    error       String?
-    rowCount    Int?
-    durationMs  Int
+  id         String   @id @default(uuid())
+  createdAt  DateTime @default(now())
+  userId     String
+  query      String
+  success    Boolean
+  error      String?
+  rowCount   Int?
+  durationMs Int
 
-    // relations
-    user        User      @relation(fields: [userId], references: [id])
+  // relations
+  user User @relation(fields: [userId], references: [id])
 }
 
 model TemplateFiles {
-    id                  String    @id @default(uuid())
-    fileName            String
-    blobId              String
-    uploadedByUserId    String
-    createdAt           DateTime    @default(now())
-    isVisible           Boolean     @default(true)
-    isDeleted           Boolean?
-    deletedAt           DateTime?
+  id               String    @id @default(uuid())
+  fileName         String
+  blobId           String
+  uploadedByUserId String
+  createdAt        DateTime  @default(now())
+  isVisible        Boolean   @default(true)
+  isDeleted        Boolean?
+  deletedAt        DateTime?
 
-    // relations
-    blob                FileBlob  @relation(fields: [blobId], references: [id])
+  // relations
+  blob FileBlob @relation(fields: [blobId], references: [id])
 }
 
 // File contents live in PostgreSQL instead of MinIO (#131). A blob is written
 // together with the row that references it, inside one transaction.
 model FileBlob {
-    id          String   @id @default(cuid())
-    fileName    String
-    mimeType    String
-    sizeBytes   Int
-    data        Bytes
-    createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  fileName  String
+  mimeType  String
+  sizeBytes Int
+  data      Bytes
+  createdAt DateTime @default(now())
 
-    // relations
-    uploads         Uploads[]
-    templateFiles   TemplateFiles[]
+  // relations
+  imports       Imports[]
+  templateFiles TemplateFiles[]
 }
 
 model PasswordResets {
-  id                String      @id @default(cuid())
+  id                String              @id @default(cuid())
   username          String
-  token             String      @unique
+  token             String              @unique
   timestamp         DateTime
   state             PasswordResetStates
   passwordChangedAt DateTime?
 }
 
-model Uploads {
-    id              String      @id @default(cuid())
-    uploaded_by     String
-    blobId          String
-    state           UploadStates
-    note            String?     
-    createdAt       DateTime    @default(now())
-    updatedAt       DateTime    @updatedAt
+// One imported Excel file (#202). The row is the provenance of every sampling
+// it created and survives as a tombstone after the import is deleted: the
+// fingerprint (name, hash, row count, who, when) stays, the content goes.
+model Imports {
+  id              String    @id @default(cuid())
+  batchId         String
+  userId          String
+  fileName        String
+  fileHash        String // sha256 of the received bytes, duplicate guard
+  rowCount        Int
+  blobId          String? // the original file; null after deletion
+  createdAt       DateTime  @default(now())
+  deletedAt       DateTime?
+  deletedByUserId String?
 
-    // relations
-    user            User        @relation(fields: [uploaded_by], references: [id])
-    blob            FileBlob    @relation(fields: [blobId], references: [id])
-}
+  // relations
+  user      User       @relation("ImportOwner", fields: [userId], references: [id])
+  deletedBy User?      @relation("ImportDeleter", fields: [deletedByUserId], references: [id])
+  blob      FileBlob?  @relation(fields: [blobId], references: [id], onDelete: Restrict)
+  samplings Sampling[]
 
-enum UploadStates {
-    UPLOADED
-    ACCEPTED
-    REJECTED
-    DB_ERROR
-    SAVED_IN_DB
+  @@index([userId, createdAt])
+  @@index([fileHash])
 }
 
 enum PasswordResetStates {
-    REQUESTED
-    EXPIRED
-    DONE
+  REQUESTED
+  EXPIRED
+  DONE
 }
 
 model Session {
@@ -136,93 +140,104 @@ model Session {
   userId       String
   expires      DateTime
 
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model RiverSite {
-    id             Int     @id @default(autoincrement())
-    siteCode       String  @unique
-    riverName      String
-    siteName       String?
-    landmarkUp     String? // bridge, powerline …
-    latitude       Float?
-    longitude      Float?
-    landmarkDown   String?
-    latDown        Float?
-    longDown       Float?
-    localityLength Float? // m
-    localityWidth  Float? // m
+  id             Int     @id @default(autoincrement())
+  siteCode       String  @unique
+  riverName      String
+  siteName       String?
+  landmarkUp     String? // bridge, powerline …
+  latitude       Float?
+  longitude      Float?
+  landmarkDown   String?
+  latDown        Float?
+  longDown       Float?
+  localityLength Float? // m
+  localityWidth  Float? // m
 
-    // relations
-    samplings Sampling[]
+  // relations
+  samplings Sampling[]
 
-    @@map("river_sites")
+  @@map("river_sites")
 }
 
 model Sampling {
-    id     Int       @id @default(autoincrement())
-    siteId Int
-    site   RiverSite @relation(fields: [siteId], references: [id])
+  id     Int       @id @default(autoincrement())
+  siteId Int
+  site   RiverSite @relation(fields: [siteId], references: [id])
 
-    year                      Int
-    catchDate                 DateTime?
-    dataProvider              String? // "Michael Grohmann", etc.
-    askProviderBeforeUse      Boolean? // yes / no
-    source                    String? // IHG, etc.
-    project                   String? // DB, etc.
-    fishingAuthority          String?
-    preclassificationStressor String?
-    temp                      Float? // °C
-    conductivity              Float? // µS cm-1
-    pHValue                   Float?
-    oCont                     Float? // mg l-1
-    oSat                      Float? // %
-    method                    String? // Boat / Wading …
-    assessment                String? // strip / point …
-    samplingStrategy          String? // partialprop …
-    anodes                    Int?
-    numSubsections            Int?
-    lengthSubsection          Float? // m
-    widthSubsection           Float? // m
-    typeOfStrip               String?
-    habitat                   String? // Ufer, Tief, …
-    runStrip                  String? // Flach, Pool …
-    catchEfficiency           Float? // %
-    remarksRawData            String?
-    remarkImport              String?
+  // Every sampling comes from exactly one import (#202). Restrict is
+  // deliberate: a stray DELETE on Imports must fail loudly, deletion happens
+  // explicitly in the service.
+  importId String
+  import   Imports @relation(fields: [importId], references: [id], onDelete: Restrict)
 
-    // relations
-    catches FishCatch[]
+  year                      Int
+  catchDate                 DateTime?
+  dataProvider              String? // "Michael Grohmann", etc.
+  askProviderBeforeUse      Boolean? // yes / no
+  source                    String? // IHG, etc.
+  project                   String? // DB, etc.
+  fishingAuthority          String?
+  preclassificationStressor String?
+  temp                      Float? // °C
+  conductivity              Float? // µS cm-1
+  pHValue                   Float?
+  oCont                     Float? // mg l-1
+  oSat                      Float? // %
+  method                    String? // Boat / Wading …
+  assessment                String? // strip / point …
+  samplingStrategy          String? // partialprop …
+  anodes                    Int?
+  numSubsections            Int?
+  lengthSubsection          Float? // m
+  widthSubsection           Float? // m
+  typeOfStrip               String?
+  habitat                   String? // Ufer, Tief, …
+  runStrip                  String? // Flach, Pool …
+  catchEfficiency           Float? // %
+  remarksRawData            String?
+  remarkImport              String?
 
-    @@map("samplings")
+  // relations
+  catches FishCatch[]
+
+  // `deleteImport` and the import list filter by importId (#202).
+  @@index([importId])
+  @@map("samplings")
 }
 
 model FishCatch {
-    id            Int         @id @default(autoincrement())
-    samplingId    Int
-    sampling      Sampling    @relation(fields: [samplingId], references: [id])
-    // excel erst ab/unterhalb von hier!!!
-    fishId        String? // WAS IS DAS? Wir brauchen die nicht (weil wir eh id haben)
-    species       FishSpecies @relation(fields: [speciesId], references: [id], onDelete: Restrict)
-    speciesId     Int
-    lengthMm      Int?
-    totalWeightGr Float?
-    pitDec        String?
-    pitHex        String?
-    recapture     Boolean     @default(false)
-    createdAt     DateTime    @default(now())
+  id            Int         @id @default(autoincrement())
+  samplingId    Int
+  sampling      Sampling    @relation(fields: [samplingId], references: [id])
+  // excel erst ab/unterhalb von hier!!!
+  fishId        String? // WAS IS DAS? Wir brauchen die nicht (weil wir eh id haben)
+  species       FishSpecies @relation(fields: [speciesId], references: [id], onDelete: Restrict)
+  speciesId     Int
+  lengthMm      Int?
+  totalWeightGr Float?
+  pitDec        String?
+  pitHex        String?
+  recapture     Boolean     @default(false)
+  createdAt     DateTime    @default(now())
 
-    @@map("fish_catches")
+  // PIT lookups are per-tag (recapture detection, #184); without this index
+  // they are sequential scans over the whole catch table.
+  @@index([pitDec])
+  @@map("fish_catches")
 }
 
 model FishSpecies {
-    id          Int     @id @default(autoincrement())
-    speciesName String  @unique
-    germanName  String?
-    family      String?
+  id          Int     @id @default(autoincrement())
+  speciesName String  @unique
+  germanName  String?
+  family      String?
 
-    // relations
-    catches FishCatch[]
+  // relations
+  catches FishCatch[]
 
-    @@map("fish_species")
+  @@map("fish_species")
 }

@@ -2,30 +2,26 @@ import * as XLSX from "xlsx";
 import * as ExcelJS from "exceljs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { buildFileBlobData, XLSX_MIME_TYPE } from "@/lib/fileBlobs";
 import { buildZip, putArchive } from "@/lib/errorArchive";
 import type { FileErrorGroup, FileReport } from "@/lib/uploadReport";
+import { writeImports, fileHash, type ImportRecord } from "@/services/importService";
 import {
   buildSpeciesIndex,
   normalizeSpeciesName,
   resolveSpecies,
   type SpeciesMasterEntry,
 } from "@/lib/fishSpecies";
+import {
+  cellToText,
+  isEmptyRow,
+  toDataObjects,
+  type CellValue,
+  type SheetRow,
+} from "@/lib/excelRows";
 
-// Types
-type CellValue = string | number | boolean | Date | null | undefined;
-type SheetRow = CellValue[];
-type DataObject = Record<string, CellValue>;
-
-// Row where every cell is null, undefined or a blank string.
-// Exported for unit tests (see services/uploadService.test.ts, #112).
-export const isEmptyRow = (row: SheetRow): boolean =>
-  row.every(
-    (cell) =>
-      cell === null ||
-      cell === undefined ||
-      (typeof cell === "string" && cell.trim() === ""),
-  );
+// Re-exported for the existing unit tests (#112); the implementation moved to
+// lib/excelRows so the import path reads files with the same code (#202).
+export { isEmptyRow };
 
 // vereinheitlichen von Strings zum Vergleich
 // Exported for unit tests (see services/uploadService.test.ts, #112).
@@ -357,6 +353,8 @@ export type ValidatedFile = {
   errors: ValidationError[];
   /** Set when the file cannot be parsed at all (missing sheet/columns …). */
   structuralError?: { error: string; details: string };
+  /** File-level problem found after parsing, e.g. a duplicate import (#202). */
+  fileError?: string;
   /** PIT DEC → species, used for the cross-file duplicate check. */
   pitDec: Map<string, { speciesName: string; rowNum: number }>;
 };
@@ -365,15 +363,11 @@ export type BulkUploadOutcome =
   | {
       success: true;
       report: FileReport[];
-      uploads: { id: string; fileName: string; state: string }[];
+      imports: ImportRecord[];
+      samplings: number;
+      catches: number;
     }
   | { success: false; report: FileReport[]; zipToken: string };
-
-const cellToText = (value: CellValue): string => {
-  if (value === null || value === undefined) return "";
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
-  return String(value);
-};
 
 const withValue = (message: string, value: string): string =>
   value ? `${message} (value: "${value}")` : message;
@@ -520,19 +514,13 @@ export function validateWorkbook(
   const dateKey = (value: CellValue): string =>
     value instanceof Date ? value.toISOString().slice(0, 10) : cellToText(value);
 
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
+  // Same row logic as the import path (#202): header-keyed objects, cut at the
+  // first empty row.
+  const dataObjects = toDataObjects(headers, rows);
+  end = dataObjects.length + 1;
 
-    // Stop at the first fully empty row (trailing blanks are common).
-    if (isEmptyRow(row)) {
-      end = i;
-      break;
-    }
-
-    const obj: DataObject = {};
-    headers.forEach((h: string, idx: number) => {
-      obj[h] = row[idx];
-    });
+  dataObjects.forEach((obj, index) => {
+    const rowNum = index + 2;
 
     const result = rowSchema.safeParse(obj);
 
@@ -541,9 +529,9 @@ export function validateWorkbook(
         const column = String(issue.path[0] ?? "");
         const columnIndex = headers.indexOf(column);
         if (columnIndex === -1) continue;
-        const value = cellToText(row[columnIndex]);
+        const value = cellToText(obj[column] as CellValue);
         errors.push({
-          row: i + 1,
+          row: rowNum,
           column,
           value,
           message: withValue(issue.message, value),
@@ -566,32 +554,32 @@ export function validateWorkbook(
           normalizeSpeciesName(speciesName);
         const tail = sameSpecies
           ? "a PIT tag is unique per sampling."
-          : `a PIT tag always belongs to the same individual — the rows name different species (row ${existing.rowNum}: ${existing.speciesName}, row ${i + 1}: ${speciesName}).`;
+          : `a PIT tag always belongs to the same individual — the rows name different species (row ${existing.rowNum}: ${existing.speciesName}, row ${rowNum}: ${speciesName}).`;
 
         // Both rows are marked, each pointing at the other occurrence.
         flagPit(
           existing.rowNum,
           pitDecValue,
-          `PIT DEC ${pitDecValue} already appears in row ${i + 1} of this file with the same catch date (${date}); ${tail}`,
+          `PIT DEC ${pitDecValue} already appears in row ${rowNum} of this file with the same catch date (${date}); ${tail}`,
         );
         flagPit(
-          i + 1,
+          rowNum,
           pitDecValue,
           `PIT DEC ${pitDecValue} already appears in row ${existing.rowNum} of this file with the same catch date (${date}); ${tail}`,
         );
       } else {
         pitByDate.set(`${pitDecValue}\u0000${date}`, {
           speciesName,
-          rowNum: i + 1,
+          rowNum,
         });
       }
 
       // Cross-file and database checks work per tag, not per date.
       if (!pitDec.has(pitDecValue)) {
-        pitDec.set(pitDecValue, { speciesName, rowNum: i + 1 });
+        pitDec.set(pitDecValue, { speciesName, rowNum });
       }
     }
-  }
+  });
 
   return {
     ...base,
@@ -774,6 +762,22 @@ export function buildFileReport(file: ValidatedFile): FileReport {
   const failedRows = new Set(file.errors.map((error) => error.row));
   const totalRows = file.dataRowCount;
 
+  // A file-level problem (e.g. a duplicate import) rejects the file without
+  // blaming a row (#202).
+  if (file.fileError) {
+    return {
+      fileName: file.fileName,
+      status: "failed",
+      totalRows,
+      passedRows: 0,
+      failedRows: totalRows,
+      errors: [
+        { column: "-", value: "", message: file.fileError, rows: [] },
+        ...groupErrors(file.errors),
+      ],
+    };
+  }
+
   return {
     fileName: file.fileName,
     status: file.errors.length > 0 ? "failed" : "passed",
@@ -859,12 +863,63 @@ export async function buildAnnotatedWorkbook(
 }
 
 /**
- * Validates and stores a bulk upload (1..N files, #88).
+ * Rejects bytes that are already imported (#184).
+ *
+ * The check is global (across users) and also covers the same file twice in
+ * one bulk. A soft-deleted import keeps its hash but no longer blocks a
+ * deliberate re-import. The write path re-checks inside its transaction.
+ */
+async function applyDuplicateHashChecks(
+  files: BulkUploadFile[],
+  validated: ValidatedFile[],
+): Promise<void> {
+  const hashes = files.map((file) => fileHash(file.buffer));
+
+  const firstInBulk = new Map<string, number>();
+  hashes.forEach((hash, index) => {
+    const first = firstInBulk.get(hash);
+    if (first === undefined) {
+      firstInBulk.set(hash, index);
+      return;
+    }
+    validated[index].fileError = `Identical file to "${validated[first].fileName}" in this upload.`;
+  });
+
+  let stored: { id: string; fileName: string; fileHash: string; createdAt: Date }[];
+  try {
+    stored = await prisma.imports.findMany({
+      where: { fileHash: { in: [...new Set(hashes)] }, deletedAt: null },
+      select: { id: true, fileName: true, fileHash: true, createdAt: true },
+    });
+  } catch (dbError) {
+    console.error("DB error while checking duplicate imports:", dbError);
+    for (const file of validated) {
+      if (!file.fileError) {
+        file.fileError = "Could not check the file against earlier imports.";
+      }
+    }
+    return;
+  }
+
+  if (stored.length === 0) return;
+
+  const byHash = new Map(stored.map((row) => [row.fileHash, row]));
+  hashes.forEach((hash, index) => {
+    const existing = byHash.get(hash);
+    if (!existing) return;
+    validated[index].fileError =
+      `This file was already imported on ${existing.createdAt.toISOString().slice(0, 10)} ` +
+      `(import ${existing.id}, file "${existing.fileName}"). Delete that import first if you want to import it again.`;
+  });
+}
+
+/**
+ * Validates and imports a bulk upload (1..N files, #88, #202).
  *
  * All-or-nothing: every file is validated first (read-only), then — only when
- * no file has an error — all files and their `Uploads` rows are written in a
- * single transaction. A failure writes nothing and returns a report plus a
- * token for the annotated error ZIP.
+ * no file has an error — all files are imported in a single transaction. A
+ * failure writes nothing and returns a report plus a token for the annotated
+ * error ZIP.
  */
 export async function processBulkUpload(
   files: BulkUploadFile[],
@@ -889,11 +944,13 @@ export async function processBulkUpload(
   crossFilePitCheck(validated);
   // Runs regardless of other errors so PIT conflicts are reported in the same round (#102).
   await applyDbPitChecks(validated);
+  await applyDuplicateHashChecks(files, validated);
 
   const report = validated.map(buildFileReport);
 
   const failed = validated.filter(
-    (file) => file.structuralError || file.errors.length > 0,
+    (file) =>
+      file.structuralError || file.fileError || file.errors.length > 0,
   );
 
   if (failed.length > 0) {
@@ -906,34 +963,24 @@ export async function processBulkUpload(
     return { success: false, report, zipToken: putArchive(await buildZip(entries)) };
   }
 
-  // One transaction for the whole bulk: every blob and every upload row, or
-  // nothing at all (#88).
-  const uploads = await prisma.$transaction(
-    validated.map((file) =>
-      prisma.uploads.create({
-        data: {
-          user: { connect: { id: userId } },
-          state: "UPLOADED",
-          blob: {
-            create: buildFileBlobData({
-              fileName: sanitizeFileName(file.fileName),
-              mimeType: XLSX_MIME_TYPE,
-              data: file.buffer,
-            }),
-          },
-        },
-        include: { blob: { select: { fileName: true } } },
-      }),
-    ),
+  // One transaction for the whole bulk: imports, blobs, sites, samplings and
+  // catches, or nothing at all (#202). Throws DuplicateImportError when a
+  // concurrent upload won the race for the same bytes.
+  const outcome = await writeImports(
+    files.map((file) => ({
+      fileName: sanitizeFileName(file.fileName),
+      buffer: file.buffer,
+    })),
+    userId,
+    undefined,
+    speciesIndex,
   );
 
   return {
     success: true,
     report,
-    uploads: uploads.map((upload) => ({
-      id: upload.id,
-      fileName: upload.blob.fileName,
-      state: upload.state,
-    })),
+    imports: outcome.imports,
+    samplings: outcome.samplings,
+    catches: outcome.catches,
   };
 }

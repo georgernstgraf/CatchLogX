@@ -341,12 +341,38 @@ async function main() {
 
   console.log("🎣 Inserting samplings...");
 
+  // Every sampling carries its provenance since #202 (`Sampling.importId` is
+  // NOT NULL). Demo data gets one synthetic import row so the FK holds.
+  const owner = await prisma.user.findFirst({
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+  if (!owner) {
+    throw new Error(
+      "insert-samplings.ts needs at least one user — run `npm run create-user` first.",
+    );
+  }
+  const demoImport = await prisma.imports.upsert({
+    where: { id: "seed-demo" },
+    update: {},
+    create: {
+      id: "seed-demo",
+      batchId: "seed-demo",
+      userId: owner.id,
+      fileName: "seed-demo.xlsx",
+      fileHash: "seed-demo",
+      rowCount: SAMPLINGS.length,
+    },
+    select: { id: true },
+  });
+
   await Promise.all(
     SAMPLINGS.map((sampling) =>
       prisma.sampling.upsert({
         where: { id: sampling.id },
         update: {
           siteId: sampling.siteId,
+          importId: demoImport.id,
           year: sampling.year,
           catchDate: sampling.catchDate,
           dataProvider: sampling.dataProvider,
@@ -377,6 +403,7 @@ async function main() {
         create: {
           id: sampling.id,
           siteId: sampling.siteId,
+          importId: demoImport.id,
           year: sampling.year,
           catchDate: sampling.catchDate,
           dataProvider: sampling.dataProvider,

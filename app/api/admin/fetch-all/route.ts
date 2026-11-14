@@ -9,11 +9,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { uploads, users } = await fetchAllData();
+    const { imports, users } = await fetchAllData();
 
     return NextResponse.json(
       {
-        uploads: uploads,
+        imports: imports,
         users: users,
       },
       { status: 200 },
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("[ADMIN] Failed to fetch data:", error);
     return NextResponse.json(
-      { error: "Could not load upload and user data" },
+      { error: "Could not load import and user data" },
       { status: 500 },
     );
   }

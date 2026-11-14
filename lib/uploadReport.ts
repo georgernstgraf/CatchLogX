@@ -49,7 +49,10 @@ export type FileReport = {
 /** Successful bulk upload response. */
 export type BulkUploadResult = {
   report: FileReport[];
-  uploads: { id: string; fileName: string; state: string }[];
+  /** One entry per imported file; the original file is stored with it. */
+  imports: { id: string; fileName: string; rowCount: number }[];
+  samplings: number;
+  catches: number;
 };
 
 /** Failed bulk upload response: report plus a token for the error archive. */

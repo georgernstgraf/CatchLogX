@@ -5,31 +5,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // The template is the binding Excel the users download; since #183 it lives
 // in assets/ instead of the removed samples/ folder. These tests run the real
-// template through the upload pipeline, so the template cannot drift from the
-// species master. Prisma is mocked; the species lookup answers from the seed
-// list that fills fish_species.
+// template and a real fixture through the whole pipeline — validation against
+// the species master, then the import write path (#202) — so the template
+// cannot drift from the master and the two phases cannot drift from each other.
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    uploads: { findUnique: vi.fn(), update: vi.fn() },
-    fileBlob: { findUnique: vi.fn() },
+    imports: { create: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
     riverSite: { upsert: vi.fn() },
     sampling: { create: vi.fn() },
-    fishSpecies: { findUnique: vi.fn(), findMany: vi.fn() },
-    fishCatch: { findFirst: vi.fn(), create: vi.fn() },
+    fishSpecies: { findMany: vi.fn() },
+    fishCatch: { findMany: vi.fn(), createMany: vi.fn() },
+    $transaction: vi.fn(),
+    $executeRaw: vi.fn(),
   },
 }));
-vi.mock("@/lib/mailer", () => ({ createMailerTransporter: vi.fn() }));
-vi.mock("bcrypt", () => ({ default: { hash: vi.fn() } }));
 
 import { prisma } from "@/lib/prisma";
 import { buildSpeciesIndex } from "@/lib/fishSpecies";
-import { updateUpload } from "@/services/adminService";
-import {
-  buildSchema,
-  normalize,
-  readLists,
-  validateWorkbook,
-} from "@/services/uploadService";
+import { buildSchema, normalize, readLists, validateWorkbook } from "@/services/uploadService";
+import { processBulkUpload } from "@/services/uploadService";
 
 const readRepoFile = (...segments: string[]) =>
   readFileSync(path.join(process.cwd(), ...segments));
@@ -59,7 +53,6 @@ const speciesIndex = buildSpeciesIndex(masterSpecies);
 
 describe(`template (assets/${TEMPLATE_FILE})`, () => {
   it("passes the structural validation and provides every schema column", () => {
-    // An extra or missing column would send the accept into the wrong branch.
     const file = validateWorkbook(TEMPLATE_FILE, template, speciesIndex);
 
     expect(file.structuralError).toBeUndefined();
@@ -137,28 +130,27 @@ function buildFixtureWorkbook(): Buffer {
 }
 
 describe("upload pipeline (in-memory fixture)", () => {
-  const upload = { id: "up1", blobId: "blob-1", state: "UPLOADED" };
   const fixture = buildFixtureWorkbook();
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(prisma.uploads.findUnique).mockResolvedValue(upload as any);
-    vi.mocked(prisma.uploads.update).mockImplementation((async ({
-      data,
-    }: any) => ({ ...upload, ...data })) as any);
-    vi.mocked(prisma.fileBlob.findUnique).mockResolvedValue({
-      fileName: "fixture.xlsx",
-      data: fixture,
-    } as any);
+    vi.mocked(prisma.$transaction).mockImplementation((async (arg: any) =>
+      typeof arg === "function" ? arg(prisma) : Promise.all(arg)) as any);
+    vi.mocked(prisma.fishSpecies.findMany).mockResolvedValue(
+      masterSpecies.map(({ id, speciesName }) => ({ id, speciesName })) as any,
+    );
+    vi.mocked(prisma.imports.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.imports.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.imports.create).mockImplementation((async ({ data }: any) => ({
+      id: "imp-1",
+      fileName: data.fileName,
+      rowCount: data.rowCount,
+      createdAt: new Date("2026-11-15T10:00:00Z"),
+    })) as any);
     vi.mocked(prisma.riverSite.upsert).mockResolvedValue({ id: 10 } as any);
     vi.mocked(prisma.sampling.create).mockResolvedValue({ id: 100 } as any);
-    vi.mocked(prisma.fishCatch.findFirst).mockResolvedValue(null);
-    // Exact match, like the unique index on speciesName.
-    vi.mocked(prisma.fishSpecies.findMany).mockImplementation((async () =>
-      templateSpecies.map((speciesName, index) => ({
-        id: index + 1,
-        speciesName,
-      }))) as any);
+    vi.mocked(prisma.fishCatch.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.fishCatch.createMany).mockResolvedValue({ count: 3 } as any);
   });
 
   it("passes the upload validation", () => {
@@ -169,38 +161,65 @@ describe("upload pipeline (in-memory fixture)", () => {
     expect(file.dataRowCount).toBe(3);
   });
 
-  it("imports every row and ends in SAVED_IN_DB", async () => {
-    await updateUpload("up1", "accept", undefined);
+  it("imports every row into one sampling and stores the original file", async () => {
+    const result = await processBulkUpload(
+      [{ fileName: "fixture.xlsx", buffer: fixture }],
+      "u1",
+    );
 
-    expect(
-      vi.mocked(prisma.uploads.update).mock.calls.at(-1)![0].data,
-    ).toEqual({ state: "SAVED_IN_DB", note: null });
-    expect(prisma.fishCatch.create).toHaveBeenCalledTimes(3);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+
+    expect(result.report[0]).toMatchObject({ status: "passed", totalRows: 3 });
+    expect(result.imports).toEqual([
+      expect.objectContaining({ id: "imp-1", fileName: "fixture.xlsx", rowCount: 3 }),
+    ]);
+    expect(result.samplings).toBe(1);
+    expect(result.catches).toBe(3);
+
+    // The original file is stored with the import (#184).
+    expect(prisma.imports.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          fileName: "fixture.xlsx",
+          rowCount: 3,
+          blob: { create: expect.objectContaining({ fileName: "fixture.xlsx" }) },
+        }),
+      }),
+    );
+
+    expect(prisma.riverSite.upsert).toHaveBeenCalledOnce();
     expect(prisma.sampling.create).toHaveBeenCalledOnce();
+    expect(vi.mocked(prisma.sampling.create).mock.calls[0][0].data).toMatchObject({
+      importId: "imp-1",
+      catchDate: new Date("2020-10-02"),
+    });
+    expect(prisma.fishCatch.createMany).toHaveBeenCalledOnce();
     expect(
-      vi.mocked(prisma.sampling.create).mock.calls[0][0].data,
-    ).toMatchObject({ catchDate: new Date("2020-10-02") });
+      (vi.mocked(prisma.fishCatch.createMany).mock.calls[0]![0]!.data as any[]).map(
+        (row) => row.recapture,
+      ),
+    ).toEqual([false, false, false]);
   });
 
-  it("aborts without writing when a species vanished between upload and accept", async () => {
-    // A rename/delete in the admin GUI after the upload (#80): the accept must
-    // reject the whole file, not skip the affected rows.
-    vi.mocked(prisma.fishSpecies.findMany).mockImplementation((async () =>
-      templateSpecies
-        .filter((name) => name !== "Rutilus rutilus")
-        .map((speciesName, index) => ({ id: index + 1, speciesName }))) as any);
+  it("rejects the whole file when one species is unknown, writing nothing", async () => {
+    vi.mocked(prisma.fishSpecies.findMany).mockResolvedValue(
+      masterSpecies
+        .filter(({ speciesName }) => speciesName !== "Alburnus alburnus")
+        .map(({ id, speciesName }) => ({ id, speciesName })) as any,
+    );
 
-    await updateUpload("up1", "accept", undefined);
+    const result = await processBulkUpload(
+      [{ fileName: "fixture.xlsx", buffer: fixture }],
+      "u1",
+    );
 
-    expect(
-      vi.mocked(prisma.uploads.update).mock.calls.at(-1)![0].data,
-    ).toMatchObject({ state: "DB_ERROR" });
-    expect(
-      vi.mocked(prisma.uploads.update).mock.calls.at(-1)![0].data.note,
-    ).toMatch(/Rutilus rutilus/);
-    // Nothing was written — not even the sites or the one valid species.
-    expect(prisma.riverSite.upsert).not.toHaveBeenCalled();
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.report[0].status).toBe("failed");
+    expect(result.report[0].errors[0].message).toMatch(/Alburnus alburnus/);
+    expect(prisma.imports.create).not.toHaveBeenCalled();
     expect(prisma.sampling.create).not.toHaveBeenCalled();
-    expect(prisma.fishCatch.create).not.toHaveBeenCalled();
+    expect(prisma.fishCatch.createMany).not.toHaveBeenCalled();
   });
 });

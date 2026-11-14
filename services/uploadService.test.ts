@@ -8,14 +8,23 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     fishCatch: { findFirst: vi.fn(), findMany: vi.fn() },
     fishSpecies: { findMany: vi.fn() },
-    uploads: { create: vi.fn() },
+    imports: { findMany: vi.fn() },
     $transaction: vi.fn(),
   },
+}));
+
+// The write path is its own unit (services/importService.test.ts, and the
+// end-to-end fixture in services/uploadPipeline.test.ts); here it is stubbed so
+// these tests stay about validation and the bulk decision.
+vi.mock("@/services/importService", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/importService")>()),
+  writeImports: vi.fn(),
 }));
 
 import { prisma } from "@/lib/prisma";
 import { getArchive } from "@/lib/errorArchive";
 import { buildSpeciesIndex } from "@/lib/fishSpecies";
+import { writeImports, fileHash } from "@/services/importService";
 import {
   buildAnnotatedWorkbook,
   buildSchema,
@@ -103,17 +112,16 @@ beforeEach(() => {
   vi.mocked(prisma.fishCatch.findFirst).mockResolvedValue(null);
   vi.mocked(prisma.fishCatch.findMany).mockResolvedValue([]);
   vi.mocked(prisma.fishSpecies.findMany).mockResolvedValue(masterSpecies as any);
-  vi.mocked(prisma.$transaction).mockImplementation((async (ops: any) =>
-    Promise.all(ops)) as any);
-  vi.mocked(prisma.uploads.create).mockImplementation((async ({
-    data,
-  }: any) => ({
-    id: `up-${data.blob.create.fileName}`,
-    state: data.state,
-    note: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    blob: { fileName: data.blob.create.fileName },
+  vi.mocked(prisma.imports.findMany).mockResolvedValue([]);
+  vi.mocked(writeImports).mockImplementation((async (files: any[]) => ({
+    imports: files.map((file) => ({
+      id: `imp-${file.fileName}`,
+      fileName: file.fileName,
+      rowCount: 1,
+      createdAt: new Date("2026-11-15T10:00:00Z"),
+    })),
+    samplings: files.length,
+    catches: files.length,
   })) as any);
 });
 
@@ -420,7 +428,7 @@ describe("buildAnnotatedWorkbook", () => {
 // --- processBulkUpload ------------------------------------------------------
 
 describe("processBulkUpload", () => {
-  it("stores every file of a clean bulk in one transaction", async () => {
+  it("validates every file and hands the clean bulk to the import", async () => {
     const files = [
       { fileName: "a.xlsx", buffer: dataFile([validRow]) },
       { fileName: "b.xlsx", buffer: dataFile([{ ...validRow, site_name: "B" }]) },
@@ -431,19 +439,19 @@ describe("processBulkUpload", () => {
     expect(result.success).toBe(true);
     if (!result.success) return;
     expect(result.report.map((r) => r.status)).toEqual(["passed", "passed"]);
-    expect(result.uploads.map((u) => u.fileName)).toEqual(["a.xlsx", "b.xlsx"]);
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(prisma.uploads.create).toHaveBeenCalledTimes(2);
-    expect(prisma.uploads.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          user: { connect: { id: "u1" } },
-          state: "UPLOADED",
-          blob: {
-            create: expect.objectContaining({ fileName: "a.xlsx" }),
-          },
-        }),
-      }),
+    expect(result.imports.map((i) => i.fileName)).toEqual(["a.xlsx", "b.xlsx"]);
+    expect(result.samplings).toBe(2);
+    expect(result.catches).toBe(2);
+    // One transaction for the whole bulk is the import service's job (#202).
+    expect(writeImports).toHaveBeenCalledOnce();
+    expect(writeImports).toHaveBeenCalledWith(
+      [
+        { fileName: "a.xlsx", buffer: files[0].buffer },
+        { fileName: "b.xlsx", buffer: files[1].buffer },
+      ],
+      "u1",
+      undefined,
+      expect.anything(),
     );
   });
 
@@ -459,9 +467,56 @@ describe("processBulkUpload", () => {
     if (result.success) return;
     expect(result.report.map((r) => r.status)).toEqual(["passed", "failed"]);
     expect(result.zipToken).toBeTruthy();
-    // The whole bulk is rejected: no transaction, no upload rows.
-    expect(prisma.$transaction).not.toHaveBeenCalled();
-    expect(prisma.uploads.create).not.toHaveBeenCalled();
+    // The whole bulk is rejected: nothing is imported.
+    expect(writeImports).not.toHaveBeenCalled();
+  });
+
+  it("rejects a file whose bytes an active import already holds", async () => {
+    const buffer = dataFile([validRow]);
+    vi.mocked(prisma.imports.findMany).mockResolvedValue([
+      {
+        id: "imp-old",
+        fileName: "a.xlsx",
+        fileHash: fileHash(buffer),
+        createdAt: new Date("2026-11-01T00:00:00Z"),
+      },
+    ] as any);
+
+    const result = await processBulkUpload([{ fileName: "a.xlsx", buffer }], "u1");
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.report[0].errors[0]).toMatchObject({ column: "-" });
+    expect(result.report[0].errors[0].message).toMatch(/already imported on 2026-11-01/);
+    expect(writeImports).not.toHaveBeenCalled();
+  });
+
+  it("rejects the same file twice in one bulk", async () => {
+    const buffer = dataFile([validRow]);
+
+    const result = await processBulkUpload(
+      [
+        { fileName: "a.xlsx", buffer },
+        { fileName: "a-copy.xlsx", buffer },
+      ],
+      "u1",
+    );
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.report[1].errors[0].message).toMatch(/Identical file to "a.xlsx"/);
+    expect(writeImports).not.toHaveBeenCalled();
+  });
+
+  it("propagates a write failure (nothing half-written)", async () => {
+    vi.mocked(writeImports).mockRejectedValueOnce(new Error("database down"));
+
+    await expect(
+      processBulkUpload(
+        [{ fileName: "a.xlsx", buffer: dataFile([validRow]) }],
+        "u1",
+      ),
+    ).rejects.toThrow("database down");
   });
 
   it("loads the species master once and rejects a file with an unknown species", async () => {
@@ -479,8 +534,7 @@ describe("processBulkUpload", () => {
     expect(result.report.map((r) => r.status)).toEqual(["passed", "failed"]);
     expect(result.report[1].errors[0].message).toMatch(/not in the species master.*Ballerus sp\./);
     // A file with an unknown species imports nothing — not even the good file.
-    expect(prisma.$transaction).not.toHaveBeenCalled();
-    expect(prisma.uploads.create).not.toHaveBeenCalled();
+    expect(writeImports).not.toHaveBeenCalled();
   });
 
   it("puts only the failed files in the error archive", async () => {
@@ -539,7 +593,7 @@ describe("processBulkUpload", () => {
     expect(result.report[0].status).toBe("failed");
     expect(result.report[1].status).toBe("failed");
     expect(result.report[0].errors[0].message).toMatch(/different species in file "b.xlsx"/);
-    expect(prisma.uploads.create).not.toHaveBeenCalled();
+    expect(writeImports).not.toHaveBeenCalled();
   });
 
   it("flags a PIT DEC already stored with another species", async () => {
@@ -570,14 +624,4 @@ describe("processBulkUpload", () => {
     expect(result.success).toBe(true);
   });
 
-  it("propagates a write failure (nothing half-written)", async () => {
-    vi.mocked(prisma.$transaction).mockRejectedValueOnce(new Error("database down"));
-
-    await expect(
-      processBulkUpload(
-        [{ fileName: "a.xlsx", buffer: dataFile([validRow]) }],
-        "u1",
-      ),
-    ).rejects.toThrow("database down");
-  });
 });

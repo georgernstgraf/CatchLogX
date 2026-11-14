@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth-middleware";
 import { processBulkUpload, type BulkUploadFile } from "@/services/uploadService";
+import { DuplicateImportError } from "@/services/importService";
 import { MAX_UPLOAD_FILES, MAX_UPLOAD_TOTAL_BYTES, MAX_UPLOAD_FILE_BYTES } from "@/lib/uploadReport";
 
 const MAX_TOTAL_MB = Math.round(MAX_UPLOAD_TOTAL_BYTES / (1024 * 1024));
@@ -92,11 +93,19 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      message: "Upload successful",
+      message: "Import successful",
       report: result.report,
-      uploads: result.uploads,
+      imports: result.imports,
+      samplings: result.samplings,
+      catches: result.catches,
     });
   } catch (err: any) {
+    // A concurrent upload of the same bytes won the race inside the
+    // transaction (#202) — the validation-phase check is read-only.
+    if (err instanceof DuplicateImportError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
+    }
+
     console.error("Server error during upload:", err);
     return NextResponse.json(
       { error: "Server error", details: err.message },
