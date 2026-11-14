@@ -1,9 +1,9 @@
 # Production cutover — rebuild the database from the `-data` files (#200)
 
-**Status: skeleton (2026-11-14).** The phases and numbers below are verified
-against the 19 files in `CatchLogX-Data`, but no step has been run end to end
-yet. Steps marked **TODO (#204)** are filled in and proven on the dev instance
-before the production window.
+**Status (2026-11-14).** The phases and numbers below are verified against the
+19 files in `CatchLogX-Data`, but no step has been run end to end yet. Phase 1
+(dev dry run) is specified and ordered; Phase 2 is still **TODO (#204)** and is
+filled in from what Phase 1 proves.
 
 ## Decision
 
@@ -140,20 +140,76 @@ the inventory:
 - `2026_S_valid_final.xlsx` was **never** uploaded — its hash does not occur in
   production.
 
-## Phase 1 — dev dry run — TODO (#204)
+## Phase 1 — dev dry run (#204)
 
-On the dev instance (a production clone since #188):
+On the dev instance (a production clone since #188). **Order (Georg,
+2026-11-14): wipe → migrate → import.** The wipe runs *before* the migration
+because `Sampling.importId NOT NULL` (#202) cannot be applied to a database
+whose samplings still carry `NULL`.
 
-1. Empty database, `npm run prisma:deploy` (migration history only, no seed).
-2. Import the 13 files through the real upload/import path — no script, no
-   bypass.
-3. Record: catches, samplings, river sites, species, per-file row counts.
-4. Compare against the expectation (183 855 rows, 165 species) and against the
-   per-file counts in the table above.
-5. Exercise the rollback once.
+> **Consequence for #202:** the dev deploy is push-driven and runs
+> `prisma migrate deploy` inside the deploy job. The wipe therefore has to
+> happen **before** the #202 commit is pushed to `dev` — otherwise the deploy
+> fails on the `NOT NULL` alter. The alternative (backfilling the 18 legacy
+> uploads into synthetic `Imports` rows) was rejected with the cutover
+> decision: the fresh database has one state only.
 
-**Gate:** every file accepted, row counts match the source files exactly,
-`deleteImport` removes one import cleanly (see #202).
+### 1. Wipe the fish data, keep the masters
+
+Not `scripts/demo/wipe-fish.ts` — that one deletes only `fish_species` and
+exists for a half-written seed, not for cleanup. The cutover needs the delete
+order from `scripts/demo/wipe-and-seed.ts`, without the seed step:
+
+```sql
+BEGIN;
+DELETE FROM fish_catches;
+DELETE FROM samplings;
+DELETE FROM river_sites;                                  -- optional: the import upserts them
+SELECT setval('fish_catches_id_seq', 1, false);
+SELECT setval('samplings_id_seq', 1, false);
+SELECT setval('river_sites_id_seq', 1, false);
+COMMIT;
+```
+
+- **`fish_species` stays** (165 entries) — the import validates every species
+  against it, and a missing entry rejects the whole file (#80).
+- **`FileBlob` rows behind `Uploads`:** the #202 migration drops `Uploads`, so
+  those blobs become orphans. They are already archived in
+  `legacy-uploads-2026-06/` (Phase 0), so delete them explicitly rather than
+  carrying dead weight. `TemplateFiles` blobs are **not** affected.
+- The wipe scripts require `ALLOW_DESTRUCTIVE_SEED=<hostname>/<db>`; a manual
+  `psql` session bypasses that guard, so print the database name first.
+
+### 2. Migrate
+
+`npx prisma migrate deploy` — applies #202's migration (drops `Uploads`,
+creates `Imports`, `Sampling.importId NOT NULL`). On dev this normally happens
+in the deploy job; run it by hand only if the release is already published.
+
+### 3. Import
+
+Through the **real upload/import path** — no script, no bypass — file by file
+in name order. Record per file: rows in the source, rows imported, samplings,
+river sites created.
+
+**Today 9 of the 13 import** (128 594 rows): `2026_A`, `B`, `G`, `K`, `L`,
+`N_O_P`, `R`, `T`, `W_Y_Z`. The other four are rejected outright until the
+Excel repair with Lena lands (`CatchLogX-Data#7`) — `2026_D` (2 ×
+`Proterorhinus marmoratus`), `2026_E_F` (10), `2026_I` (4), `2026_S` (2), plus
+the 16 `Salvelinus fontinalis × Salvelinus umbla` rows waiting on Lena's
+target name. That is the intended behaviour, not a defect: a file with one
+unknown species imports nothing.
+
+### 4. Rollback drill
+
+Exercise the rollback once (restore the pre-wipe dump) and confirm the app
+serves again.
+
+**Gate:** every file that passes validation imports with row counts matching
+its source exactly; the four blocked files are rejected with the full species
+list and write nothing; `deleteImport` removes one import cleanly (see #202);
+the rollback drill is green. Phase 1b — all 13 files — runs after the Excel
+repair and is the real rehearsal for the production window.
 
 ## Phase 2 — production window — TODO (#204)
 

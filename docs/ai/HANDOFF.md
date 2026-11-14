@@ -22,6 +22,14 @@ Upload-Objekte im Datenrepo, `legacy-uploads-2026-06/inventur-prod-uploads.tsv`)
 frische DB, **nächster Schritt**) → Excel-Reparaturen im -data-Repo (18
 Zeilen, 2 Namen; `Salvelinus fontinalis × Salvelinus umbla` braucht Lenas
 Zielnamen) → #204 (Runbook + Dev-Trockenlauf) → Prod-Fenster.
+**#202-Reihenfolge (2026-11-14): Wipe → Migration → Import.** `Sampling.importId
+NOT NULL` lässt sich nicht auf eine DB mit bestehenden Samplings anwenden, und
+der Dev-Deploy fährt `prisma migrate deploy` im Deploy-Job — der Wipe auf Dev
+muss also **vor** dem Push des #202-Commits passieren, sonst scheitert der
+Deploy am `NOT NULL`-Alter. Phase 1 des Runbooks
+(`deploy/prod/cutover/README.md`) ist entsprechend ausgeschrieben: 9 der 13
+Dateien importieren heute (128 594 Zeilen), die vier artenblockierten warten auf
+`CatchLogX-Data#7`.
 **Cutover-Satz: 13 Dateien / 183 855 Fänge** (464 654 → −60 %). Die früher
 genannten „~401 269" sind falsch: ein reiner Datei-Import reproduziert keine
 Duplikate. **M ist nicht geparkt, sondern kommt nach dem Fenster als regulärer
