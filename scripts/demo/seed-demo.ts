@@ -13,11 +13,11 @@ import { createTemplateFile } from "@/services/templateFileService";
  */
 
 const SEED_STEPS = [
-  "scripts/create-user.ts",
-  "scripts/insert-fish.ts",
-  "scripts/insert-river-sites.ts",
-  "scripts/insert-samplings.ts",
-  "scripts/insert-fish-catches.ts",
+  "scripts/ops/create-user.ts",
+  "scripts/demo/insert-fish.ts",
+  "scripts/demo/insert-river-sites.ts",
+  "scripts/demo/insert-samplings.ts",
+  "scripts/demo/insert-fish-catches.ts",
 ];
 
 const TEMPLATE_FILES: { fileName: string; contentType: string }[] = [
@@ -36,7 +36,7 @@ function runStep(script: string) {
 async function seedTemplateFiles() {
   const admin = await prisma.user.findUnique({ where: { username: "admin" } });
   if (!admin) {
-    throw new Error("Dev user 'admin' missing — run scripts/create-user.ts first.");
+    throw new Error("Dev user 'admin' missing — run scripts/ops/create-user.ts first.");
   }
 
   for (const template of TEMPLATE_FILES) {

@@ -18,7 +18,7 @@
 # fully live on production, where it would
 #   * publish `0.0.0.0:5432` -> port clash with the native cluster, and
 #   * run the app container's start command, which applies migrations, SEEDS
-#     fish species (`scripts/insert-fish.ts`) and tries to bind :3001.
+#     fish species (`scripts/demo/insert-fish.ts`) and tries to bind :3001.
 #
 # The stopped `clx-postgres` container and its volume stay as the rollback path
 # for a few weeks; `docker start clx-postgres` is a direct docker command and is

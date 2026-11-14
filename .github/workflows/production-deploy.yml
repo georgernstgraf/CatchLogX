@@ -215,7 +215,7 @@ jobs:
       # Publish the immutable release and atomically repoint ~/current (last
       # step of the script). The previous release stays on disk for a rollback.
       - name: Publish the release
-        run: ./scripts/publish-release.sh "$DEPLOY_SHA"
+        run: ./scripts/ops/publish-release.sh "$DEPLOY_SHA"
 
       # The systemd unit owns the app and port 3001 from here. The interim
       # container was retired with #143; #122 removed this step together with

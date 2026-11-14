@@ -1,6 +1,6 @@
 // Species master merge (#183): the Artliste Excel is the binding source for
 // speciesName, germanName and family; existing ids are kept stable.
-// Pure functions only — the generator script (scripts/generate-fish-species-json.ts)
+// Pure functions only — the generator script (scripts/data/generate-fish-species-json.ts)
 // does the file I/O, tests use inline fixtures (lib/fishSpecies.test.ts).
 
 export type SpeciesMasterRow = {

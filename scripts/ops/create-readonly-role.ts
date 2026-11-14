@@ -1,4 +1,4 @@
-import { prisma } from "../lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 // Creates/updates the read-only role clx_readonly in a LOCAL database (docker compose),
 // so the SQL query UI works there too (#121). Hosts (dev instance, production) use

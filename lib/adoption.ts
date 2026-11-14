@@ -5,7 +5,7 @@ import { basename, join, relative, sep } from "node:path";
  * Pure planning logic for the one-time adoption of the legacy production
  * database (the `prisma db push` era) to the migration-tracked baseline
  * (#139). The runner that executes the plan lives in
- * `scripts/adopt-legacy-prod.ts`; everything here is side-effect free so it
+ * `scripts/prod/adopt-legacy-prod.ts`; everything here is side-effect free so it
  * can be unit tested without a database.
  */
 

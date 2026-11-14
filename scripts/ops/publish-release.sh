@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Publish a built Next.js standalone bundle as an immutable release (#135).
 #
-# Usage: scripts/publish-release.sh <commit-sha>     (run from the repo root, after `npm run build`)
+# Usage: scripts/ops/publish-release.sh <commit-sha>     (run from the repo root, after `npm run build`)
 #
 # Produces:
 #   ~/releases/<sha>/               standalone bundle (server.js, node_modules, .next)

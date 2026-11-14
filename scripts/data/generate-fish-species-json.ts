@@ -1,8 +1,8 @@
 // Generates assets/species.json from the binding Artliste Excel (#183).
 //
-//   npx tsx scripts/generate-fish-species-json.ts           # dry run: print the report
-//   npx tsx scripts/generate-fish-species-json.ts --write   # write assets/species.json
-//   npx tsx scripts/generate-fish-species-json.ts --check   # verify, exit 1 on drift
+//   npx tsx scripts/data/generate-fish-species-json.ts           # dry run: print the report
+//   npx tsx scripts/data/generate-fish-species-json.ts --write   # write assets/species.json
+//   npx tsx scripts/data/generate-fish-species-json.ts --check   # verify, exit 1 on drift
 //
 // The merge never drops a seed id silently: unmatched entries are kept with
 // notInArtliste: true, name collisions fail the run. speciesName, germanName
@@ -14,7 +14,7 @@ import {
   mergeArtliste,
   type ArtlisteRow,
   type SpeciesMasterRow,
-} from "../lib/fishSpecies";
+} from "@/lib/fishSpecies";
 
 const EXCEL_PATH = "assets/20261019_Artliste.xlsx";
 const JSON_PATH = "assets/species.json";
@@ -73,7 +73,7 @@ function readCurrentMaster(): SpeciesMasterRow[] {
 async function main() {
   const mode = process.argv[2] ?? "";
   if (!["", "--write", "--check"].includes(mode)) {
-    console.error("Usage: tsx scripts/generate-fish-species-json.ts [--write|--check]");
+    console.error("Usage: tsx scripts/data/generate-fish-species-json.ts [--write|--check]");
     process.exit(2);
   }
 

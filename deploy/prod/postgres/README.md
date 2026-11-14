@@ -478,7 +478,7 @@ sudo -u clxadmin XDG_RUNTIME_DIR=/run/user/1000 \
 ```
 
 The app reads the env at start, hence the restart. Locally, `npm run db:readonly-role`
-(`scripts/create-readonly-role.ts`) creates the same role with the same whitelist in the
+(`scripts/ops/create-readonly-role.ts`) creates the same role with the same whitelist in the
 compose database — keep both lists in sync.
 
 **The SQL page has a 10 s statement timeout, the research group does not.** It is

@@ -11,14 +11,14 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "prepare": "git config core.hooksPath .githooks || true",
-    "check:hooks": "node scripts/check-hooks.mjs",
-    "create-user": "tsx scripts/create-user.ts",
-    "seed:demo": "tsx scripts/seed-demo.ts",
+    "check:hooks": "node scripts/ops/check-hooks.mjs",
+    "create-user": "tsx scripts/ops/create-user.ts",
+    "seed:demo": "tsx scripts/demo/seed-demo.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "postinstall": "prisma generate",
-    "db:readonly-role": "tsx scripts/create-readonly-role.ts"
+    "db:readonly-role": "tsx scripts/ops/create-readonly-role.ts"
   },
   "dependencies": {
     "@next-auth/prisma-adapter": "^1.0.7",

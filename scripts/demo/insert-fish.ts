@@ -1,4 +1,4 @@
-import speciesJson from "../assets/species.json";
+import speciesJson from "../../assets/species.json";
 import { prisma } from "@/lib/prisma";
 import { syncSeedSequence } from "@/lib/seedSequences";
 

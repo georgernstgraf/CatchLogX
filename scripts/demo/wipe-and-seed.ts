@@ -30,7 +30,7 @@ async function main() {
 
   // Import the full species list from insert-fish.ts
   const { execSync } = await import("child_process");
-  execSync("npx tsx scripts/insert-fish.ts", { stdio: "inherit" });
+  execSync("npx tsx scripts/demo/insert-fish.ts", { stdio: "inherit" });
 
   console.log("Done.");
 }

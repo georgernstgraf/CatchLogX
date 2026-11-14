@@ -9,7 +9,7 @@
  *   ... plus the new FileBlob table that holds the bytes.
  *
  * Usage:
- *   npx tsx scripts/adopt-legacy-prod.ts --source-dir <export> [--dry-run]
+ *   npx tsx scripts/prod/adopt-legacy-prod.ts --source-dir <export> [--dry-run]
  *
  * `<export>` is a directory produced by `mc mirror` of the bucket, i.e. it
  * contains `CatchLogX/uploads/<name>` and `CatchLogX/dummy_files/<folder>/<name>`.
@@ -21,7 +21,7 @@
  */
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { PrismaClient } from "../app/generated/prisma";
+import { PrismaClient } from "@/app/generated/prisma";
 import {
   BLOB_TABLE,
   LEGACY_TEMPLATE_TABLE,
@@ -32,7 +32,7 @@ import {
   planAdoption,
   type AdoptionPlan,
   type LegacyRow,
-} from "../lib/adoption";
+} from "@/lib/adoption";
 
 interface Options {
   sourceDir: string;

@@ -29,7 +29,7 @@ On the dev instance `catchlogx.graf.priv.at` the app runs as a systemd **user** 
 Deploys are **push-driven**: the `deploy` job in `.github/workflows/deploy-dev.yml` (gated by
 the `CI` workflow via `workflow_run`) builds on the self-hosted runner
 `actions.runner.catchlogx-vps.service` (label `vps`, running under the same `catchlogx` user
-manager), publishes the release with `scripts/publish-release.sh`, applies `prisma migrate deploy`,
+manager), publishes the release with `scripts/ops/publish-release.sh`, applies `prisma migrate deploy`,
 restarts `catchlogx.service` and health-checks `127.0.0.1:40873`. So
 `systemctl --user restart catchlogx.service` is a plain ~2 s restart with **no build**, and a
 rollback is "point `~/current` at the previous release and restart". Units live in
@@ -186,7 +186,7 @@ Uploaded files and template files are stored as **PostgreSQL blobs** (`FileBlob`
 | Read-only query client | `lib/queryPrisma.ts` (`QUERY_DATABASE_URL`, role `clx_readonly`, #121) |
 | Email sender (nodemailer) | `lib/mailer.ts` |
 | Admin panel page | `app/admin/page.tsx` |
-| User creation (dev seed) | `scripts/create-user.ts` |
+| User creation (dev seed) | `scripts/ops/create-user.ts` |
 | Supervision log (hours) | `docs/Betreuung.md` |
 | Meeting minutes | `docs/meetings/` (one file per meeting: `YYYY-MM-DD-topic.md`, German) |
 
@@ -204,12 +204,12 @@ Skills live in `.opencode/skills/` and are **committed to the repo** — every c
 
 **Update the two vendored skills** (manual — there is no script for them yet):
 copy the upstream `SKILL.md` over, re-apply the CatchLogX-specific parts, and
-record the upstream commit in the header. `scripts/update-engineering-skills.sh`
+record the upstream commit in the header. `scripts/ops/update-engineering-skills.sh`
 covers only `engineering/`.
 
 **Update engineering skills** (run when you want upstream changes; review the diff before committing):
 ```
-bash scripts/update-engineering-skills.sh
+bash scripts/ops/update-engineering-skills.sh
 git diff .opencode/skills/engineering
 ```
 

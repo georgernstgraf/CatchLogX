@@ -129,7 +129,11 @@ CatchLogX/
 ├── prisma/
 │   └── schema.prisma         # DB-Schema (Änderungen via `prisma migrate dev`)
 ├── assets/                   # Master-Artenliste (Artliste + Eingabemaske V.6, siehe #183)
-├── scripts/                  # create-user, Seed- und Wipe-Scripts
+├── scripts/                  # nach Risikoklasse getrennt (siehe docs/ai/CONVENTIONS.md)
+│   ├── demo/                 # Seed + Wipe — nur auf leerer DB, seedGuard
+│   ├── data/                 # Datenpflege (Artlisten-Generator)
+│   ├── prod/                 # Einmal-Runbooks für die Produktion
+│   └── ops/                  # create-user, readonly-role, release, hooks
 ├── docs/ai/                  # Projektwissen (Architektur, Entscheidungen, ...)
 ├── middleware.ts             # Edge-Cookie-Check für /api/admin/*
 └── docker-compose.yml        # PostgreSQL 16 + App
