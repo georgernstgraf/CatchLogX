@@ -84,6 +84,7 @@ components/             React components (all client-side)
   MapComponent.tsx          Leaflet map with marker support
   AdminPageComponent.tsx    Admin user/upload management
   AdminTemplateFilesManager.tsx Template file management UI
+  AdminFishSpeciesManager.tsx Fish species management UI (admin, #201)
   MyUploadsPageComponent.tsx User's upload list
 lib/                    Server-side utilities
   prisma.ts             Prisma singleton (imports from app/generated/prisma)
@@ -95,12 +96,15 @@ lib/                    Server-side utilities
   fileBlobs.ts          FileBlob helpers (bytes in PostgreSQL)
   mailer.ts             Nodemailer SMTP transport (password reset emails)
   template-files.ts      Template file tracking helpers
+  fishSpecies.ts        Artliste master merge + normalizeSpeciesName (pure, #183)
+  fish-species-client.ts Fish species admin API client (browser, #201)
   seedSequences.ts      Moves id sequences past fixed ids written by seed scripts
 services/               Business logic layer (API routes delegate here)
   authService.ts        Sign-in, session validation
   passwordService.ts    Forgot-password, reset, change-initial-password
   adminService.ts       User CRUD, upload approval/rejection, file downloads
   templateFileService.ts  Template file list, upload, visibility, soft delete, download
+  fishSpeciesService.ts Fish species list, create, rename, delete (delete refused while catches exist, #201)
   queryService.ts       SQL query execution as clx_readonly + QueryLog audit
   uploadService.ts      Excel bulk upload: validate all files, all-or-nothing store, report (#88)
 prisma/
