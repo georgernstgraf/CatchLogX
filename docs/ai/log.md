@@ -1,5 +1,19 @@
 # Persistenz-Log
 
+## 2026-11-14 — GUI-Sprache: deutsche Reststrings entfernt (#199)
+
+* **Update**: 24 deutsche Strings in sechs Dateien übersetzt (`app/api/query/route.ts`,
+  `app/api/query/save/route.ts`, `components/SqlQueryComponent.tsx`,
+  `components/MyUploadsPageComponent.tsx`, `components/MapComponent.tsx`,
+  `app/api/admin/fetch-all/route.ts`), darunter der 403-Text, der der
+  Forschungsgruppe die Whitelist erklärt, und das Spaltenlabel
+  `"Ø Länge (mm)"` im Detail-Preset (→ `"Avg Length (mm)"`).
+* **Reason**: `CONVENTIONS.md`/`AGENTS.md` sagen „UI text: English"; der
+  Befund fiel beim Entwurf der Lösch-/Download-Dialoge für #184 auf
+  (Observed-Drift-Regel: im selben Zug beheben oder festhalten).
+* **Verifikation**: Umlaut-/Stichwort-Scan über `app/`, `components/`,
+  `services/`, `lib/` leer; kein Test prüft die Strings; Gate grün.
+
 ## 2026-11-14 — Basisdaten-Cutover, Seed-Guard, `scripts/` nach Risikoklasse (#198)
 
 * **Creation**: `lib/seedGuard.ts` + `lib/seedGuard.test.ts` (21 Tests:
