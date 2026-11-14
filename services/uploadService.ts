@@ -342,6 +342,16 @@ export type ValidationError = {
 };
 
 /** Result of validating one file: structure plus row-level problems. */
+/**
+ * First occurrence of a PIT DEC in a file, plus every row of that tag that is
+ * not marked as a recapture (checked against the database, #102).
+ */
+export type PitEntry = {
+  speciesName: string;
+  rowNum: number;
+  rowsWithoutRecapture: number[];
+};
+
 export type ValidatedFile = {
   fileName: string;
   buffer: Buffer;
@@ -356,7 +366,7 @@ export type ValidatedFile = {
   /** File-level problem found after parsing, e.g. a duplicate import (#202). */
   fileError?: string;
   /** PIT DEC → species, used for the cross-file duplicate check. */
-  pitDec: Map<string, { speciesName: string; rowNum: number }>;
+  pitDec: Map<string, PitEntry>;
 };
 
 export type BulkUploadOutcome =
@@ -493,7 +503,7 @@ export function validateWorkbook(
   // delivery for a river over many dates, so the same tag may legitimately
   // reappear on a later date (recapture). Twice on the same date is a copy
   // error (#80, #184).
-  const pitDec = new Map<string, { speciesName: string; rowNum: number }>();
+  const pitDec = new Map<string, PitEntry>();
   const pitByDate = new Map<string, { speciesName: string; rowNum: number }>();
   // A PIT can appear three times; the earlier row must not collect one error
   // per later occurrence.
@@ -575,9 +585,15 @@ export function validateWorkbook(
       }
 
       // Cross-file and database checks work per tag, not per date.
-      if (!pitDec.has(pitDecValue)) {
-        pitDec.set(pitDecValue, { speciesName, rowNum });
+      const entry = pitDec.get(pitDecValue) ?? {
+        speciesName,
+        rowNum,
+        rowsWithoutRecapture: [],
+      };
+      if (Number(obj["recapture"]) !== 1) {
+        entry.rowsWithoutRecapture.push(rowNum);
       }
+      pitDec.set(pitDecValue, entry);
     }
   });
 
@@ -646,7 +662,12 @@ const PIT_LOOKUP_BATCH = 500;
 async function applyDbPitChecks(files: ValidatedFile[]): Promise<void> {
   const hits = new Map<
     string,
-    { file: ValidatedFile; rowNum: number; speciesName: string }[]
+    {
+      file: ValidatedFile;
+      rowNum: number;
+      speciesName: string;
+      rowsWithoutRecapture: number[];
+    }[]
   >();
 
   for (const file of files) {
@@ -654,7 +675,12 @@ async function applyDbPitChecks(files: ValidatedFile[]): Promise<void> {
 
     for (const [pitDec, info] of file.pitDec) {
       const list = hits.get(pitDec) ?? [];
-      list.push({ file, rowNum: info.rowNum, speciesName: info.speciesName });
+      list.push({
+        file,
+        rowNum: info.rowNum,
+        speciesName: info.speciesName,
+        rowsWithoutRecapture: info.rowsWithoutRecapture,
+      });
       hits.set(pitDec, list);
     }
   }
@@ -701,6 +727,15 @@ async function applyDbPitChecks(files: ValidatedFile[]): Promise<void> {
         normalizeSpeciesName(storedSpecies) ===
         normalizeSpeciesName(hit.speciesName)
       ) {
+        // Same individual again: every row of it must say recapture = 1 (#102).
+        for (const row of hit.rowsWithoutRecapture) {
+          hit.file.errors.push({
+            row,
+            column: "pit_dec",
+            value: pitDec,
+            message: `PIT DEC ${pitDec} already exists in the database; this catch must be marked as a recapture (recapture = 1).`,
+          });
+        }
         continue;
       }
 

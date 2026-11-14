@@ -59,7 +59,7 @@ const validRow = {
 // --- workbook helpers -------------------------------------------------------
 
 type Row = Record<string, unknown>;
-const headers = [...Object.keys(validRow), "pit_dec"];
+const headers = [...Object.keys(validRow), "pit_dec", "recapture"];
 
 function toCells(row: Row) {
   return headers.map((h) => {
@@ -612,16 +612,47 @@ describe("processBulkUpload", () => {
     expect(result.report[0].errors[0].message).toMatch(/always belongs to the same individual/);
   });
 
-  it("accepts a known PIT tag of the same species", async () => {
+  it("accepts a known PIT tag of the same species marked as recapture", async () => {
     vi.mocked(prisma.fishCatch.findMany).mockResolvedValue([
       { pitDec: "123", species: { speciesName: "Brown trout" } },
     ] as any);
 
     const result = await processBulkUpload(
-      [{ fileName: "a.xlsx", buffer: dataFile([{ ...validRow, pit_dec: "123" }]) }],
+      [
+        {
+          fileName: "a.xlsx",
+          buffer: dataFile([{ ...validRow, pit_dec: "123", recapture: 1 }]),
+        },
+      ],
       "u1",
     );
     expect(result.success).toBe(true);
+  });
+
+  it("flags a known PIT tag of the same species without recapture = 1 (#102)", async () => {
+    vi.mocked(prisma.fishCatch.findMany).mockResolvedValue([
+      { pitDec: "123", species: { speciesName: "Brown trout" } },
+    ] as any);
+
+    const result = await processBulkUpload(
+      [
+        {
+          fileName: "a.xlsx",
+          buffer: dataFile([
+            { ...validRow, pit_dec: "123", date: new Date("2024-05-01") },
+            { ...validRow, pit_dec: "123", date: new Date("2024-06-01"), recapture: 0 },
+          ]),
+        },
+      ],
+      "u1",
+    );
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    const group = result.report[0].errors.find((e) =>
+      /must be marked as a recapture/.test(e.message),
+    );
+    expect(group?.rows).toEqual([2, 3]);
   });
 
 });
