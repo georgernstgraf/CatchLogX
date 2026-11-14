@@ -106,7 +106,7 @@ services/               Business logic layer (API routes delegate here)
   templateFileService.ts  Template file list, upload, visibility, soft delete, download
   fishSpeciesService.ts Fish species list, create, rename, delete (delete refused while catches exist, #201)
   queryService.ts       SQL query execution as clx_readonly + QueryLog audit
-  uploadService.ts      Excel bulk upload: validate all files, all-or-nothing store, report (#88)
+  uploadService.ts      Excel bulk upload: validate all files (species against fish_species, #80), all-or-nothing store, report (#88)
 prisma/
   schema.prisma         Data model + generator (output: app/generated/prisma)
   migrations/           Migration history — single baseline `*_init` (schema source of truth)
@@ -139,6 +139,26 @@ Uploads ── FileBlob             (uploaded Excel bytes, #131)
 RiverSite ──< Sampling ──< FishCatch ── FishSpecies
 FishCatch: added pitDec, pitHex, recapture fields for PIT tag tracking
 ```
+
+## Upload Validation (#80, #88)
+
+`processBulkUpload` validates every file before anything is written; one
+erroring file rejects the whole bulk.
+
+- **Species** are checked against the master in `fish_species`, loaded once per
+  bulk and matched with `normalizeSpeciesName` (NBSP, `×`→`x`, `(hybrid)`/`hyb`,
+  case, whitespace). The file's own `List` sheet is **not** authoritative for
+  the species column. An unknown species rejects the whole file and names every
+  unknown name with its Excel row numbers.
+- A **missing `List` sheet is a structural error** — without it the list
+  validation would silently accept anything (that is how three June files
+  passed the upload and lost rows at the import).
+- **PIT DEC**: the same tag twice in one file **on the same catch date** is a
+  hard error (both rows are marked). On a different date it is a legitimate
+  recapture — one file is a delivery for a river over many dates. Across files
+  a repeated tag is allowed; a different species for the same tag is not.
+- The database PIT check runs in one batched lookup per bulk (not one query per
+  tag) and runs even when the file already has other errors (#102).
 
 ## Auth Flow
 ```

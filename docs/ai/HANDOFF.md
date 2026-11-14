@@ -11,6 +11,18 @@ status: stable
 
 Offene Aufgaben für die nächste Session.
 
+**Stand 2026-11-15 (Arten-Validierung, #80 erledigt):** Die Validierung prüft
+`species` gegen `fish_species` (nicht mehr gegen das `List`-Blatt der Datei),
+ein fehlendes `List`-Blatt ist ein struktureller Fehler, und eine unbekannte Art
+lehnt die ganze Datei mit allen Namen und Zeilen ab. Damit importieren
+`2026_D`, `2026_E_F`, `2026_I` und `2026_S` weiterhin **nichts** — jetzt aber
+sichtbar in der Validierung statt als Teilimport beim Accept. **Nächster
+Schritt: #202** (Imports-Modell, `importId NOT NULL`, ein Schreibpfad,
+`deleteImport`) — Reihenfolge: implementieren → **Dev-Wipe von Hand** (Dump
+davor) → Push. Der Wipe muss vor dem Push liegen, weil der Deploy-Job
+`prisma migrate deploy` fährt und `NOT NULL` auf bestehenden Samplings
+scheitert.
+
 **Stand 2026-11-14 (Cutover-Entscheidung, #200):** Die Prod-DB wird **neu
 aufgebaut** statt migriert — `prisma migrate deploy` auf eine leere DB, dann
 reiner Datei-Import aus `CatchLogX-Data` mit allen Validierungen aktiv, ids neu
