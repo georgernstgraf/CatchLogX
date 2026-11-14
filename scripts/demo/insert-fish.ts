@@ -1,5 +1,6 @@
 import speciesJson from "../../assets/species.json";
 import { prisma } from "@/lib/prisma";
+import { assertSeedAllowed } from "@/lib/seedGuard";
 import { syncSeedSequence } from "@/lib/seedSequences";
 
 type SpeciesRow = {
@@ -14,6 +15,8 @@ type SpeciesRow = {
 const SPECIES: SpeciesRow[] = speciesJson;
 
 async function main() {
+  await assertSeedAllowed({ script: "insert-fish.ts" });
+
   for (const s of SPECIES) {
     await prisma.fishSpecies.upsert({
       where: { id: s.id },

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { assertSeedAllowed } from "@/lib/seedGuard";
 import { syncSeedSequence } from "@/lib/seedSequences";
 
 type SamplingRow = {
@@ -336,6 +337,8 @@ const SAMPLINGS: SamplingRow[] = [
 ];
 
 async function main() {
+  await assertSeedAllowed({ script: "insert-samplings.ts" });
+
   console.log("🎣 Inserting samplings...");
 
   await Promise.all(

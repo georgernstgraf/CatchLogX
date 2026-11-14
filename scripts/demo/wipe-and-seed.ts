@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
+import { assertSeedAllowed } from "@/lib/seedGuard";
 
 async function main() {
+  await assertSeedAllowed({ script: "wipe-and-seed.ts", destructive: true });
+
   console.log("Wiping fish_catches, samplings, river_sites, fish_species...");
 
   const fc = await prisma.fishCatch.deleteMany();

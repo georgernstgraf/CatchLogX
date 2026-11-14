@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { assertSeedAllowed } from "@/lib/seedGuard";
 import { syncSeedSequence } from "@/lib/seedSequences";
 
 type FishCatchRow = {
@@ -435,6 +436,8 @@ const FISH_CATCHES: FishCatchRow[] = [
 ];
 
 async function main() {
+  await assertSeedAllowed({ script: "insert-fish-catches.ts" });
+
   console.log("🐟 Inserting fish catches...");
 
   await Promise.all(

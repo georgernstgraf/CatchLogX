@@ -2,14 +2,20 @@ import { execSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
+import { assertSeedAllowed } from "@/lib/seedGuard";
 import { createTemplateFile } from "@/services/templateFileService";
 
 /**
- * Dev-only demo seed. Idempotent: every step upserts by its natural key, and
- * the template files are only created when no live template file of that name
- * exists. Never run against production data.
+ * Dev-only demo seed. Every step upserts by its natural key, and the template
+ * files are only created when no live template file of that name exists.
  *
- * Usage: npm run seed:demo
+ * One-shot per database: the seed guard (#198) refuses as soon as the database
+ * holds a single catch, because from that moment base data is operational data
+ * ("Basisdaten-Cutover", docs/ai/DECISIONS.md). For a fresh demo dataset wipe
+ * first (`scripts/demo/wipe-and-seed.ts`, needs ALLOW_DESTRUCTIVE_SEED).
+ *
+ * Usage: npm run db:init   (migrate + seed, the entry point for a new database)
+ *        npm run seed:demo (seed only)
  */
 
 const SEED_STEPS = [
@@ -65,6 +71,8 @@ async function seedTemplateFiles() {
 }
 
 async function main() {
+  await assertSeedAllowed({ script: "seed-demo.ts" });
+
   console.log("Seeding dev demo dataset…");
 
   for (const step of SEED_STEPS) {

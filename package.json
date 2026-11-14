@@ -14,6 +14,7 @@
     "check:hooks": "node scripts/ops/check-hooks.mjs",
     "create-user": "tsx scripts/ops/create-user.ts",
     "seed:demo": "tsx scripts/demo/seed-demo.ts",
+    "db:init": "prisma migrate deploy && tsx scripts/demo/seed-demo.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",

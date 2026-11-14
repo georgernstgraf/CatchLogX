@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { assertSeedAllowed } from "@/lib/seedGuard";
 import { syncSeedSequence } from "@/lib/seedSequences";
 
 type RiverSiteRow = {
@@ -160,6 +161,8 @@ const RIVER_SITES: RiverSiteRow[] = [
 ];
 
 async function main() {
+  await assertSeedAllowed({ script: "insert-river-sites.ts" });
+
   console.log("🌊 Inserting river sites...");
 
   await Promise.all(
