@@ -90,6 +90,28 @@ describe("createFishSpecies", () => {
     expect(prisma.fishSpecies.create).not.toHaveBeenCalled();
   });
 
+  it("normalizes NBSP and inner whitespace before writing (#201)", async () => {
+    vi.mocked(prisma.fishSpecies.create).mockResolvedValue({
+      id: 113,
+      speciesName: "Silurus glanis",
+      germanName: "Wels",
+      family: "Siluridae",
+      _count: { catches: 0 },
+    } as any);
+
+    await createFishSpecies({
+      speciesName: "Silurus\u00A0 \u00A0glanis",
+      germanName: "Wels",
+      family: "Siluridae",
+    });
+
+    expect(prisma.fishSpecies.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ speciesName: "Silurus glanis" }),
+      }),
+    );
+  });
+
   it("trims the species name before writing", async () => {
     vi.mocked(prisma.fishSpecies.create).mockResolvedValue({
       id: 2,
@@ -155,6 +177,24 @@ describe("createFishSpecies", () => {
 });
 
 describe("updateFishSpecies", () => {
+  it("normalizes NBSP on rename so a near-duplicate cannot be created (#201)", async () => {
+    vi.mocked(prisma.fishSpecies.update).mockResolvedValue({
+      id: 113,
+      speciesName: "Silurus glanis",
+      germanName: "Wels",
+      family: "Siluridae",
+      _count: { catches: 9 },
+    } as any);
+
+    await updateFishSpecies(113, { speciesName: "Silurus\u00A0glanis" });
+
+    expect(prisma.fishSpecies.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { speciesName: "Silurus glanis" },
+      }),
+    );
+  });
+
   it("trims a renamed species name and keeps the id stable", async () => {
     vi.mocked(prisma.fishSpecies.update).mockResolvedValue({
       id: 1,

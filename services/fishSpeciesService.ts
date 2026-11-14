@@ -90,6 +90,18 @@ function isPrismaError(error: unknown, code: string): boolean {
   );
 }
 
+/**
+ * Collapses U+00A0 and runs of whitespace to single spaces, then trims (#201).
+ *
+ * A name pasted out of Word or a PDF carries NBSP, which is visually identical
+ * to a space — that is how `Silurus glanis` ended up in two spellings (#80).
+ * The GUI normalizes too, but a direct API call must not be able to mint the
+ * near-duplicate.
+ */
+function cleanSpeciesName(value: string): string {
+  return value.replace(/\u00A0/g, " ").replace(/\s+/g, " ").trim();
+}
+
 /** Lists all species alphabetically, each with the number of catches using it. */
 export async function listFishSpecies(): Promise<FishSpeciesRecord[]> {
   const rows = await prisma.fishSpecies.findMany({
@@ -104,7 +116,7 @@ export async function listFishSpecies(): Promise<FishSpeciesRecord[]> {
 export async function createFishSpecies(
   input: CreateFishSpeciesInput,
 ): Promise<CreateFishSpeciesResult> {
-  const speciesName = input.speciesName.trim();
+  const speciesName = cleanSpeciesName(input.speciesName);
   if (!speciesName) {
     return { invalid: true };
   }
@@ -143,7 +155,7 @@ export async function updateFishSpecies(
   } = {};
 
   if (input.speciesName !== undefined) {
-    const speciesName = input.speciesName.trim();
+    const speciesName = cleanSpeciesName(input.speciesName);
     if (!speciesName) {
       return { invalid: true };
     }
