@@ -21,6 +21,15 @@ import { readDataRows, type DataObject } from "@/lib/excelRows";
 
 type Tx = Prisma.TransactionClient;
 
+/**
+ * Transaction limits for the two long-running transactions (#209). Prisma's
+ * default is 5 s, which the cutover dry run proved too small: `2026_B`
+ * (13 454 rows) died on `Transaction already closed`, and the largest
+ * delivery (35 413 rows) is several times that. 120 s is generous headroom
+ * and still far below nginx's `proxy_read_timeout 600s`.
+ */
+const TX_OPTIONS = { timeout: 120_000, maxWait: 10_000 } as const;
+
 /** One file as it arrives from the API. */
 export type ImportFile = {
   fileName: string;
@@ -370,7 +379,7 @@ export async function writeImports(
     }
 
     return { imports, samplings, catches };
-  });
+  }, TX_OPTIONS);
 }
 
 // --- deletion ---------------------------------------------------------------
@@ -449,7 +458,7 @@ export async function deleteImport(
       catches: removedCatches.count,
       samplings: removedSamplings.count,
     };
-  });
+  }, TX_OPTIONS);
 }
 
 // --- listing and download ---------------------------------------------------

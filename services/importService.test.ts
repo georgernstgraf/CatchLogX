@@ -477,6 +477,26 @@ describe("writeImports", () => {
       ),
     ).rejects.toThrow(/Nessie/);
   });
+
+  // Regression #209: the Prisma default of 5 s killed every file above ~7 000
+  // rows (2026_B, 13 454 rows, answered 500 in the cutover dry run).
+  it("gives the write transaction a timeout that outlives a large delivery", async () => {
+    await writeImports(
+      [{ fileName: "a.xlsx", buffer: workbook([row()]) }],
+      "u1",
+      "batch-1",
+      species,
+    );
+
+    const options = vi.mocked(prisma.$transaction).mock.calls[0][1] as {
+      timeout?: number;
+      maxWait?: number;
+    };
+    expect(options).toBeDefined();
+    // 35 413 rows (the largest cutover file) take ~15-20 s; 60 s is the floor.
+    expect(options.timeout).toBeGreaterThanOrEqual(60_000);
+    expect(options.maxWait).toBeGreaterThanOrEqual(2_000);
+  });
 });
 
 // --- deleteImport -----------------------------------------------------------
@@ -532,6 +552,17 @@ describe("deleteImport", () => {
     expect(result).toEqual({ forbidden: true });
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(prisma.fishCatch.deleteMany).not.toHaveBeenCalled();
+  });
+
+  // Regression #209: deleting the largest import takes longer than 5 s too.
+  it("gives the delete transaction the same generous timeout", async () => {
+    await deleteImport("imp-1", { id: "owner", role: "VIEWER" });
+
+    const options = vi.mocked(prisma.$transaction).mock.calls[0][1] as {
+      timeout?: number;
+    };
+    expect(options).toBeDefined();
+    expect(options.timeout).toBeGreaterThanOrEqual(60_000);
   });
 
   it.each(["ADMIN", "SUPER_ADMIN"] as const)("lets a %s delete a foreign import", async (role) => {
