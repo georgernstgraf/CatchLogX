@@ -71,6 +71,11 @@ issues `SELECT`s, inside a read-only transaction (`default_transaction_read_only
 ./export-upload-blobs.sh export      # fetch the UNMATCHED blobs, verify sha256
 ```
 
+Set `PROD_DSN='postgresql://clxadmin:…@141.244.222.191:5432/clx'` to connect
+directly (Postgres is reachable from the BOKU net and the VPN). Without it the
+script goes through SSH and runs `psql` on the host as the `postgres` user.
+Either way the session is read-only.
+
 The inventory is one row per upload: `id, fileName, state, createdAt,
 sizeBytes, sha256, uploadedBy`. `compare` hashes every `.xlsx` in the data repo
 and prints the matching path, or `UNMATCHED`. Only `UNMATCHED` blobs are

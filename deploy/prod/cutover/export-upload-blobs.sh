@@ -33,24 +33,33 @@
 #   ARCHIVE    CatchLogX-Data checkout (default: ~/repos/georgernstgraf/CatchLogX-Data)
 #   OUT        output directory (default: ~/blob-export)
 #
-# The SSH user must be able to run `runuser -u postgres -- psql` (i.e. root);
-# that is how the first five blobs were exported on 2026-11-14
-# (CatchLogX-Data#6).
+# Two ways to reach the database — set PROD_DSN to go direct:
+#
+#   PROD_DSN='postgresql://clxadmin:…@141.244.222.191:5432/clx' ./export-upload-blobs.sh inventory
+#
+#   With PROD_DSN unset, the script goes through SSH and runs psql on the host
+#   as the postgres user (that is how the first five blobs were exported on
+#   2026-11-14, CatchLogX-Data#6). The SSH user must then be able to run
+#   `runuser -u postgres -- psql`, i.e. be root.
+#
+# Either way the session is read-only and only SELECTs are issued.
 
 set -euo pipefail
 
 SSH_HOST="${SSH_HOST:-catchlogx-boku}"
+PROD_DSN="${PROD_DSN:-}"
 DB="${DB:-clx}"
 EXPECT_DB="${EXPECT_DB:-clx}"
 ARCHIVE="${ARCHIVE:-$HOME/repos/georgernstgraf/CatchLogX-Data}"
 OUT="${OUT:-$HOME/blob-export}"
+READONLY_OPTS='-c default_transaction_read_only=on -c statement_timeout=120s'
 
 INVENTORY=""
 IDS=()
 ARGS=()
 
 usage() {
-  sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,48p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
@@ -59,17 +68,20 @@ die() {
   exit 1
 }
 
-# --- remote psql -----------------------------------------------------------
+# --- psql against production ----------------------------------------------
 # Read-only by construction: the session default is a read-only transaction.
-remote_psql() {
-  ssh -o BatchMode=yes "$SSH_HOST" \
-    "PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=120s' \
-     runuser -u postgres -- psql -d '$DB' -At -v ON_ERROR_STOP=1 -f -"
+prod_psql() {
+  if [ -n "$PROD_DSN" ]; then
+    PGOPTIONS="$READONLY_OPTS" psql "$PROD_DSN" -At -v ON_ERROR_STOP=1 -f -
+  else
+    ssh -o BatchMode=yes "$SSH_HOST" \
+      "PGOPTIONS='$READONLY_OPTS' runuser -u postgres -- psql -d '$DB' -At -v ON_ERROR_STOP=1 -f -"
+  fi
 }
 
 guard_target() {
   local got
-  got=$(remote_psql <<'SQL'
+  got=$(prod_psql <<'SQL'
 SELECT current_database() || E'\t' || coalesce(inet_server_addr()::text, 'local')
        || E'\t' || (SELECT count(*) FROM "Uploads");
 SQL
@@ -87,7 +99,7 @@ cmd_inventory() {
   guard_target
   {
     printf 'id\tfileName\tstate\tcreatedAt\tsizeBytes\tsha256\tuploadedBy\n'
-    remote_psql <<'SQL'
+    prod_psql <<'SQL'
 SELECT u.id, b."fileName", u.state,
        to_char(u."createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
        b."sizeBytes", encode(sha256(b.data), 'hex'), u.uploaded_by
@@ -150,15 +162,22 @@ export_one() {
     die "$target exists with a different hash — refusing to overwrite"
   fi
   printf '  %-44s fetching…' "$(basename "$target")"
-  remote_psql <<SQL | base64 -d >"$target"
+  local tmp="$target.part"
+  rm -f "$tmp"
+  if ! prod_psql <<SQL | base64 -d >"$tmp"
 SELECT encode(data, 'base64') FROM "FileBlob" WHERE id = '$id';
 SQL
+  then
+    rm -f "$tmp"
+    die "fetch failed for $id"
+  fi
   local got
-  got=$(sha256sum "$target" | cut -d' ' -f1)
+  got=$(sha256sum "$tmp" | cut -d' ' -f1)
   if [ "$got" != "$want" ]; then
-    rm -f "$target"
+    rm -f "$tmp"
     die "hash mismatch for $id: expected $want, got $got"
   fi
+  mv "$tmp" "$target"
   printf ' ok (%s bytes)\n' "$(stat -c%s "$target")"
 }
 
