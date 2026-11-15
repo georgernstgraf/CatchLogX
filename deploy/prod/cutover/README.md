@@ -543,15 +543,19 @@ The old dump is restored into a new database and `DATABASE_URL` is pointed at
 it; `~/current` (the release) is untouched. The cutover never rewrites the old
 database, so rollback is a restore, not an undo.
 
-## Announcement
+## Text for the research group — not sent
 
-**Text for the research group (2026-11-15, after the window).** A proof copy
-went out on 2026-11-15 13:19 to `georg@graf.priv.at` (Cc `lena@graf.priv.at`)
-from the production BOKU account `ihyam_catchlogx@boku.ac.at` — message id
+**No broadcast (decided 2026-11-15).** Lena carries the change to the group in
+person; there is no mailing to the ~50 addresses, and the text below is the
+reference answer for individual questions — **not** a send order. What did go
+out is the proof copy on 2026-11-15 13:19 to `georg@graf.priv.at` (Cc
+`lena@graf.priv.at`) from the production BOKU account
+`ihyam_catchlogx@boku.ac.at` — message id
 `<179474518447.1340517.3190257341133599268@catchlogx-server.boku.ac.at>`,
 delivered both, DKIM/DMARC pass, SpamAssassin `-2.1` (see
-`deploy/prod/postfix/README.md`, "One-off mail by hand"). **The group itself
-has not been mailed yet.** Production holds **128 594
+`deploy/prod/postfix/README.md`, "One-off mail by hand"). That is also why the
+numbers in the in-person message and the ones below are the same. Production
+holds **128 594
 catches instead of 464 654** — the rebuild imports files, not rows, so the
 duplicates that production accumulated from repeated imports of the same
 deliveries (the June uploads of the 13 files, three variants of one June
