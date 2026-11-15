@@ -3,13 +3,15 @@ type: State
 title: Project State
 description: Aktueller Projektstand.
 tags: [catchlogx, state]
-generated: { by: opencode/knowledge-persistence, at: 2026-11-15T18:13:32Z }
+generated: { by: opencode/knowledge-persistence, at: 2026-11-15T18:33:11Z }
 status: stable
 ---
 
 # Project State
 
 Current status as of 2026-11-15.
+
+- **Arten-Admin: Catches-Zahl öffnet die Importe der Art (#224, 2026-11-15, deployt `d4968d9`)**: Die Fangzahl in `components/AdminFishSpeciesManager.tsx` ist jetzt ein Button (Chevron, `aria-expanded`); er klappt eine Zeile `colSpan={5}` auf und lädt **erst dann** `GET /api/admin/fish-species/[id]/imports` (lazy, Cache pro Art, „Refresh" leert ihn). Pro Import steht `Datei (Importeur) — Datum`, jüngster zuoberst (`createdAt desc`, Tiebreak `fileName`); bei 0 Fängen bleibt die Zahl Text. `listSpeciesImports(speciesId)` in `services/fishSpeciesService.ts` ist **eine** Abfrage (`imports.findMany` mit `samplings.some.catches.some.speciesId`) — die Eindeutigkeit ist strukturell, weil jedes Sampling an genau einem Import hängt; unbekannte Art → `null` → 404. Die Importeur-Felder heißen `importedByUsername`/`importedByName` wie in `listImports` (`CONVENTIONS.md`). Dazu `@@index([speciesId])` auf `FishCatch` (Migration `20261115182236_fish_catch_species_id_index`, plain `CREATE INDEX` wie #211) und ein Guard in `lib/schemaIndexes.test.ts` (rot ohne den Index, verifiziert). Gate: **382 Tests** (11 neu), Lint 0 Fehler / 12 vorbestehende Warnungen, Typecheck; die Komponente ist ohne jsdom nicht testbar (in der Commit-Message benannt). Beide Deploys grün (`824ff72` Index, `d4968d9` Feature, Health-Check 200); `GET /api/admin/fish-species/1/imports` antwortet ohne Session 401.
 
 - **„All Imports" und Namenskonvention Import vs. Upload (#223, 2026-11-15, Issue geschlossen)**: Der Imports-Tab des Admin-Dashboards heißt jetzt **„All Imports"** (Reiter, Überschrift, Beschreibung „Every import in the system…"), die Spalte **„Uploaded by" → „Imported by"** — die Spalte existierte bereits, nur falsch benannt; Inhalt bleibt `username (Name)`. **Konvention** (neu in `CONVENTIONS.md`, Abschnitt „Terminology"): *Import* = Domänenobjekt und abgeschlossene Handlung (eine `Imports`-Zeile), *Upload* = nur der Byte-Transport (Dateiauswahl, `/api/upload/*`, `services/uploadService.ts`, `lib/upload-client.ts`, Transfer-Limits); eine **Vorlage (Template File) wird hochgeladen, nicht importiert**, deshalb bleibt `TemplateFiles.uploadedByUserId`. Sichtbare Texte nachgezogen: Sidebar „Upload" → **„New Import"**, Upload-Seite „Import Excel Files", „Import report", „Start new import", „Import rejected …", „per import" (auch in der 400er-Meldung von `POST /api/upload/new`). Payload-Felder `uploadedBy*` → **`importedBy*`** (`importService.listImports`, `AdminPageComponent`, `MyUploadsPageComponent`, `importService.test.ts`). **Bewusst nicht geändert**: URLs (`/upload`, `/my-uploads`, `/api/upload/*` — Lesezeichen und Doku-Links), Komponentennamen (`MyUploadsPageComponent`, `UploadPageComponent`), und `/my-uploads` bekommt **keine** „Imported by"-Spalte (dort stehen nur eigene Importe). Gate: Lint 0 Fehler / 12 vorbestehende Warnungen (#173), Typecheck, **370 Tests** grün; die vier betroffenen Komponenten sind ohne jsdom nicht testbar (in der Commit-Message benannt).
 

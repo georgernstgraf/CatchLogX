@@ -3,7 +3,7 @@ type: History Archive
 title: History
 description: Append-only-Archiv ueberholter Wissenseintraege.
 tags: [catchlogx, history-archive]
-generated: { by: opencode/knowledge-persistence, at: 2026-11-15T14:40:00Z }
+generated: { by: opencode/knowledge-persistence, at: 2026-11-15T18:33:11Z }
 status: stable
 ---
 
@@ -11,6 +11,12 @@ status: stable
 
 Append-only archive of superseded knowledge entries.
 Each entry keeps its date, title, origin file, reason, and original text.
+
+## 2026-11-15 (SUPERSEDED 2026-11-15, origin: HANDOFF.md, reason: #221 widerlegt): `deploy-dev.yml` feuert auch auf `master`-Pushes
+- **Original**: „Der Workflow deklariert `workflow_run.branches: [dev]`, aber Run 43716280746 hat `event: workflow_run`, `head_branch: master`, `head_sha: 788be5b` und die Dev-Instanz neu deployt; dasselbe bei `9eefb21`. … Folge: jeder `master`-Merge restartet `catchlogx.service` auf `claw` und zieht `migrate deploy` gegen die Dev-DB."
+- **Superseded by**: Die Metadaten (`head_branch`/`head_sha`) eines `workflow_run`-Runs zeigen auf den **Default-Branch** (die Workflow-Datei), nicht auf den auslösenden Commit — der Job deployt korrekt `github.event.workflow_run.head_sha` (Beleg: Run 43746573161 meldet in der API `master`/`11b5ed4`, loggt aber `DEPLOY_SHA: 824ff72…`). Die vier `master`-Push-CI-Läufe am 2026-11-15 (11:39, 12:44, 12:49, 13:19) haben **keinen** Deploy-Lauf erzeugt; jeder Deploy-Lauf hat genau einen `dev`-Push. `branches: [dev]` greift, kein zusätzliches `if` nötig. Siehe `PITFALLS.md`.
+- **Origin**: `docs/ai/HANDOFF.md` (Aufgabe 19)
+- **Reason**: Die Beobachtung war ein Artefakt der `gh run list`-Metadaten, kein Fehlverhalten des Workflows. #221 geschlossen.
 
 ## 2026-11-15 (SUPERSEDED 2026-11-15, origin: HANDOFF.md/STATE.md, reason: #109 geschlossen): 42 Dependabot-Alerts offen
 - **Original**: HANDOFF-Aufgabe 21 / STATE-Pending: „Dependabot-Alerts triagieren (#109, gemessen 2026-11-15): 42 offene Alerts, aber **alle** hängen an `version_requirement: 15.2.2` … Nächster Schritt: Dependabot-Re-Evaluation anstoßen + stale Alerts schließen, dann `npm audit fix` für die 7 moderaten `@typescript-eslint`/`minimatch`-Funde."

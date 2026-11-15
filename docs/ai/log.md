@@ -1,5 +1,23 @@
 # Persistenz-Log
 
+## 2026-11-15 — Arten-Admin: Importe je Art, Index auf `FishCatch.speciesId` (#224)
+
+* **Update**: `STATE.md` (Eintrag zu #224: Aufklappzeile, lazy API, Query-Form,
+  Index, Gate), `PITFALLS.md` (neuer Eintrag: `gh run list` zeigt bei
+  `workflow_run`-Runs den Default-Branch, nicht den auslösenden Commit),
+  `HISTORY.md` (der #221-Eintrag aus `HANDOFF.md` als widerlegt archiviert),
+  `HANDOFF.md` (Aufgabe 19 entfernt, 20 → 19).
+* **Creation**: #224 (Catches-Zahl öffnet die Importe der Art mit Importeur).
+* **Reason**: Die Fangzahl war toter Text; die Herkunft (Fischfang → Sampling →
+  Import → User) lag bereits vollständig im Schema. Beim Deploy-Nachweis zeigte
+  sich, dass die #221-Beobachtung ein Artefakt der `gh run list`-Metadaten war —
+  der Deploy-Lauf loggt den richtigen `DEPLOY_SHA` und `branches: [dev]` greift.
+* **Verifikation**: 382 Tests grün (11 neu), Lint 0 Fehler / 12 vorbestehende
+  Warnungen, Typecheck; Index-Guard in `lib/schemaIndexes.test.ts` rot ohne den
+  Index. Beide Deploys grün (`824ff72`, `d4968d9`), Migration
+  `20261115182236_fish_catch_species_id_index` angewendet, Health-Check 200,
+  neue Route ohne Session 401. Issues #224 und #221 geschlossen.
+
 ## 2026-11-15 — „All Imports" und Namenskonvention Import vs. Upload (#223)
 
 * **Update**: `CONVENTIONS.md` (neuer Abschnitt „Terminology" — Import =
