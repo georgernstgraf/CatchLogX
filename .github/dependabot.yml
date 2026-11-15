@@ -48,7 +48,8 @@ updates:
       # ist #174, nicht ein PR.
       - dependency-name: "xlsx"
 
-  # Compose-Dateien (PostgreSQL 16 für Dev, prod-Compose für den Rückfallweg)
+  # Compose-Dateien (PostgreSQL 16 für das lokale Studierenden-Setup; auf Prod
+  # und Dev läuft keine Compose-Datei mehr — Prod ohne Runtime seit #220)
   - package-ecosystem: "docker"
     directory: "/"
     target-branch: "dev"

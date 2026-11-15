@@ -117,9 +117,12 @@ curl -sSI http://141.244.222.191:3001/ | head -3   # 301 -> port 80
 
 Not managed here: the release tree under `~clxadmin` (created by
 `.github/workflows/production-deploy.yml`), the diagnosis clone
-`~/src/CatchLogX` (hand-pulled, see above), the Node distribution in
-`~/tools/node` (documented in [`node/README.md`](node/README.md)) and the
-stopped `clx-postgres` container (kept as a rollback path, `restart=no`).
+`~/src/CatchLogX` (hand-pulled, see above) and the Node distribution in
+`~/tools/node` (documented in [`node/README.md`](node/README.md)). **No
+container runtime since 2026-11-15 (#220)**: the stopped `clx-postgres` that
+served as the rollback path is gone, together with docker/containerd and
+`docker-compose.prod.yml`; a rollback is a restore from the nightly archive
+([`postgres/README.md`](postgres/README.md), "Rollback").
 
 Since **2026-10-29 (#122)** the host is hardened around one rule: **nothing of
 `clxadmin` lives outside its home**.

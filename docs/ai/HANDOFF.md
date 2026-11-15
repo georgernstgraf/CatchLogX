@@ -11,6 +11,28 @@ status: stable
 
 Offene Aufgaben für die nächste Session.
 
+**Stand 2026-11-15 (Docker-Reste abgeräumt, #220, Issue geschlossen):** Beide Hosts sind
+container-frei, soweit CatchLogX betroffen ist. **Prod** (`141.244.222.191`): die sechs
+Docker-Pakete sind gepurged, `clx-postgres` + 9 Volumes (5,13 GB) + 5 Images (951,7 MB)
+gelöscht, `/var/lib/docker` und `/var/lib/containerd` (6,2 GB) entfernt, `docker0` und die
+iptables-Ketten geflusht, der docker/containerd-Block aus `50unattended-upgrades` gestrichen
+(Backup `/root/50unattended-upgrades.bak-20261115`) und `docker-compose.prod.yml` aus dem Repo
+gelöscht. **Der Rückfallweg ist bewusst verworfen**, nicht getestet: das Volume trug den
+Pre-Cutover-Stand (464 654 Fänge), der identisch in `20261115T023818Z` liegt (Host + offsite
+auf `claw`, sha256 geprüft) — ein `docker start` hätte den nativen Cluster von 5432 nehmen
+müssen. Vorher wurde der Hand-Satz `cutover-20261018T085752Z` (48 399 960 B, 21 MinIO-Objekte)
+**erstmals offsite** auf `claw` gelegt und verifiziert; er war dort die einzige Lücke.
+**Dev** (`claw`): nur der Rootless-Store von `catchlogx` ist weg (Container, 7 Volumes, 3
+Images, `docker.service`-User-Unit, `~/.local/share/docker`, `~/dev-stack/`) — **der
+System-Docker bleibt**, weil dort `searxng`/`searxng-redis` laufen (verifiziert: beide `Up`,
+`:8888` → 200). Weil `~/dev-stack/.env` damit verschwand, ist `READONLY_DB_PASSWORD` (aus
+`QUERY_DATABASE_URL` dekodiert) in die Dev-App-`.env` gewandert; Login als `clx_readonly` über
+TCP verifiziert (SELECT ok, `create table` → `permission denied`). **Reboot-Rehearsal grün:**
+Boot 34,8 s, App 200, nginx 200, Cluster aktiv, 128 594 Fänge / 9 Imports / 12 Blobs
+unverändert, `NRestarts=0`, Runner aktiv. **Neuer Befund (nicht von #220):**
+`systemd-networkd-wait-online` endet seit mindestens dem Boot vom 2026-11-10 in **`failed`**
+(15-s-Cap greift, kein 2-Minuten-Stall) — siehe Aufgabe 22.
+
 **Stand 2026-11-15 (Backlog-Triage, #222, Issue geschlossen):** 54 offene Issues wurden gegen Code,
 Git-Historie und `docs/ai/` geprüft; **27 sind geschlossen** (18 `completed`,
 9 `not planned`), 31 bleiben offen. Belege stehen als Kommentar in jedem Issue.
@@ -302,7 +324,7 @@ Read-only-Rolle laufen auf dem Host-Pfad. `production-maintenance.yml` ist
 gelöscht; Wartung passiert per SSH über das BOKU-VPN mit den Runbooks unter
 `deploy/prod/postgres/`. Details in `docs/ai/STATE.md` und
 `docs/meetings/2026-10-30-prod-postgres-native.md`. Der Container
-`clx-postgres` bleibt gestoppt mit `restart=no` als Rückfallweg.
+`clx-postgres` blieb gestoppt mit `restart=no` als Rückfallweg — **überholt: am 2026-11-15 mit #220 entfernt** (oberster Block).
 
 **Stand 2026-10-27:** Das zweite Vor-Ort-Fenster ist gelaufen. #143 ist **erledigt** —
 die Produktion läuft als systemd-User-Unit (Release `37fbcf7`, `~/current` →
@@ -402,13 +424,12 @@ Superuser-Slots.
     Break-Glass — nicht weg-härten. **Issue geschlossen (#222):** der Zugang ist
     der in `DECISIONS.md` (2026-10-16) sanktionierte Weg, kein Tunnel; offen bleibt
     nur die formale Antwort von BOKU-IT auf die allgemeine Wartungsanfrage.
-11. [ ] **Docker-Reste auf Prod abräumen (#220)** — Docker läuft dort noch
-    (`29.9.3`, `enabled`+`active`), Container `clx-postgres` gestoppt, Volumes
-    `catchlogx_clx_pgdata` (Rückfallweg), `catchlogx_clx_miniodata` (einzige Kopie
-    der Alt-Objekte ist das Backup-Set `cutover-20261018T085752Z`, 21 Objekte,
-    54 M), `catchlogx_clx_node_modules` plus 4 anonyme. **Erst nach einer grünen
-    Monatsprobe** entfernen, dann `docker`/`containerd` deinstallieren und
-    `docker-compose.prod.yml` löschen. Details im Issue.
+11. [x] **Docker-Reste auf Prod abräumen (#220)** — **erledigt 2026-11-15** (oberster Block):
+    Pakete gepurged, Container/Volumes/Images/`/var/lib/{docker,containerd}` weg, `docker0` +
+    iptables geflusht, Blacklist-Eintrag gestrichen, `docker-compose.prod.yml` gelöscht, Dev
+    analog (nur der Rootless-Store). Der Rückfallweg `clx_pgdata` ist **bewusst verworfen**,
+    Belege: Nachtarchiv `20261115T023818Z` (Host + offsite) und der neu offsite gesicherte
+    Satz `cutover-20261018T085752Z` für die MinIO-Objekte.
 12. [ ] **#122 Restposten**: Backup-Routine läuft seit 2026-10-27 (#86, siehe oben) —
     offen bleibt das **Institut-Fileserver-Ziel** aus dem Issue (Pfad + Protokoll von
     Martin/Lena); bis dahin spiegelt die VPS. Entscheidung zum Vorgänger-Runner
@@ -437,8 +458,7 @@ Superuser-Slots.
     neuen Pfad erzeugt einen 127-Zeilen-Report. Offen bleibt: (b) bei BOKU-IT
     einen **DNS-Namen** für `141.244.222.191` erbitten (nimmt die IP aus allen
     R-Configs und erlaubt später ein echtes Zertifikat); (c) **Docker-Reste**
-    (`clx_pgdata`, `clx_miniodata`, Daemon) sind jetzt **#220** — erst nach einer
-    grünen Monatsprobe. Der Runbook-Checkout ist seit #122
+    sind **erledigt** (2026-11-15, #220 — oberster Block). Der Runbook-Checkout ist seit #122
     **root-eigen** und wird bei Bedarf frisch geklont
     (`git clone https://github.com/georgernstgraf/CatchLogX /root/CatchLogX`);
     `/opt/CatchLogX` ist gelöscht, die Laufzeit-Env liegt in
@@ -501,6 +521,15 @@ Superuser-Slots.
     auf Dev. **exceljs** bleibt gepinnt (Downgrade-Vorschlag 3.4.0 abgelehnt), optional
     `overrides` auf `uuid ^11.1.1`. Ablauf, Gates und Begründung im Kommentar von #174;
     danach erwartet `npm audit` 0 critical / 0 high. Prod-Deploy nötig (Runtime-Dep).
+
+22. [ ] **`systemd-networkd-wait-online` endet in `failed` (beobachtet 2026-11-15, #220-Reboot)**:
+    der Boot ist mit 34,8 s (Userspace 19,1 s) in Ordnung, aber die Unit läuft nach dem
+    15-s-Cap (`99-any-link.conf`) in `Timeout occurred while waiting for network
+    connectivity` + `status=1/FAILURE`. **Nicht durch #220 verursacht** — der Boot vom
+    2026-11-10 zeigt dieselbe Zeile. `PITFALLS.md` behauptet „23,8 s boot, ~7 s userspace";
+    das stimmt so nicht mehr. Zu klären: braucht `eno1` länger als 15 s (dann Cap hoch),
+    oder ist die Unit auf diesem Host überflüssig (dann `mask`, weil nichts auf
+    `network-online.target` wartet) — und die Zahlen in `PITFALLS.md`/`STATE.md` nachziehen.
 
 Kontext: Das Epic #125 bleibt offen, solange `CatchLogX-Data#2` offen ist. Vom
 Produktions-Upgrade-Pfad #137–#153 sind #138–#143 und #150/#152 erledigt; offen

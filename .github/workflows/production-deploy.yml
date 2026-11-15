@@ -34,7 +34,8 @@ name: Deploy CatchLogX
 #   * exactly one process owns port 3001 - the systemd user unit. The interim
 #     `clx-web` container was retired in #143 and its docker-based cleanup step
 #     is gone with #122 (the machine no longer gives `clxadmin` the docker
-#     group; the stopped `clx-postgres` fallback is root's business).
+#     group). Since #220 there is no container runtime at all: the stopped
+#     `clx-postgres` fallback is deleted, a rollback is a restore.
 #
 # Rollback: re-dispatch this workflow with `ref` set to the previous master
 # commit:
@@ -219,9 +220,9 @@ jobs:
 
       # The systemd unit owns the app and port 3001 from here. The interim
       # container was retired with #143; #122 removed this step together with
-      # clxadmin's docker group - a docker call would only fail, and the
-      # remaining stopped `clx-postgres` is deliberately kept as a rollback
-      # path (root-level, #170).
+      # clxadmin's docker group - a docker call would only fail. The stopped
+      # `clx-postgres` that was kept as a rollback path until 2026-11-15 is
+      # gone with #220, together with the runtime itself.
 
       - name: Restart the service
         run: systemctl --user restart "$UNIT_NAME"

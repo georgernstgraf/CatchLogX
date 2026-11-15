@@ -1,5 +1,30 @@
 # Persistenz-Log
 
+## 2026-11-15 — Docker-Reste auf beiden Hosts abgeräumt (#220)
+
+* **Update**: `PITFALLS.md` (Compose-Guard-, `docker0`- und `clx-web`-Einträge
+  ersetzt; Dev-Fallback-Container, `~/dev-stack/.env` und der 5432-Clash
+  korrigiert; apt-Blacklist auf `claw`/SearXNG umgeschrieben; neue Messung zur
+  `wait-online`-Unit), `ARCHITECTURE.md` (Prod ohne Runtime, Dev-Rootless-Store
+  weg, Secret-Pfad, Dateitabelle), `STATE.md` (Prod-/Dev-Blöcke,
+  unattended-upgrades, MinIO-Volume), `DECISIONS.md` (neue Entscheidung
+  2026-11-15; drei ältere Einträge als überholt markiert), `HANDOFF.md`
+  (Aufgabe 11 und 16c erledigt, neue Aufgabe 22), `deploy/prod/README.md`,
+  `deploy/prod/postgres/README.md` (Rollback = Restore, Fenster als historisch
+  markiert), `.github/workflows/production-deploy.yml` (Kommentare),
+  `.github/dependabot.yml` (Kommentar). **Gelöscht**: `docker-compose.prod.yml`.
+* **Creation**: keine.
+* **Reason**: Kein Pfad nutzt Docker mehr; der dokumentierte Rückfallweg
+  (Volume mit dem Pre-Cutover-Stand) war durch das Nachtarchiv überholt, und
+  die Vorbedingung „grüne Monatsprobe" war erfüllt (2026-11-01 `ok`, plus
+  Probe gegen den Post-Cutover-Satz am 2026-11-15).
+* **Verifikation**: Prod nach Reboot App 200 / nginx 200 / Cluster aktiv /
+  128 594 Fänge / 9 Imports / 12 Blobs / `NRestarts=0` / Runner aktiv, kein
+  `docker`-Binary, keine Bridge, leeres nft-Regelset, 6,2 GB frei; Dev-App 200,
+  SearXNG-Container unverändert `Up` (`:8888` → 200), `clx_readonly`-Login über
+  TCP grün (SELECT ok, DDL `permission denied`). Offsite vorher: Hand-Satz
+  `cutover-20261018T085752Z` (48 399 960 B) auf `claw`, sha256 geprüft.
+
 ## 2026-11-15 — Arten-Admin: Importe je Art, Index auf `FishCatch.speciesId` (#224)
 
 * **Update**: `STATE.md` (Eintrag zu #224: Aufklappzeile, lazy API, Query-Form,

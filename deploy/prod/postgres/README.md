@@ -15,7 +15,14 @@ inside a volume.
 | Client IPs | bridge IP `172.18.0.1` | the real address (`%r`) |
 | Maintenance | `docker exec` / `docker restart` | `psql`, `systemctl reload\|restart postgresql@16-main` |
 | Access | loopback `trust`, external `scram` | socket `peer` (clxadmin/postgres), TCP `scram-sha-256`, TLS offered |
-| Rollback | — | container kept: `restart=no`, stopped, volume intact |
+| Rollback | — | container kept: `restart=no`, stopped, volume intact (until 2026-11-15) |
+
+**Since 2026-11-15 (#220) there is no container left**: the runtime, the
+container, its volumes and the images are gone, so the rollback is a
+`pg_restore` from the nightly archive (`../backup/README.md`, "Manual
+restore") — see the "Rollback" section below. The window section further down
+is kept as a record of what was done on 2026-10-30, not as a repeatable
+procedure.
 
 Node details: Ubuntu 26.04 ships PostgreSQL **18** only, so the PGDG repository
 adds 16. The store is `/var/lib/postgresql/16/main`; the packaged
@@ -63,6 +70,10 @@ because the libraries are preloaded, but a typo in
 `shared_preload_libraries` makes the postmaster refuse to start.
 
 ## Maintenance window
+
+> **Historical record (2026-10-30).** The `docker` commands below were the
+> state before #220; the container no longer exists. Kept because it documents
+> the migration, not as a procedure to repeat.
 
 Everything below runs as **root** over the BOKU VPN. `runuser` is used because
 the server-side commands must run as `clxadmin`: peer auth maps the OS user to
@@ -266,29 +277,22 @@ chown clxadmin:clxadmin /home/clxadmin/catchlogx-reports/observability-*.txt
 
 ## Rollback
 
-The container is **stopped, not removed** (`restart=no`), volume
-`catchlogx_clx_pgdata` intact; the `pre-native-<stamp>` set is the second
-safety net. The rollback returns to exactly the state before the window:
+**Since 2026-11-15 (#220) there is no container to go back to.** The stopped
+`clx-postgres`, its volume `catchlogx_clx_pgdata` and the whole docker runtime
+are removed, deliberately: the volume held the pre-cutover state (464 654
+catches), which is archived twice — as `20261115T023818Z` on the host and
+off-site on `claw` (sha256 verified). A rollback therefore means a **restore
+from a backup set**, not a container start:
 
-```sh
-sudo -u clxadmin XDG_RUNTIME_DIR=/run/user/1000 \
-  DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
-  systemctl --user stop catchlogx.service
-systemctl stop postgresql@16-main
-docker start clx-postgres
-# Prisma reconnects on its own; restart the app and check the health endpoint
-sudo -u clxadmin XDG_RUNTIME_DIR=/run/user/1000 \
-  DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
-  systemctl --user start catchlogx.service
-curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3001/
-```
+1. pick the set (`ls -1d /home/clxadmin/catchlogx-backups/20*`), verify it
+   against its `SHA256SUMS`/`.sha256`,
+2. follow `../backup/README.md` → "Manual restore" (`pg_restore` into a new
+   database, verify the counts against `rowcounts.txt`, then rename),
+3. if the *code* is what broke, re-dispatch `production-deploy.yml` with the
+   full SHA of the previous `master` commit (`ARCHITECTURE.md`, #163).
 
-While both exist, **never** run both at once: the cluster and the container
-both want `5432`. `start.conf = manual` keeps the cluster from coming up at
-boot, so a reboot while the rollback is active starts only the container.
-
-Delete the volume only after weeks of green backups and at least one monthly
-restore probe on the native path (same rule as the dev container, #168).
+The window below is the record of the 2026-10-30 migration; the container steps
+in it (`docker ps`, `docker start clx-postgres`) no longer exist on the host.
 
 ## For the research group — connecting
 
