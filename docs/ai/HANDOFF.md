@@ -3,13 +3,41 @@ type: Handoff
 title: Handoff
 description: Offene Aufgaben fuer die naechste Session.
 tags: [catchlogx, handoff]
-generated: { by: opencode/knowledge-persistence, at: 2026-11-14T22:34:25Z }
+generated: { by: opencode/knowledge-persistence, at: 2026-11-15T12:53:11Z }
 status: stable
 ---
 
 # Handoff
 
 Offene Aufgaben für die nächste Session.
+
+**Stand 2026-11-15 (Release, Post-Cutover-Backup, Dev-Reseed, #204):** `dev`
+per PR #215 nach `master` gemerged (`9eefb21`), `master` danach per Fast-Forward
+zurück auf `dev` (beide zeigen jetzt `788be5b` bzw. dessen Merge-Basis).
+Produktion wurde per `workflow_dispatch` auf **`9eefb21`** deployt (app-seitig
+ein No-op: der Merge brachte nur Doku und `scripts/data/`), `master` steht auf
+**`788be5b`** — der Diff `9eefb21..788be5b` ist ausschließlich
+`deploy/prod/backup/` + `docs/ai/PITFALLS.md` und wurde deshalb **nicht** nach
+Prod deployt; dort läuft `9eefb21`, gesund, 0 offene Migrationen.
+**Backup-Befund (kritisch, behoben):** der erste Post-Cutover-Lauf starb nach
+2 s an `FEHLER: Zeilen zählen fehlgeschlagen: Uploads` — `import_hard_delete`
+hat die Tabelle gedroppt, `backup.sh` zählt sie in einer festen Liste und
+bricht beim ersten Fehlschlag ab. Damit war **seit dem Cutover kein Backup
+möglich**, der 02:30-Timer wäre heute Nacht genauso gescheitert (Signal nur in
+`/var/mail/root`). Fix #216 (`Imports` statt `Uploads`), auf Prod installiert,
+Lauf grün. **Erster Post-Cutover-Satz `20261115T124937Z`** (19 MB, 104
+Dump-Einträge): 128 594 Fänge / 1 282 Samplings / 1 095 Sites / 165 Arten /
+9 Imports / 9 User / 3 Templates / 12 Blobs (21 321 722 Bytes), Offsite auf
+`claw` mit stimmiger Prüfsumme; das Pre-Cutover-Nachtarchiv
+`20261115T023818Z.tar.zst` (55,9 MB) liegt weiterhin auf beiden Hosts, ein
+fehlgeschlagener Teilsatz (`20261115T124714Z`) wurde entfernt.
+**Dev ist neu geseedet:** `~/catchlogx-dev-restore.sh 20261115T124937Z.tar.zst`
+als User `catchlogx` (kein sudo, kein root) — Dev trägt jetzt **die
+Produktionsdaten** (128 594 / 1 282 / 1 095 / 165 / 9 Imports / 12 Blobs),
+7 Migrationen ohne offene, `clx_readonly` wieder auf der Vier-Tabellen-Whitelist,
+App 200 auf `:40873` und öffentlich, `clx_prev` nach grünem Health-Check
+gedroppt. Damit ist der Dev-Stand **kein leerer Startzustand mehr**; die
+Arten-Session mit Lena kann auf Dev gegen echte Prod-Daten laufen (Block unten).
 
 **Stand 2026-11-15 (Cutover auf Produktion gelaufen, #200/#204):** Produktion
 ist neu aufgebaut: **128 594 Fänge statt 464 654**, 9 der 13 Dateien live
@@ -36,9 +64,10 @@ Runbooks ist gestrichen. Auf Dev belegt (Details: `deploy/prod/cutover/README.md
 danach `P3009`, `migrate resolve --rolled-back`) → `TRUNCATE`-Wipe in 0,1 s →
 Migration grün in 2,2 s → 9 Dateien importieren (128 594 / 1 282 / 1 095, wie
 Phase 1a, bei erhaltenen 9 Usern / 3 Templates / 2 Queries) → **alle 9 Importe
-per GUI-Endpunkt löschen** (14 s gesamt, danach 0 Fänge). Dev steht auf
-0 Fängen / 165 Arten / 9 Usern / 3 Templates, ohne Import-Hashes — also genau
-im Startzustand für Phase 1b, die 13 Dateien lassen sich wieder hochladen.
+per GUI-Endpunkt löschen** (14 s gesamt, danach 0 Fänge). Dev stand damit auf
+0 Fängen / 165 Arten / 9 Usern / 3 Templates, ohne Import-Hashes — das war der
+Startzustand für Phase 1b. **Überholt seit dem Reseed am 2026-11-15:** Dev trägt
+jetzt die Produktionsdaten (oberster Block).
 **Der Index ist da (#211, Release `92b9132`):** `FishCatch.samplingId` war der
 Grund für das quadratische Löschen — der `ON DELETE RESTRICT`-FK scannte die
 Fangtabelle einmal pro Sampling. Vorher/nachher auf denselben Daten: RI-Check
@@ -46,9 +75,11 @@ Fangtabelle einmal pro Sampling. Vorher/nachher auf denselben Daten: RI-Check
 `DELETE`-Wipe des Prod-Klons ~6 min → 2,4 s. `TRUNCATE` bleibt trotzdem das
 Wipe-Rezept; `CONCURRENTLY` ist bei 244 ms Index-Build auf 464 654 Zeilen kein
 Thema (und von Prisma ohnehin nicht nutzbar). Guard: `lib/schemaIndexes.test.ts`.
-Die beiden Nebenbefunde von vorher: `~/catchlogx-dev-restore.sh` scheitert seit
-#202 an jedem Prod-Archiv — es bricht jetzt **vor** dem App-Start ab und nennt
-beide Wege (README + `PITFALLS.md`).
+Die beiden Nebenbefunde von vorher: `~/catchlogx-dev-restore.sh` scheiterte an
+jedem Prod-Archiv aus der Zeit **vor** dem Cutover (`Sampling.importId NOT NULL`,
+#202) und brach dabei **vor** dem App-Start ab (Wege: README + `PITFALLS.md`).
+**Seit dem Post-Cutover-Satz läuft es wieder durch** (Reseed im obersten Block);
+bei einem künftigen Schema-Sprung bleibt der Abbruch vor dem App-Start richtig.
 **Aufgeräumt (#212, 2026-11-15):** `clx_prev` (91 MB), beide Dumps
 (`pre-route-c-*`, `pre-imports-model-*`, zusammen 71 MB), die alte
 Skript-Sicherung und der Drill-Account `route-c-drill` sind **weg** — Dev hat
@@ -57,7 +88,9 @@ wieder **9 User**, nur `clx` + `clx_shadow`, `QueryLog` leer. Es gibt damit
 die laufende Produktion und liegt als Nachtarchiv
 `~/backups/20261115T023818Z.tar.zst` (54 MB), der 113 102-Zwischenstand ist
 durch die 9 Cutover-Dateien reproduzierbar (~2 min).
-**Nächster Schritt: Phase 1b (#204)** — sobald `CatchLogX-Data#7` landet (Arten-Reparatur **plus** `List`-Blatt für D), alle 13 Dateien auf dem leeren Dev, erwartete 183 855 Zeilen; danach Phase 2 (Prod-Fenster) mit dem Wipe aus „Phase 1c".
+**Überholt:** Phase 2 ist am 2026-11-15 gelaufen (oberster Block). Phase 1b (alle
+13 Dateien, 183 855 Zeilen) ist damit **Nachlauf auf Produktion**, nicht mehr
+Voraussetzung des Fensters; das `List`-Blatt für D ist mit #213 gestrichen.
 
 **Stand 2026-11-15 (Trockenlauf Phase 1a grün, #204):** 9 der 13 Dateien sind
 auf Dev durch den echten Import-Pfad gelaufen — **128 594 Fänge / 1 282
@@ -76,9 +109,8 @@ den Dateien noch in der alten DB (0 echte Tags, 0 Wiederfänge); der
 PIT-Stichproben-Schritt ist gestrichen, und die Site-Abdeckung schließt auf
 `river_name`+`site_name` exakt (1 320 = 256 + 112 + 123 + 829), was die
 Juni-23-Lieferung als echten Inhalt bestätigt (`CatchLogX-Data#207`).
-**Nächster Schritt: Phase 1b (#204)** — sobald `CatchLogX-Data#7` landet
-(Arten-Reparatur **plus** `List`-Blatt für D), alle 13 Dateien, erwartete
-183 855 Zeilen; danach Phase 2 (Prod-Fenster) im Runbook ausschreiben.
+**Überholt:** Phase 2 lief am 2026-11-15 (oberster Block). Offen ist nur
+`CatchLogX-Data#7` — die Arten-Reparatur, **ohne** `List`-Blatt für D (#213).
 
 **Stand 2026-11-15 (Arten-Validierung #80 und Imports-Modell #202 erledigt):** Die
 Validierung prüft `species` gegen `fish_species` (nicht mehr gegen das
@@ -221,9 +253,9 @@ sondern mit der Datei aus `dev` (`git show origin/dev:… > /root/readonly-role-
 Forschungsgruppe ist noch zu sagen, dass `Uploads`/`FileBlob`/`UserQueries`/`TemplateFiles` in R
 weggefallen sind. (3) `statement_timeout` ist beantwortet und umgesetzt: **nicht** auf der Rolle
 (sie dient auch der Forschungsgruppe in R), sondern `SET LOCAL statement_timeout` mit
-`QUERY_TIMEOUT_MS = 10 s` im Query-Client (`services/queryService.ts`, Vitest). **Weiter offen:**
-`QUERY_DATABASE_URL` in `~clxadmin/.config/catchlogx/.env` + Unit-Restart, sonst antwortet die
-SQL-Seite auf Prod nach dem `dev`→`master`-Merge mit 500. #121 bleibt offen, bis das läuft.
+`QUERY_TIMEOUT_MS = 10 s` im Query-Client (`services/queryService.ts`, Vitest). **Erledigt 2026-11-15 im Cutover:** `QUERY_DATABASE_URL` steht in
+`~clxadmin/.config/catchlogx/.env`, Unit-Restart gelaufen, die SQL-Seite
+liefert auf Prod (Cutover-Phase-2-Schritt 10).
 
 **Stand 2026-10-29 (Härtung, #122):** Der Produktions-Host ist auf eine Regel
 gebracht — **nichts von `clxadmin` außerhalb seines Homes, keine Erhöhung
@@ -427,9 +459,9 @@ Superuser-Slots.
     `UserQueries`, `TemplateFiles`, `_prisma_migrations` und beide `pg_stat_statements`-Views lesen;
     behoben mit `git show origin/dev:deploy/prod/postgres/readonly-role.sh > /root/readonly-role-121.sh`
     und `KEEP_PASSWORD=1`, danach von außen nachgeprüft (`pg_default_acl` leer, Sequenzen frei von
-    Rechten). **Offen bleibt, um den `dev`→`master`-Merge:** `QUERY_DATABASE_URL` in
-    `~clxadmin/.config/catchlogx/.env` + Unit-Restart (Details: `deploy/prod/postgres/README.md`,
-    Abschnitt „SQL query page").
+    Rechten). **Prod seit 2026-11-15 gesetzt** (`QUERY_DATABASE_URL` +
+    Unit-Restart im Cutover, Phase-2-Schritt 10); offen bleibt nur die In-App-Seite
+    #153.
 
 Kontext: Das Epic #125 bleibt offen, solange `CatchLogX-Data#2` offen ist. Vom
 Produktions-Upgrade-Pfad #137–#153 sind #138–#143 und #150/#152 erledigt; offen

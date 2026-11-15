@@ -3,7 +3,7 @@ type: History Archive
 title: History
 description: Append-only-Archiv ueberholter Wissenseintraege.
 tags: [catchlogx, history-archive]
-generated: { by: opencode/knowledge-persistence, at: 2026-11-14T19:40:00Z }
+generated: { by: opencode/knowledge-persistence, at: 2026-11-15T12:53:11Z }
 status: stable
 ---
 
@@ -11,6 +11,18 @@ status: stable
 
 Append-only archive of superseded knowledge entries.
 Each entry keeps its date, title, origin file, reason, and original text.
+
+## 2026-11-15 (SUPERSEDED 2026-11-15, origin: HANDOFF.md, reason: Post-Cutover-Dev-Reseed #204): Dev als leerer Startzustand für Phase 1b
+- **Original**: „Dev steht auf 0 Fängen / 165 Arten / 9 Usern / 3 Templates, ohne Import-Hashes — also genau im Startzustand für Phase 1b, die 13 Dateien lassen sich wieder hochladen." sowie zweimal „**Nächster Schritt: Phase 1b (#204)** — sobald `CatchLogX-Data#7` landet (Arten-Reparatur **plus** `List`-Blatt für D), alle 13 Dateien auf dem leeren Dev, erwartete 183 855 Zeilen; danach Phase 2 (Prod-Fenster)."
+- **Superseded by**: Der Reseed am 2026-11-15 (`~/catchlogx-dev-restore.sh 20261115T124937Z.tar.zst`) bringt die Produktionsdaten auf Dev (128 594 Fänge); Phase 2 ist gelaufen, Phase 1b ist Nachlauf auf Produktion, und das `List`-Blatt für D ist mit #213 gestrichen.
+- **Origin**: `docs/ai/HANDOFF.md`
+- **Reason**: Dev ist kein leerer Startzustand mehr; die Reihenfolge „erst 1b, dann Fenster" gilt nicht mehr.
+
+## 2026-11-15 (SUPERSEDED 2026-11-15, origin: HANDOFF.md, reason: Post-Cutover-Schema #204): Dev-Restore scheitert an jedem Prod-Archiv
+- **Original**: „`~/catchlogx-dev-restore.sh` scheitert seit #202 an jedem Prod-Archiv — es bricht jetzt **vor** dem App-Start ab und nennt beide Wege (README + `PITFALLS.md`)."
+- **Superseded by**: Der Fehler galt nur für Archive aus der Zeit **vor** dem Cutover (`Sampling.importId NOT NULL` gegen bestehende Samplings). Mit dem Post-Cutover-Satz `20261115T124937Z` läuft das Skript wieder durch (Exit 0, 7 Migrationen, keine offene).
+- **Origin**: `docs/ai/HANDOFF.md`
+- **Reason**: Der Abbruch war datenabhängig, nicht versionsunabhängig; die Aussage „an jedem Prod-Archiv" ist falsch.
 
 ## 2026-10-18: Produktions-Upgrade-Tickets als erledigt geschlossen (Backlog-Triage)
 - **Original**: `docs/ai/STATE.md` „Pending" — der Produktions-Upgrade-Pfad #137–#153 als offene Ticketliste (Audit, Adoptionsskript, Rehearsal, Cutover, Interim-Deploy, Read-only-Rolle …).
