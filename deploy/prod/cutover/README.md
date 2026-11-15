@@ -158,7 +158,9 @@ whose samplings still carry `NULL`.
 > decision: the fresh database has one state only.
 >
 > **Done on dev on 2026-11-15:** dump `~/backups/pre-imports-model-20261114T231621Z.dump`
-> (56 MB), then wipe — **464 654 catches / 10 497 samplings / 6 260 sites /
+> (56 MB; deleted in the cleanup of 2026-11-15, #212 — the 464 654-catch state
+> lives in production and in the nightly archive `~/backups/20261115T023818Z.tar.zst`),
+> then wipe — **464 654 catches / 10 497 samplings / 6 260 sites /
 > 18 uploads / 18 upload blobs** removed, 3 template blobs kept, sequences
 > reset — then `fish_species` emptied and reloaded from the JSON master (165).
 > The #202 push deployed and applied `20261114230855_imports_model` on the
@@ -378,9 +380,13 @@ Two things this settles:
 
 Dev ends the drill at 0 catches / 165 species / 9 users / 3 templates, i.e. the
 state Phase 1b wants: the file hashes are gone with the imports, so the 13
-files can be uploaded again without hitting the duplicate check. `clx_prev`
-(the 113 102-catch state before the drill) and
-`~/backups/pre-route-c-<timestamp>.dump` are kept as the way back.
+files can be uploaded again without hitting the duplicate check. The drill's
+own artefacts (`clx_prev` with the 113 102-catch state, and the
+`~/backups/pre-route-c-<timestamp>.dump`) were **deleted in the cleanup of
+2026-11-15** (#212): the 464 654-catch state lives in production and in the
+nightly archive `~/backups/20261115T023818Z.tar.zst`, and the 113 102-catch
+state is reproducible by importing the 9 files again (~2 min, rehearsed three
+times).
 
 The drill's slowest finding was fixed the same day (#211, release `92b9132`):
 `FishCatch.samplingId` now has an index. Measured before/after on the same

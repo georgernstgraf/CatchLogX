@@ -65,8 +65,10 @@ Zeilen ab. **#202 ist deployt** (Release `8a0f1f0`, Migration
 NOT NULL` sind da, der Upload importiert direkt, `deleteImport` nimmt Fänge,
 Samplings und die Originaldatei mit. **Dev ist gewiped und neu aufgesetzt:**
 0 Fänge / 0 Samplings / 0 Sites, 165 Arten aus `assets/species.json`, 9 User,
-3 Templates; der Pre-Wipe-Dump liegt als
-`~/backups/pre-imports-model-20261114T231621Z.dump` (56 MB) auf `claw`.
+3 Templates; der Pre-Wipe-Dump lag als
+`~/backups/pre-imports-model-20261114T231621Z.dump` (56 MB) auf `claw` und ist
+beim Aufräumen am 2026-11-15 gelöscht worden (#212) — der 464 654-Fänge-Stand
+lebt in der Produktion und im Nachtarchiv `~/backups/20261115T023818Z.tar.zst`.
 
 **Stand 2026-11-14 (Cutover-Entscheidung, #200):** Die Prod-DB wird **neu
 aufgebaut** statt migriert — `prisma migrate deploy` auf eine leere DB, dann
