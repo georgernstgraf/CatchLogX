@@ -262,7 +262,7 @@ before and after, no `Imports` row, no orphan blob):
 
 | File | Answer | Detail |
 |---|---|---|
-| `2026_D_valid_final_DaniohnePIT.xlsx` | 400 | **missing `List` sheet** — a structural error, *before* the species check |
+| `2026_D_valid_final_DaniohnePIT.xlsx` | 400 | `Proterorhinus marmoratus`, **2 rows (Excel 6227, 7330)** — since #213 no longer a structural error |
 | `2026_E_F_valid_final.xlsx` | 400 | `Salvelinus fontinalis × Salvelinus umbla`, 10 rows |
 | `2026_I_valid_final.xlsx` | 400 | same species, 4 rows |
 | `2026_S_valid_final.xlsx` | 400 | same species, 2 rows |
@@ -321,10 +321,14 @@ production window.
    same file then imported in 11.8 s, `2026_T` (35 413 rows) in 36.4 s. The
    rollback on failure was clean — no partial rows, no orphan blob, no
    `Imports` row — so only the limit was wrong.
-2. **`2026_D` is blocked structurally, not by its species.** The file has only
-   a `DATA` sheet — no `List`, no `Instructions`. Repairing the two
-   `Proterorhinus marmoratus` cells (`CatchLogX-Data#7`) is **not enough**; the
-   file needs its `List` sheet back. It would be rejected after the repair too.
+2. **`2026_D` looked structural, and the fix was the validator, not the file.**
+   The file has only a `DATA` sheet — no `List`, no `Instructions` — and was
+   rejected as a structural error *before* the species check. The reaction was
+   first "the file needs its `List` sheet back"; **#213 reversed that** (see
+   "Open decisions" below): the sheet carries the Excel dropdowns, not the
+   import contract. Since the change, the same upload reaches the species check
+   and fails **only** on its two `Proterorhinus marmoratus` cells (Excel rows
+   6227 and 7330). No sheet has to be rebuilt for the repair.
 3. **There is no PIT data — anywhere.** `pit_dec`, `pit_hex`, `reader_id`,
    `memory_id` and `recapture` are empty in every delivered file (checked
    column by column on `2026_T`, 35 413 rows: all five at 0 %), and the
@@ -395,22 +399,72 @@ data — the foreign-key check `SELECT 1 … FOR KEY SHARE` drops from 23.8 ms t
 wipe of the prod clone from ~6 min to **2.4 s**, and `deleteImport` for
 `2026_T` (35 413 catches / 612 samplings) from **8.3 s to 0.52 s**.
 
-## Phase 2 — production window — TODO (#204)
+## Phase 2 — production window (#204)
 
-1. Announce the window; the app is read-only or stopped during the import.
-2. Fresh dump of the old database (`deploy/prod/backup/`), kept off-host.
-3. **Wipe the live database instead of creating an empty one** (#210, decided
-   2026-11-15): `TRUNCATE TABLE fish_catches, samplings, river_sites RESTART
-   IDENTITY`, delete the 18 upload blobs, empty and reload `fish_species` from
-   the JSON master — the details and measurements are in "Phase 1c" and in §1.
-   Users, `TemplateFiles` and `UserQueries` survive; the old step "recreate
-   users, re-upload templates, restore saved SQL queries" is **gone**.
-4. Deploy the release: its `prisma migrate deploy` applies `imports_model` and
-   `import_hard_delete` on the emptied database (2.2 s on dev, §Phase 1c).
-5. Import the 13 files (no legacy variant, no `2026_M` — both come back later as
-   regular uploads, see "Announcement").
-6. `deploy/prod/postgres/readonly-role.sh` (with `KEEP_PASSWORD=1`).
-7. Health check: `127.0.0.1:3001`, nginx on port 80, sign-in, one download.
+Written 2026-11-15 from the dev rehearsals (Phase 1a and 1c) and executed that
+day; the measured numbers are in "Phase 2 — result" below. **The order is the
+whole runbook**: the wipe has to happen *before* the deploy, because the deploy
+job runs `prisma migrate deploy` and `imports_model` cannot be applied to a
+database whose `samplings` still carry rows (P3018/P3009, see §2 and
+`PITFALLS.md`).
+
+**Prerequisites, verified read-only before the window** (2026-11-15):
+
+| Check | Value on production |
+|---|---|
+| counts before | 464 654 catches / 10 497 samplings / 6 260 sites / 125 species / 21 blobs (18 uploads + 3 templates) |
+| migration history | only `20261017190000_init` and `20261017200000_replace_minio_with_file_blobs` — the same state the dev counter-test rehearsed |
+| releases | `~/current` → `1266a87` (2026-10-30) is the pre-cutover release and stays on disk for a rollback |
+| runners | `catchlogx-server` (boku) and `catchlogx-vps` online |
+| app | `catchlogx.service` active, `127.0.0.1:3001` |
+| last prod deploy | 38 s dispatch → health check |
+
+**Steps**
+
+1. **Announce** (text below). The app stays up; only the data is briefly empty.
+2. **Dump off-host**, before anything destructive:
+   `pg_dump -Fc clx > ~/backups/pre-cutover-<ts>.dump` and copy it off the
+   machine (`pg_restore -l` must read it). This dump is the rollback.
+3. **Stop the app**: as the user of `catchlogx.service` (boku runner is a
+   *system* service, so use `sudo -u clxadmin XDG_RUNTIME_DIR=/run/user/1000
+   DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user stop
+   catchlogx.service`). `TRUNCATE` needs `ACCESS EXCLUSIVE`.
+4. **Delete the legacy upload blobs while `Uploads` still exists** — after the
+   migration the table is gone and the 18 blobs are orphans with no owner:
+   `DELETE FROM "FileBlob" WHERE id IN (SELECT "blobId" FROM "Uploads");`
+   → 21 blobs become 3 (the templates).
+5. **Wipe the fish data, keep the users**: `TRUNCATE TABLE fish_catches,
+   samplings, river_sites RESTART IDENTITY;` (0.1 s, §1). Users,
+   `TemplateFiles`, `UserQueries` and `Session` stay.
+6. **Empty the species master**: `DELETE FROM fish_species;` — the 165-entry
+   JSON master cannot be upserted over the 125-row seed (`P2002`, `PITFALLS.md`).
+7. **Deploy the release** (`production-deploy.yml`, dispatch with the master
+   SHA): `migrate deploy` applies `imports_model` and `import_hard_delete` on
+   the emptied database, publishes, restarts, health-checks.
+8. **Load the species master**: from the deployed checkout,
+   `npx tsx scripts/demo/insert-fish.ts` → 165 rows (the seed guard passes, the
+   database holds no catch).
+9. **Import the deliverables** through the real path:
+   `CUTOVER_USER=… CUTOVER_PASS=… ./import-deliveries.sh http://127.0.0.1:3001
+   <CatchLogX-Data>/should_work A B G K L N_O_P R T W_Y_Z` — one request per
+   file, each row count asserted against the table in "Scope". `--probe`
+   asserts the rejection of the blocked ones (`--probe … D E_F I S`).
+   The import needs a `SUPER_ADMIN` session; the window creates a temporary
+   account for it and deletes it in step 12 (`CatchLogX-Data` holds no
+   credentials, and the researchers' accounts are theirs).
+10. **Read-only role and the SQL page**: `KEEP_PASSWORD=1
+    ./deploy/prod/postgres/readonly-role.sh` (repairs the whitelist and keeps
+    the password the research group already has), then put
+    `QUERY_DATABASE_URL=postgresql://clx_readonly:<READONLY_DB_PASSWORD,
+    percent-encoded>@127.0.0.1:5432/clx` into `~clxadmin/.config/catchlogx/.env`
+    (it was **missing** on production until this window — without it the SQL
+    page answers 500, `deploy/prod/postgres/README.md`) and restart the unit.
+11. **Verify** (see below): per-file counts, species coverage, a site/species/
+    date spot check, one real query through the SQL page, a download, sign-in.
+12. **Remove the temporary account** and record the numbers here.
+
+**Post-cutover, as regular uploads** (no window): the four files blocked on
+`CatchLogX-Data#7`, then `2026_M` (#206) and the June-23 delivery (#207).
 
 ## Verification
 
@@ -492,10 +546,13 @@ coming back yet:
   seed, `PITFALLS.md`). **Hard gate:** #80 rejects a whole file on an unknown
   species, so `2026_E_F`, `2026_I` and `2026_S` import nothing until one of the
   two routes lands.
-- `2026_D` needs **two** repairs, not one. Its 2 `Proterorhinus marmoratus`
-  cells are a taxonomic synonym of `Proterorhinus semilunaris` (id 80) and need
-  the file repaired. Independently, the dry run (2026-11-15) showed the file
-  carries only a `DATA` sheet — **no `List`, no `Instructions`** — so since
-  #80 it is rejected as a **structural** error *before* the species check.
-  Fixing the two cells alone changes nothing: the file needs its `List` sheet
-  back or it stays out of the window. `CatchLogX-Data#7` carries both halves.
+- `2026_D` needs **one** repair, not two (since #213). Its 2
+  `Proterorhinus marmoratus` cells (Excel rows 6227 and 7330) are a taxonomic
+  synonym of `Proterorhinus semilunaris` (id 80) and need the file repaired. The
+  dry run (2026-11-15) first saw the file rejected as a **structural** error
+  because it carries only a `DATA` sheet — no `List`, no `Instructions`. That
+  rule was dropped in **#213**: the `List` sheet is the Excel dropdown, not the
+  import contract, and the species is checked against `fish_species` in every
+  case. **The `List` sheet does not have to be rebuilt** — verified on dev
+  2026-11-15: the file now answers with exactly those two rows.
+  `CatchLogX-Data#7` carries the cell repair only.
