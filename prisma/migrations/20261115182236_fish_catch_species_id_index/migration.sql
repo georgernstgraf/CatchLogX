@@ -1,0 +1,12 @@
+-- `FishCatch.speciesId` had no index, although the species admin filters on it
+-- twice: the per-species catch count and the "which imports does this species
+-- come from?" lookup, which walks catches → samplings → imports (#224).
+--
+-- Plain CREATE INDEX on purpose, same trade-off as the `samplingId` index
+-- (#211): Prisma wraps every migration in a transaction, so `CONCURRENTLY`
+-- cannot be used here. The build is short — the `samplingId` index took 244 ms
+-- on 464 654 catches, dev and production now carry ~128 594 — and the table
+-- stays writable right after. On a much larger copy, create it by hand with
+-- `CREATE INDEX CONCURRENTLY` outside a transaction instead of letting this
+-- migration run.
+CREATE INDEX "fish_catches_speciesId_idx" ON "fish_catches"("speciesId");

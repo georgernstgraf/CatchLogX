@@ -230,6 +230,9 @@ model FishCatch {
   // measured on 464 654 catches / 10 497 samplings: a `DELETE` wipe took
   // ~6 minutes, `TRUNCATE` 0.1 s (#211).
   @@index([samplingId])
+  // The species admin asks "which imports does this species come from?" and
+  // counts its catches per species; both filter on this column (#224).
+  @@index([speciesId])
   @@map("fish_catches")
 }
 

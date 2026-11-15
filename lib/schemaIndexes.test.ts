@@ -40,6 +40,10 @@ describe("Prisma schema indexes", () => {
     expect(modelBlock("Sampling")).toContain("@@index([importId])");
   });
 
+  it("indexes FishCatch.speciesId (species→imports lookup, #224)", () => {
+    expect(modelBlock("FishCatch")).toContain("@@index([speciesId])");
+  });
+
   it("reads real blocks, so a renamed model fails loudly", () => {
     expect(() => modelBlock("NoSuchModel")).toThrow(/not found/);
   });
