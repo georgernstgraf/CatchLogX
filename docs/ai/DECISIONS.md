@@ -3,7 +3,7 @@ type: Decisions
 title: Decisions
 description: Architektur- und Technikentscheidungen mit Begruendung (WAS und WARUM).
 tags: [catchlogx, decisions]
-generated: { by: opencode/knowledge-persistence, at: 2026-11-15T14:40:00Z }
+generated: { by: opencode/knowledge-persistence, at: 2026-11-15T18:01:00Z }
 status: stable
 ---
 
@@ -11,6 +11,13 @@ status: stable
 
 Architectural and technical decisions made in this project.
 Each entry documents WHAT was decided and WHY.
+
+## 2026-11-15: Fischarten werden im Admin-GUI gepflegt, `species.json` ist nur Bootstrap
+
+- **Choice**: Der Arten-Master lebt in der Datenbank (`fish_species`) und wird im Admin-Panel gepflegt (Tab „Fish Species", #201): Anlegen, Umbenennen, Löschen — Letzteres nur, solange keine Fänge referenzieren (`onDelete: Restrict`). `assets/species.json` (165 Einträge) bleibt ausschließlich Demo-/Bootstrap-Master für `npm run db:init` und `scripts/demo/insert-fish.ts`; es ist nicht mehr der Weg, auf dem die Produktion Arten erhält.
+- **Reason**: Mit #201 gibt es eine Verwaltungsoberfläche; ein zweiter Pfad über Excel-Liste plus Generator wäre eine zweite Wahrheit. Die Produktion hat den Master beim Cutover am 2026-11-15 einmalig aus dem JSON geladen (165 Arten) — danach ist die DB die Quelle.
+- **Considered**: (a) weiter über `assets/species.json` + `generate-fish-species-json.ts --write` pflegen — verworfen, weil jede Umbenennung einen Commit und ein Deploy verlangt und Lena keinen Repo-Zugang hat; (b) den JSON-Master löschen — verworfen, `db:init` und der Demo-Seed brauchen ihn.
+- **Tradeoff**: Zwei Altlasten bleiben als Zeilen stehen und brauchen kein Ticket: `id 60` („Leuciscus aspius/idus hyb", `notInArtliste`) ist eine Seed-Zeile ohne Fänge und per GUI löschbar; `id 44` (3 368 Fänge) und `id 85` stehen nicht in Lenas Artliste — eine taxonomische Frage an Lena, kein Code. #183 ist damit geschlossen.
 
 ## 2026-11-15: Dependabot patcht automatisch, Majors bleiben Handarbeit
 
@@ -120,6 +127,7 @@ Each entry documents WHAT was decided and WHY.
 - **Tradeoff**: Der Build läuft im Runner auf derselben 3,8-GB-VPS parallel zum laufenden Server (RAM-Druck wie zuvor, siehe #132); der `deploy`-Job liegt im Workflow `Test`, dessen `cancel-in-progress` einen laufenden Deploy abbrechen kann (selbstheilend: Symlink-Swap liegt vor dem Restart). Der Health-Check schlägt hart fehl, **kein** Auto-Rollback. Neue Abhängigkeit: `catchlogx-vps` muss laufen, sonst hängt der Deploy in der Queue.
 
 ## 2026-10-18: Datenerhaltende Übernahme der Produktionsdatenbank (#139, #141)
+> Superseded 2026-11-15 by "Cutover statt Migration" (#200): die Produktion wurde **nicht** adoptiert, sondern aus den `-data`-Dateien neu aufgebaut (464 654 → 128 594 Fänge). Der Adoptionscode (`lib/adoption.ts`, `scripts/prod/adopt-legacy-prod.ts`) ist toter Code und wird in #208 entfernt.
 - **Choice**: Die BOKU-Produktionsdatenbank wird **nicht** aus der Baseline `20261017190000_init` neu aufgebaut, sondern in-place adoptiert: `scripts/prod/adopt-legacy-prod.ts` (#139) benennt `DummyFiles` → `TemplateFiles` um, legt die Tabelle `FileBlob` an, befüllt pro referenziertem MinIO-Objekt einen Blob aus einem `mc mirror`-Export, setzt `Uploads.blobId`/`TemplateFiles.blobId` auf `NOT NULL`, droppt die MinIO-Pfadspalten (`DummyFiles.filePath`, `Uploads.link`), räumt die veraltete Migrations-Buchhaltung auf und markiert `20261017190000_init` und `20261017200000_replace_minio_with_file_blobs` als applied. Das Skript ist idempotent und per `--dry-run` probelauffähig. Der Cutover-Job (#141, `production-maintenance.yml`, `confirm=ADOPT-PRODUCTION`) verifiziert danach Drift, `migrate status`, Zeilenzahlen und Blobs, bevor er den neuen Stack hochfährt.
 - **Reason**: Die Produktion enthält echte Nutzungsdaten (Fänge, Sessions, Password-Resets, Upload-Metadaten und 19 MinIO-Objekte). Ein Neuaufbau hätte die Rows verloren und die Objekte unverlinkt gelassen. Die Generalprobe (#140) hat den Pfad gegen eine echte Kopie der Produktionsdatenbank bewiesen (Run 39079039305: 19 Blobs / 56.337.761 Bytes, 464.654 Fänge, 18 Uploads, 1 Template, 7 User, 13 Sessions — alle Zeilenzahlen vor/nach identisch, Drift leer).
 - **Considered**: (a) Produktion aus der Baseline neu aufbauen (der früher akzeptierte Plan, siehe 2026-10-17) — verworfen, Datenverlust; (b) `db push` beibehalten und auf den Baseline-Abgleich verzichten — verworfen, weil `db push` die History weiter umgeht und der Deploy-Pfad `migrate deploy` voraussetzt (siehe #129); (c) das Adoptionswerkzeug ohne Generalprobe direkt in Produktion laufen lassen — verworfen zugunsten der Rehearsal gegen eine Prod-Kopie (#140, Run 39079039305).

@@ -3,13 +3,26 @@ type: Handoff
 title: Handoff
 description: Offene Aufgaben fuer die naechste Session.
 tags: [catchlogx, handoff]
-generated: { by: opencode/knowledge-persistence, at: 2026-11-15T17:10:00Z }
+generated: { by: opencode/knowledge-persistence, at: 2026-11-15T18:01:00Z }
 status: stable
 ---
 
 # Handoff
 
 Offene Aufgaben für die nächste Session.
+
+**Stand 2026-11-15 (Backlog-Triage, #222):** 54 offene Issues wurden gegen Code,
+Git-Historie und `docs/ai/` geprüft; **27 sind geschlossen** (18 `completed`,
+9 `not planned`), 31 bleiben offen. Belege stehen als Kommentar in jedem Issue.
+Nachfolger für die drei abgespaltenen Reste: **#221** (`deploy-dev.yml` deployt
+auch auf `master`-Pushes), **#219** (inhaltliche Duplikaterkennung beim Upload),
+**#220** (Docker-Reste auf dem Prod-Host abräumen). Im selben Zug korrigiert:
+`STATE.md` (`QUERY_DATABASE_URL` ist auf Prod gesetzt), `DECISIONS.md`
+(Adoption als überholt markiert, neue Entscheidung „Artenpflege im Admin-GUI"),
+`DOMAIN.md` (`Imports` statt `Uploads`, Rollen, Import-Regeln). **Neu gemessen:**
+Docker läuft auf dem Prod-Host weiter (`29.9.3`, `enabled`+`active`, Container
+`clx-postgres` gestoppt, Volumes `clx_pgdata`/`clx_miniodata`/`clx_node_modules`
+plus 4 anonyme) — deshalb #220.
 
 **Stand 2026-11-15 (Release, Post-Cutover-Backup, Dev-Reseed, #204):** `dev`
 per PR #215 nach `master` gemerged (`9eefb21`), `master` danach per Fast-Forward
@@ -367,15 +380,18 @@ Superuser-Slots.
 6. [x] **#162 Deploy legt `.env` in jedes Release** — erledigt mit #164:
    `rm -f .env .next/standalone/.env` nach dem Build und `rm -f "$REL/.env"` in
    `publish-release.sh`.
-7. [ ] **#163 Rollback-Rezept** überall auf den **vollen** Commit-SHA umstellen
-   (kurze SHAs scheitern in `actions/checkout`).
+7. [x] **#163 Rollback-Rezept** — erledigt: `ARCHITECTURE.md`, `PITFALLS.md`,
+   das Meeting-Protokoll 2026-10-27 und `deploy/prod/cutover/README.md` verlangen
+   den **vollen** Commit-SHA und erklären, warum kurze SHAs in `actions/checkout`
+   scheitern. Issue geschlossen (#222).
 8. [ ] **#153 In-App-Data-Access-Seite** (R-Verbindungsdaten + Read-only-Passwort
    für die Forschungsgruppe) — das Passwort liegt nur als `READONLY_DB_PASSWORD`
    in `/home/clxadmin/.config/catchlogx/.env`; Rotation = `deploy/prod/postgres/readonly-role.sh`
    per SSH (ohne `KEEP_PASSWORD=1`), Verifikation mit `KEEP_PASSWORD=1`.
-9. [ ] **#145 Wissensbasis** nachziehen (Läufe #143/#152 sind jetzt vollständig
-   dokumentiert; offen bleibt die Zusammenfassung im Datenrepo-Kontext).
-10. [ ] **#115 Wartungszugang**: der Zugang existiert jetzt real — `root` per
+9. [x] **#145 Wissensbasis** — mit #200 überholt und geschlossen (#222): die
+   datenerhaltende Adoption ist nicht der Weg, der gegangen wurde; die
+   Entscheidung von 2026-10-18 ist in `DECISIONS.md` als überholt markiert.
+10. [x] **#115 Wartungszugang**: der Zugang existiert jetzt real — `root` per
     persönlichem SSH-Key (`grafg@spengergasse.at` **und** `georg@grafg`, seit
     2026-10-27), **kein** unprivilegierter Account, keine zweite Person. Mit der OE
     klären und dokumentieren, ob das so bleibt (Alternative: eigener `georg`-Account
@@ -383,10 +399,16 @@ Superuser-Slots.
     (`deploy/prod/sshd/99-catchlogx-no-password.conf`, `KbdInteractiveAuthentication
     no`), `passwd -l clxadmin`; Key-Login für `root` **und** `clxadmin` bleibt
     (verifiziert), `root` behält den Passwort-Login **auf der Konsole** als
-    Break-Glass — nicht weg-härten.
-11. [ ] **MinIO-Volume** `catchlogx_clx_miniodata` endgültig löschen, sobald das
-    Backup-Set `cutover-20261018T085752Z` (21 Objekte, 54 M) als ausreichend
-    bewertet ist. Container sind bereits entfernt.
+    Break-Glass — nicht weg-härten. **Issue geschlossen (#222):** der Zugang ist
+    der in `DECISIONS.md` (2026-10-16) sanktionierte Weg, kein Tunnel; offen bleibt
+    nur die formale Antwort von BOKU-IT auf die allgemeine Wartungsanfrage.
+11. [ ] **Docker-Reste auf Prod abräumen (#220)** — Docker läuft dort noch
+    (`29.9.3`, `enabled`+`active`), Container `clx-postgres` gestoppt, Volumes
+    `catchlogx_clx_pgdata` (Rückfallweg), `catchlogx_clx_miniodata` (einzige Kopie
+    der Alt-Objekte ist das Backup-Set `cutover-20261018T085752Z`, 21 Objekte,
+    54 M), `catchlogx_clx_node_modules` plus 4 anonyme. **Erst nach einer grünen
+    Monatsprobe** entfernen, dann `docker`/`containerd` deinstallieren und
+    `docker-compose.prod.yml` löschen. Details im Issue.
 12. [ ] **#122 Restposten**: Backup-Routine läuft seit 2026-10-27 (#86, siehe oben) —
     offen bleibt das **Institut-Fileserver-Ziel** aus dem Issue (Pfad + Protokoll von
     Martin/Lena); bis dahin spiegelt die VPS. Entscheidung zum Vorgänger-Runner
@@ -414,9 +436,9 @@ Superuser-Slots.
     464.654 Fänge unverändert, Container bleibt `Exited`; `report.sql` auf dem
     neuen Pfad erzeugt einen 127-Zeilen-Report. Offen bleibt: (b) bei BOKU-IT
     einen **DNS-Namen** für `141.244.222.191` erbitten (nimmt die IP aus allen
-    R-Configs und erlaubt später ein echtes Zertifikat); (c) Volume
-    `catchlogx_clx_pgdata` und Docker erst entfernen, wenn die native DB Wochen
-    inkl. Monatsprobe grün läuft. Der Runbook-Checkout ist seit #122
+    R-Configs und erlaubt später ein echtes Zertifikat); (c) **Docker-Reste**
+    (`clx_pgdata`, `clx_miniodata`, Daemon) sind jetzt **#220** — erst nach einer
+    grünen Monatsprobe. Der Runbook-Checkout ist seit #122
     **root-eigen** und wird bei Bedarf frisch geklont
     (`git clone https://github.com/georgernstgraf/CatchLogX /root/CatchLogX`);
     `/opt/CatchLogX` ist gelöscht, die Laufzeit-Env liegt in
@@ -450,7 +472,7 @@ Superuser-Slots.
     Kein Restart kostet Statistik: `pg_stat_statements.save = on` (198 Shapes,
     `stats_reset` unverändert nach dem Prod-Restart).
 
-18. [ ] **#121 Rollout SQL-Seite auf `clx_readonly`**: Die SQL-Seite läuft nur mit
+18. [x] **#121 Rollout SQL-Seite auf `clx_readonly`**: Die SQL-Seite läuft nur mit
     `QUERY_DATABASE_URL` (Rolle `clx_readonly`, libpq-taugliche URL ohne `?connection_limit=`/`?schema=`),
     es gibt bewusst keinen Fallback auf die Admin-URL. **Dev:** Rolle verengt und Env gesetzt (Georg,
     2026-10-30); Code deployt und Rauchtest grün (2026-11-04, `546ea84`). **Prod-Grants sind seit
@@ -461,9 +483,10 @@ Superuser-Slots.
     und `KEEP_PASSWORD=1`, danach von außen nachgeprüft (`pg_default_acl` leer, Sequenzen frei von
     Rechten). **Prod seit 2026-11-15 gesetzt** (`QUERY_DATABASE_URL` +
     Unit-Restart im Cutover, Phase-2-Schritt 10); offen bleibt nur die In-App-Seite
-    #153.
+    #153. **Issue geschlossen (#222).**
 
-19. [ ] **`deploy-dev.yml` feuert auch auf `master`-Pushes** (beobachtet 2026-11-15):
+19. [ ] **#221 `deploy-dev.yml` feuert auch auf `master`-Pushes** (beobachtet 2026-11-15,
+    als eigenes Ticket angelegt):
     Der Workflow deklariert `workflow_run.branches: [dev]`, aber Run 43716280746
     hat `event: workflow_run`, `head_branch: master`, `head_sha: 788be5b` und die
     Dev-Instanz neu deployt (`completed/success`); dasselbe bei `9eefb21`. Der

@@ -1,5 +1,27 @@
 # Persistenz-Log
 
+## 2026-11-15 — Backlog-Triage: 27 Issues geschlossen, Doku-Drift nachgezogen (#222)
+
+* **Update**: `STATE.md` (zwei Aussagen „`QUERY_DATABASE_URL` fehlt auf Prod"
+  korrigiert — seit dem Cutover gesetzt), `DECISIONS.md` (Adoption 2026-10-18 als
+  überholt markiert; neue Entscheidung „Artenpflege im Admin-GUI,
+  `species.json` nur Bootstrap"), `DOMAIN.md` (`Imports` statt
+  `Uploads`-State-Machine, Rollen `USER`/`ADMIN`/`SUPER_ADMIN`, Import- und
+  Artenregeln, Runner „läuft" statt „geplant"), `HANDOFF.md` (Triage-Block,
+  Checkboxen 7/9/10/18 auf erledigt, Items 11/16c auf #220, Item 19 auf #221).
+* **Creation**: #221 (`deploy-dev.yml` deployt auch auf `master`), #219
+  (inhaltliche Duplikaterkennung beim Upload), #220 (Docker-Reste auf dem
+  Prod-Host), #222 (dieses Triage-Issue).
+* **Reason**: 54 offene Issues waren über Wochen gewachsen; 27 waren erledigt
+  oder durch #200/#202/#184 überholt. Jede Schließung hat einen Beleg-Kommentar
+  (Commit, Datei:Zeile oder Nachfolger-Issue). Live-Befund dabei: Docker läuft
+  auf dem Prod-Host noch (`29.9.3`, `enabled`+`active`, `clx-postgres` gestoppt,
+  drei benannte plus vier anonyme Volumes) — Grundlage für #220 und für die
+  Neubewertung von #159.
+* **Verifikation**: `gh issue list` zeigt 31 offene Issues (27 Rest + 4 neue);
+  keine Schließung mit offenen Sub-Issues (#132 vor #88 geschlossen; #204 und
+  #183 hatten nur geschlossene).
+
 ## 2026-11-15 (Nachtrag) — #174 Stufe 3 reisefertig entschieden
 
 * **Update**: `HANDOFF.md` Aufgabe 21 — xlsx → CDN-Pin 0.20.3 (Variante A, Rückfall A′
