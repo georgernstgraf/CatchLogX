@@ -1,5 +1,21 @@
 # Persistenz-Log
 
+## 2026-11-15 — „All Imports" und Namenskonvention Import vs. Upload (#223)
+
+* **Update**: `CONVENTIONS.md` (neuer Abschnitt „Terminology" — Import =
+  Domänenobjekt, Upload = Byte-Transport, Vorlage = Upload), `DOMAIN.md` und
+  `ARCHITECTURE.md` („an import commits directly", Seiten-/Komponentenbeschreibung
+  nachgezogen), `STATE.md` (Eintrag zu #223).
+* **Creation**: #223 (Admin-GUI: Tab „All Imports", Spalte „Imported by",
+  Namenskonvention).
+* **Reason**: „Upload" und „Import" wurden gemischt verwendet (Sidebar „Upload"
+  neben „My Imports", Seite „Upload Excel Files" neben „Importing…", Code
+  `uploadService` vs. `importService`). Entscheidung: „Import" ist der Datensatz,
+  „Upload" nur der Transport; die Spalte „Uploaded by" im Admin-Tab hieß falsch.
+* **Verifikation**: Lint 0 Fehler / 12 vorbestehende Warnungen, Typecheck,
+  370 Tests grün; Komponenten ohne jsdom nicht testbar (Commit-Message).
+  Issue #223 geschlossen.
+
 ## 2026-11-15 — Backlog-Triage: 27 Issues geschlossen, Doku-Drift nachgezogen (#222)
 
 * **Update**: `STATE.md` (zwei Aussagen „`QUERY_DATABASE_URL` fehlt auf Prod"
