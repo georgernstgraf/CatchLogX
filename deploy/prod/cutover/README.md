@@ -2,9 +2,11 @@
 
 **Status (2026-11-15).** Phase 0 (blob archive) and **Phase 1a (dev dry run,
 9 of 13 files)** are run and green; the numbers below are measured, not
-computed. Phase 1b (all 13 files) waits on the Excel repair
-(`CatchLogX-Data#7`), Phase 2 is still **TODO (#204)** and is filled in from
-what Phase 1 proves.
+computed. **Phase 1c (Route C: wipe instead of an empty database)** was
+rehearsed on the same day and is what Phase 2 uses — the production database is
+wiped in place, so users, templates and saved queries survive. Phase 1b (all 13
+files) waits on the Excel repair (`CatchLogX-Data#7`); Phase 2 is still
+**TODO (#204)** and is filled in from what Phase 1 proves.
 
 ## Decision
 
@@ -166,19 +168,22 @@ whose samplings still carry `NULL`.
 ### 1. Wipe the fish data, keep the masters
 
 Not `scripts/demo/wipe-fish.ts` — that one deletes only `fish_species` and
-exists for a half-written seed, not for cleanup. The cutover needs the delete
-order from `scripts/demo/wipe-and-seed.ts`, without the seed step:
+exists for a half-written seed, not for cleanup. Use **`TRUNCATE`, not
+`DELETE`** (measured on dev 2026-11-15, #210):
 
 ```sql
-BEGIN;
-DELETE FROM fish_catches;
-DELETE FROM samplings;
-DELETE FROM river_sites;                                  -- optional: the import upserts them
-SELECT setval('fish_catches_id_seq', 1, false);
-SELECT setval('samplings_id_seq', 1, false);
-SELECT setval('river_sites_id_seq', 1, false);
-COMMIT;
+-- the app must be stopped: ACCESS EXCLUSIVE, nothing else may hold these tables
+TRUNCATE TABLE fish_catches, samplings, river_sites RESTART IDENTITY;
 ```
+
+`TRUNCATE` takes **0.1 s**. The `DELETE` chain it replaces
+(`DELETE FROM fish_catches; DELETE FROM samplings; DELETE FROM river_sites;`
+plus three `setval` calls) needs **~6 minutes** for 464 654 catches / 10 497
+samplings: `fish_catches` carries only `fish_catches_pkey` — no index on
+`samplingId` — so the `ON DELETE RESTRICT` foreign key seq-scans the whole
+catch table once per deleted sampling (backend at 99.7 % CPU for minutes). All
+three tables are named in one statement, so no `CASCADE` is needed, and
+`RESTART IDENTITY` replaces the three `setval` calls.
 
 - **`fish_species` is the 165-entry master from `assets/species.json`**, not
   the old 125-entry seed — the import validates every species against it, and a
@@ -201,6 +206,17 @@ COMMIT;
 `npx prisma migrate deploy` — applies #202's migration (drops `Uploads`,
 creates `Imports`, `Sampling.importId NOT NULL`). On dev this normally happens
 in the deploy job; run it by hand only if the release is already published.
+
+**It only applies to a wiped database.** `20261114230855_imports_model` starts
+with `ALTER TABLE "samplings" ADD COLUMN "importId" TEXT NOT NULL`, which fails
+with `23502` (Prisma `P3018`) as soon as a single sampling exists. Measured on
+dev 2026-11-15 (#210) against the pre-#202 dump: the migration rolls back
+cleanly, but the failed row stays in `_prisma_migrations` and **every later
+deploy is refused with `P3009`** until
+`npx prisma migrate resolve --rolled-back 20261114230855_imports_model`. This is
+the technical reason for the wipe → migrate → import order, and it is why
+`catchlogx-dev-restore.sh` cannot migrate a freshly restored production dump
+(see `deploy/vps/dev-restore/README.md`).
 
 ### 3. Import
 
@@ -322,14 +338,58 @@ production window.
    409 documented in #202: 409 is reserved for the race inside the write
    transaction. Both are correct; the runbook wording was wrong.
 
+### Phase 1c — Route C, wipe instead of an empty database (2026-11-15, #210)
+
+Phase 1a started from an **empty** database. That works, but it throws away
+what the old database already knows correctly: users, password hashes,
+`TemplateFiles` and `UserQueries`. Route C keeps them by starting the rebuild
+on a **wiped copy of production**, which is also what Phase 2 does now.
+
+Rehearsed on dev on 2026-11-15, in this order — the order is the whole point:
+
+| Step | Result |
+|---|---|
+| 1. Dump `clx`, rename it to `clx_prev`, restore pre-#202 dump into a fresh `clx` | 6.5 s, exactly 464 654 / 10 497 / 6 260 / 125 / 18 uploads / 21 blobs |
+| 2. `prisma migrate deploy` **on the data copy** (the counter-test) | **fails**: `P3018`, `23502 column "importId" … contains null values`; rollback clean; retry → `P3009`; `migrate resolve --rolled-back` clears it |
+| 3. Wipe: `TRUNCATE … RESTART IDENTITY`, delete the 18 upload blobs, `DELETE FROM fish_species` + `insert-fish.ts` | 0.1 s for the truncate, 165 species, 3 template blobs, still 9 users / 3 templates / 2 saved queries |
+| 4. `prisma migrate deploy` on the wiped copy | **green in 2.2 s** — `imports_model` + `import_hard_delete` applied, `Uploads` dropped, `samplings.importId NOT NULL` |
+| 5. `clx_readonly` whitelist + `pg_stat_statements` revoke, start the app | health check 200 after 2 s, sign-in 200 |
+| 6. Import the 9 importable files through `POST /api/upload/new` (one request each) | **128 594 catches / 1 282 samplings / 1 095 sites / 9 imports / 12 blobs** — identical to Phase 1a, per file: A 3.5 s, B 9.6 s, G 5.6 s, K 11.9 s, L 3.0 s, N_O_P 19.6 s, R 1.8 s, T 33.2 s, W_Y_Z 16.8 s |
+| 7. Delete all 9 imports through the admin endpoint the GUI calls | 9 × `DELETE /api/admin/imports/{id}`, 0.2–8.3 s each (14 s total); second delete of the same id → 404; afterwards **0 catches / 0 samplings / 0 imports / 3 blobs**, `river_sites` 1 095 and `fish_species` 165 stay, sequences keep running |
+
+Two things this settles:
+
+- **The migration only ever needed an empty `samplings` table, not an empty
+  database.** Users, templates and saved queries do not get in its way, so
+  Phase 2 no longer needs its manual "recreate users, re-upload templates,
+  restore saved SQL queries" step.
+- **"Delete everything via the GUI" is a per-import operation, and it reaches
+  exactly the rows that have an `Imports` row.** In Route C every catch belongs
+  to an import, so 9 clicks empty the database. The old mass (464 654 catches,
+  no provenance) was never deletable through any GUI — the pre-#202 admin page
+  only had accept/deny, and `river_sites`, `fish_species` and the sequences are
+  not GUI-deletable in any version.
+
+Dev ends the drill at 0 catches / 165 species / 9 users / 3 templates, i.e. the
+state Phase 1b wants: the file hashes are gone with the imports, so the 13
+files can be uploaded again without hitting the duplicate check. `clx_prev`
+(the 113 102-catch state before the drill) and
+`~/backups/pre-route-c-<timestamp>.dump` are kept as the way back.
+
 ## Phase 2 — production window — TODO (#204)
 
 1. Announce the window; the app is read-only or stopped during the import.
 2. Fresh dump of the old database (`deploy/prod/backup/`), kept off-host.
-3. Empty database, `prisma migrate deploy`.
-4. Import the 13 files (no legacy variant, no `2026_M` — both come back later as
+3. **Wipe the live database instead of creating an empty one** (#210, decided
+   2026-11-15): `TRUNCATE TABLE fish_catches, samplings, river_sites RESTART
+   IDENTITY`, delete the 18 upload blobs, empty and reload `fish_species` from
+   the JSON master — the details and measurements are in "Phase 1c" and in §1.
+   Users, `TemplateFiles` and `UserQueries` survive; the old step "recreate
+   users, re-upload templates, restore saved SQL queries" is **gone**.
+4. Deploy the release: its `prisma migrate deploy` applies `imports_model` and
+   `import_hard_delete` on the emptied database (2.2 s on dev, §Phase 1c).
+5. Import the 13 files (no legacy variant, no `2026_M` — both come back later as
    regular uploads, see "Announcement").
-5. Recreate users, re-upload templates, restore saved SQL queries if exported.
 6. `deploy/prod/postgres/readonly-role.sh` (with `KEEP_PASSWORD=1`).
 7. Health check: `127.0.0.1:3001`, nginx on port 80, sign-in, one download.
 

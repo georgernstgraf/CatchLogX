@@ -11,6 +11,25 @@ status: stable
 
 Offene Aufgaben für die nächste Session.
 
+**Stand 2026-11-15 (Route C durchgespielt, #210):** Der Cutover startet jetzt
+auf einer **gewipeten Prod-Kopie** statt auf einer leeren DB — User, Templates
+und gespeicherte SQL-Queries bleiben damit erhalten, Phase-2-Schritt 5 des
+Runbooks ist gestrichen. Auf Dev belegt (Details: `deploy/prod/cutover/README.md`,
+„Phase 1c"): Restore (6,5 s, 464 654 / 10 497 / 6 260 / 125 / 18 / 21) →
+**Gegenprobe** `migrate deploy` auf der Datenkopie scheitert (`P3018`/`23502`,
+danach `P3009`, `migrate resolve --rolled-back`) → `TRUNCATE`-Wipe in 0,1 s →
+Migration grün in 2,2 s → 9 Dateien importieren (128 594 / 1 282 / 1 095, wie
+Phase 1a, bei erhaltenen 9 Usern / 3 Templates / 2 Queries) → **alle 9 Importe
+per GUI-Endpunkt löschen** (14 s gesamt, danach 0 Fänge). Dev steht auf
+0 Fängen / 165 Arten / 9 Usern / 3 Templates, ohne Import-Hashes — also genau
+im Startzustand für Phase 1b, die 13 Dateien lassen sich wieder hochladen.
+Zwei Nebenbefunde mit Ticket: `fish_catches.samplingId` hat **keinen Index**
+(der `DELETE`-Wipe braucht deshalb ~6 min statt 0,1 s; ebenso skaliert
+`deleteImport`) und `~/catchlogx-dev-restore.sh` scheitert seit #202 an jedem
+Prod-Archiv — es bricht jetzt **vor** dem App-Start ab und nennt beide Wege
+(README + `PITFALLS.md`).
+**Nächster Schritt: Phase 1b (#204)** — sobald `CatchLogX-Data#7` landet (Arten-Reparatur **plus** `List`-Blatt für D), alle 13 Dateien auf dem leeren Dev, erwartete 183 855 Zeilen; danach Phase 2 (Prod-Fenster) mit dem Wipe aus „Phase 1c".
+
 **Stand 2026-11-15 (Trockenlauf Phase 1a grün, #204):** 9 der 13 Dateien sind
 auf Dev durch den echten Import-Pfad gelaufen — **128 594 Fänge / 1 282
 Samplings / 1 095 Sites**, exakt die erwarteten Zahlen; die vier blockierten

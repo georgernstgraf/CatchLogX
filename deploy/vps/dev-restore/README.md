@@ -87,5 +87,15 @@ systemctl --user start catchlogx.service
 - No alerting on this host; a failure is a non-zero exit and a log line.
 - The restore brings production **data**, not the production schema: step 7
   migrates forward to whatever `dev` is deployed. A release with a migration
-  that cannot run against the production data will fail here (loudly, with
-  `clx_prev` intact).
+  that cannot run against the production data will fail here (`clx_prev` intact,
+  the app **left stopped**, not restarted against a database it cannot serve).
+- **That failure is current (2026-11-15, #210).** Since #202 the release carries
+  `Sampling.importId NOT NULL`, which `prisma migrate deploy` cannot add while
+  the restored database holds 10 497 samplings (`23502`, Prisma `P3018`; every
+  later attempt answers `P3009` until `prisma migrate resolve --rolled-back
+  20261114230855_imports_model`). Until the production cutover (#200), a re-seed
+  needs the **wipe route** in `deploy/prod/cutover/README.md` (§1 +
+  "Phase 1c"): restore, then `TRUNCATE TABLE fish_catches, samplings,
+  river_sites RESTART IDENTITY`, drop the `Uploads` rows/blobs, reload
+  `fish_species` from `assets/species.json`, then migrate. That sequence was
+  rehearsed on dev on 2026-11-15 and is what Phase 2 will do on production.

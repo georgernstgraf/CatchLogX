@@ -161,8 +161,26 @@ db_url="${db_url%\'}"; db_url="${db_url#\'}"
 [ -n "$db_url" ] || die "DATABASE_URL nicht in $ENV_FILE"
 
 log "wende Migrationen des Releases $(basename "$(readlink -f "$RELEASE_DIR")") an"
-DATABASE_URL="$db_url" "$PRISMA" migrate deploy --schema "$RELEASE_DIR/prisma/schema.prisma" \
-  || die "prisma migrate deploy fehlgeschlagen - $DB_PREV bleibt erhalten"
+# A release that is AHEAD of the restored schema can still be blocked by the
+# restored DATA: `Sampling.importId NOT NULL` (#202) cannot be added while
+# samplings exist. That is not a bug to paper over - the restored database is
+# then a state the running release cannot serve, so the app must NOT be started
+# (it would answer 500 on every page). Leave clx_prev alone and print the way
+# out. See deploy/prod/cutover/README.md ("Phase 1c") for the wipe route.
+if ! DATABASE_URL="$db_url" "$PRISMA" migrate deploy --schema "$RELEASE_DIR/prisma/schema.prisma"; then
+  app_stopped=0
+  log "FEHLER: prisma migrate deploy fehlgeschlagen - $DB_PREV bleibt erhalten, App bleibt gestoppt."
+  log "Die wiederhergestellte DB passt nicht zum Release: Migrationen, die eine leere Tabelle"
+  log "brauchen (Sampling.importId NOT NULL, #202), scheitern an den Produktionsdaten (23502/P3018)."
+  log "Zwei Wege:"
+  log "  (a) zurueckrollen:"
+  log "      psql -d postgres -c 'DROP DATABASE IF EXISTS clx WITH (FORCE)' -c 'ALTER DATABASE clx_prev RENAME TO clx'"
+  log "      systemctl --user start catchlogx.service"
+  log "  (b) Fischdaten wipen und dann migrieren (deploy/prod/cutover/README.md, Abschnitt 1):"
+  log "      TRUNCATE TABLE fish_catches, samplings, river_sites RESTART IDENTITY;"
+  log "      Uploads loeschen, fish_species leeren + scripts/demo/insert-fish.ts, dann dieser Schritt erneut."
+  die "prisma migrate deploy fehlgeschlagen"
+fi
 
 # ---- read-only role back into shape (#121) ----------------------------------
 log "setze clx_readonly neu (Whitelist)"
