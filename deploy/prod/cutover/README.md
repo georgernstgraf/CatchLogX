@@ -1,12 +1,12 @@
 # Production cutover — rebuild the database from the `-data` files (#200)
 
 **Status (2026-11-15).** Phase 0 (blob archive) and **Phase 1a (dev dry run,
-9 of 13 files)** are run and green; the numbers below are measured, not
-computed. **Phase 1c (Route C: wipe instead of an empty database)** was
-rehearsed on the same day and is what Phase 2 uses — the production database is
-wiped in place, so users, templates and saved queries survive. Phase 1b (all 13
-files) waits on the Excel repair (`CatchLogX-Data#7`); Phase 2 is still
-**TODO (#204)** and is filled in from what Phase 1 proves.
+9 of 13 files)** are run and green; **Phase 1c (Route C: wipe instead of an empty
+database)** was rehearsed on the same day and is what Phase 2 uses. **Phase 2 ran
+on production on 2026-11-15**: 9 of the 13 files are live (128 594 catches), the
+other four wait on the Excel repair (`CatchLogX-Data#7`). Phase 1b (all 13 files,
+183 855 rows) is therefore still open — it is now the *follow-up* of the window,
+not its precondition (see "Phase 2 — result").
 
 ## Decision
 
@@ -466,6 +466,63 @@ database whose `samplings` still carry rows (P3018/P3009, see §2 and
 **Post-cutover, as regular uploads** (no window): the four files blocked on
 `CatchLogX-Data#7`, then `2026_M` (#206) and the June-23 delivery (#207).
 
+### Phase 2 — result (2026-11-15, executed)
+
+Production was rebuilt in place. Every number below is measured on
+`catchlogx-server`, not copied from the dev run.
+
+| Step | Result |
+|---|---|
+| 1. Dump off-host | 56 040 198 B, 95 TOC entries, `pg_restore -l` reads it, sha256 verified on the second host |
+| 2. App stopped | `TRUNCATE` had `ACCESS EXCLUSIVE`; nginx answered 502 during the window |
+| 3. Legacy upload blobs | 18 `Uploads` rows + 18 blobs deleted → 3 blobs left (templates) |
+| 4. Wipe | `TRUNCATE … RESTART IDENTITY` → 0 / 0 / 0 |
+| 5. Species | `DELETE FROM fish_species` → 125 rows gone |
+| 6. Deploy | `production-deploy.yml` @ `d9ac764`, 7 migrations applied, health check green |
+| 7. Species master | `insert-fish.ts` → **165** rows, sequence at 167 |
+| 8. Import | **128 594 catches in 37 s** total (A 1 s, B 4 s, G 2 s, K 4 s, L 1 s, N_O_P 7 s, R <1 s, T 11 s, W_Y_Z 7 s) |
+| 9. Probes | the four blocked files answer 400 and write nothing (D 4 s, E_F 3 s, I 2 s, S 9 s) |
+| 10. Read-only role | whitelist verified over TCP+TLS: 4 tables readable, `Imports`/`FileBlob`/`QueryLog`/`User` denied, writes denied |
+| 11. `QUERY_DATABASE_URL` | was **missing**; added from `READONLY_DB_PASSWORD` (percent-encoded), unit restarted, SQL page answers |
+| 12. Temporary account | imports reassigned to the operator, then account + sessions + its 5 `QueryLog` rows deleted → **9 users** as before |
+
+Database afterwards: **128 594 catches / 1 282 samplings / 1 095 river sites /
+165 species / 9 imports / 12 blobs / 9 users / 3 templates / 2 saved queries**,
+`samplings.importId` set on every row, 67 of the 165 species used — identical to
+the dev dry run (Phase 1a/1c).
+
+**Verification on the real data**
+
+- SQL page over `clx_readonly`: `Salmo trutta` 31 359 / `Cyprinidae` 15 604 /
+  `Squalius cephalus` 13 509 / `Cottus gobio` 11 035 / `Oncorhynchus mykiss`
+  8 868 — the same numbers as the dev dry run.
+- Spot check against the source files: `Rotach`/`Rotach`/2021-07-07 = **1 478**
+  catches (1 450 `Cyprinidae`, 13 `Barbatula barbatula`, 10 `Telestes souffia`,
+  3 `Cottus gobio`, 1 `Barbus barbus`, 1 `Squalius cephalus`),
+  `Rellsbach`/`flussab Rodundwerk`/2021-07-09 = **100** (97 `Salmo trutta`,
+  3 `Cottus gobio`) — exactly the file's rows.
+- Downloads work: the template (121 KB) and an original delivery (3.5 MB) come
+  back as valid `.xlsx`.
+- Sign-in, admin list (9 imports), health check on `127.0.0.1:3001` and nginx.
+
+**Four deviations that the runbook did not have** (all now in the steps above):
+
+1. **The blob delete has to go through `Uploads` first.** `Uploads.blobId` has
+   an FK *to* `FileBlob`, so `DELETE FROM "FileBlob" WHERE id IN (SELECT
+   "blobId" FROM "Uploads")` fails with `Uploads_blobId_fkey`. Order: collect
+   the ids into a temp table, `DELETE FROM "Uploads"`, then delete the blobs.
+2. **`workflow_dispatch` needs a full SHA** (`-f ref=d9ac764` answers "A branch
+   or tag with the name … could not be found"). Use `master` or the 40-char SHA
+   — the same trap as the rollback recipe (#163).
+3. **`QUERY_DATABASE_URL` was never set on production** — the last release there
+   predates #121, so the variable had never been needed. Without it the SQL page
+   answers 500 while the rest of the app works (by design, no fallback).
+4. **The temporary import account cannot simply be deleted**: `Imports.userId`
+   keeps a plain FK, and `QueryLog.userId` an even stricter one (`PITFALLS.md`).
+   Reassign the 9 imports to a real operator account, delete its `QueryLog` rows
+   and sessions, then the user — done in that order in one transaction.
+
+
 ## Verification
 
 - Row counts per file and in total (183 855 expected before the June files).
@@ -476,8 +533,9 @@ database whose `samplings` still carry rows (P3018/P3009, see §2 and
   Replace it with a **site/species/date spot check**: pick a `siteCode`, a date
   and a species from a source file and confirm the same counts in the database.
 - One real query from the research group's R session over `clx_readonly` —
-  done on dev on 2026-11-15 through the app's SQL page
-  (`Salmo trutta` 31 359 / `Cyprinidae` 15 604 / `Squalius cephalus` 13 509).
+  done on production 2026-11-15 through the app's SQL page (`Salmo trutta`
+  31 359 / `Cyprinidae` 15 604 / `Squalius cephalus` 13 509, see
+  "Phase 2 — result").
 
 ## Rollback
 
@@ -487,17 +545,22 @@ database, so rollback is a restore, not an undo.
 
 ## Announcement
 
-Tell the research group before the window, and state explicitly what is **not**
-coming back yet:
+**Sent text (2026-11-15, after the window).** Production holds **128 594
+catches instead of 464 654** — the rebuild imports files, not rows, so the
+duplicates that production accumulated from repeated imports of the same
+deliveries (the June uploads of the 13 files, three variants of one June
+delivery, the earlier `E_F`/`S` versions) are gone by construction. Still to
+come, as regular uploads without another window:
 
-- Production will hold **183 855 catches instead of 464 654**. The rebuild
-  imports files, not rows: everything that production accumulated from repeated
-  imports of the same deliveries (the June uploads of the 13 files, the three
-  variants of one June delivery, and the earlier `E_F`/`S` versions) does not
-  come back as a duplicate. `2026_M` (63 385) follows as a regular upload once
-  its `site_name` cells are filled (#206), the June-23 delivery (45 380) as
-  soon as its return is decided (#207) — together they carry 952 of the 1 320
-  site pairs the old database had.
+| What | Rows | Why it is not there yet |
+|---|---:|---|
+| `2026_D`, `2026_E_F`, `2026_I`, `2026_S` | 55 261 | 18 species cells need a decision with Lena (`CatchLogX-Data#7`) |
+| `2026_M_final.xlsx` | 63 385 | 1 638 rows without `site_name` (#206) |
+| the June-23 delivery | 45 380 | own delivery, return still undecided (#207) |
+
+With all of it the database returns to **183 855** catches from the deliveries
+(plus M and June-23 on top). The rest of the message:
+
 - ids have changed; joins must use content (`siteCode`, `river_name` +
   `site_name`, date), not `samplings.id` / `fish_catches.id`.
 - **`siteCode` values change too**: the same physical site can appear under a
@@ -507,6 +570,9 @@ coming back yet:
 - **There is no PIT data in the delivered files** and there was none in
   production (0 real tags, 0 recaptures). Anything built on `pit_dec` has no
   data before or after the cutover.
+- Accounts, passwords, the template files and saved SQL queries are unchanged;
+  the read-only account for R/psql keeps its password and its whitelist
+  (`fish_catches`, `samplings`, `river_sites`, `fish_species`).
 
 ## Open decisions
 

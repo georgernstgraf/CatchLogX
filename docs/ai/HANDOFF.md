@@ -11,6 +11,22 @@ status: stable
 
 Offene Aufgaben für die nächste Session.
 
+**Stand 2026-11-15 (Cutover auf Produktion gelaufen, #200/#204):** Produktion
+ist neu aufgebaut: **128 594 Fänge statt 464 654**, 9 der 13 Dateien live
+(1 282 Samplings, 1 095 Sites, 165 Arten, 9 Importe, 9 User, 3 Templates,
+2 Queries), Release `d9ac764`, `clx_readonly` verifiziert, `QUERY_DATABASE_URL`
+erstmals gesetzt und die SQL-Seite liefert die Dev-Zahlen. Ablauf, Zahlen und
+vier Abweichungen vom Runbook in `deploy/prod/cutover/README.md`, „Phase 2 —
+result"; Rollback liegt bereit (`think:~/backups/pre-cutover-20261115T113930Z.dump`
++ Release `1266a87`). **Nächster Schritt: die Arten-Session mit Lena** — 18 Zellen
+in 4 Dateien (`2026_D` 2 × `Proterorhinus marmoratus` → `Proterorhinus
+semilunaris` in den Excel-Zeilen 6227/7330, 16 × `Salvelinus fontinalis ×
+Salvelinus umbla` in `E_F`/`I`/`S`, Zielname offen). Danach die vier Dateien als
+**reguläre Uploads** (kein Fenster, `import-deliveries.sh … D E_F I S`), Gate
+**183 855**. Ausdrücklich **nicht** mehr nötig: ein `List`-Blatt für `2026_D`
+(#213 hat die Strukturregel aus #80 abgelöst). Alles andere (M #206, Juni-23
+#207) bleibt danach offen wie gehabt.
+
 **Stand 2026-11-15 (Route C durchgespielt, #210):** Der Cutover startet jetzt
 auf einer **gewipeten Prod-Kopie** statt auf einer leeren DB — User, Templates
 und gespeicherte SQL-Queries bleiben damit erhalten, Phase-2-Schritt 5 des
