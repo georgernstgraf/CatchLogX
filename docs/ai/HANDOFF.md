@@ -33,6 +33,14 @@ Thema (und von Prisma ohnehin nicht nutzbar). Guard: `lib/schemaIndexes.test.ts`
 Die beiden Nebenbefunde von vorher: `~/catchlogx-dev-restore.sh` scheitert seit
 #202 an jedem Prod-Archiv — es bricht jetzt **vor** dem App-Start ab und nennt
 beide Wege (README + `PITFALLS.md`).
+**Aufgeräumt (#212, 2026-11-15):** `clx_prev` (91 MB), beide Dumps
+(`pre-route-c-*`, `pre-imports-model-*`, zusammen 71 MB), die alte
+Skript-Sicherung und der Drill-Account `route-c-drill` sind **weg** — Dev hat
+wieder **9 User**, nur `clx` + `clx_shadow`, `QueryLog` leer. Es gibt damit
+**keinen lokalen Rückweg** mehr auf den alten Stand: der 464 654-Fänge-Stand ist
+die laufende Produktion und liegt als Nachtarchiv
+`~/backups/20261115T023818Z.tar.zst` (54 MB), der 113 102-Zwischenstand ist
+durch die 9 Cutover-Dateien reproduzierbar (~2 min).
 **Nächster Schritt: Phase 1b (#204)** — sobald `CatchLogX-Data#7` landet (Arten-Reparatur **plus** `List`-Blatt für D), alle 13 Dateien auf dem leeren Dev, erwartete 183 855 Zeilen; danach Phase 2 (Prod-Fenster) mit dem Wipe aus „Phase 1c".
 
 **Stand 2026-11-15 (Trockenlauf Phase 1a grün, #204):** 9 der 13 Dateien sind
