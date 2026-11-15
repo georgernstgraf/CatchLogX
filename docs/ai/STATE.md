@@ -114,7 +114,7 @@ Kickoff 2026-09-19 (siehe `docs/meetings/2026-09-19-kickoff.md`, Protokoll + Auf
 - [x] Migration-only-Schema-Workflow etabliert (#129): eine Baseline `20261017190000_init` aus `schema.prisma`, `db push` aus allen Deploy-Pfaden verbannt, CI-Drift-Gate + Shadow-DB `clx_shadow`
 - [ ] NextAuth v4 is configured but not integrated with the custom session system
 - [ ] Fish search component was removed (issue #60)
-- [ ] 26 Dependabot alerts incl. 4 critical (see #109)
+- [ ] Dependabot/Alerts (#109, neu vermessen 2026-11-15): 42 offene Alerts sind **stale** (alle gegen `next 15.2.2`, die 6 critical liegen hinter dem 16.4.3-Upgrade); `npm audit` = 13 (0 critical, 4 high: `nodemailer`/`xlsx` + 2 via-nodemailer, alle bei #174; 9 moderate teils per `npm audit fix` machbar)
 - [ ] BOKU-IT answer to the maintenance inquiry pending (see #115)
 
 ## Blockers
