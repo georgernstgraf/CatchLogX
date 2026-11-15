@@ -390,11 +390,28 @@ coming back yet:
   compared against all 13 `should_work` files and `2026_M`; the raw D file was
   checked via its `sharedStrings`.)
 - `Salvelinus fontinalis × Salvelinus umbla` (16 rows in 3 files) has no
-  counterpart in the master. Either a mis-entry for id 106
-  (`Salvelinus alpinus x Salvelinus fontinalis`) or a genuinely missing hybrid —
-  Lena decides; the Excel repair follows from that. **Hard gate:** #80 rejects a
-  whole file on an unknown species, so `2026_E_F`, `2026_I` and `2026_S` import
-  nothing until this is repaired.
-- `Proterorhinus marmoratus` (2 rows, one file) is a taxonomic synonym of
-  `Proterorhinus semilunaris` (id 80) — repair the file. Same hard gate:
-  `2026_D` imports nothing until then.
+  counterpart in the master. Two routes, and they are not equivalent:
+  - **A genuine missing hybrid** → one new entry in `assets/species.json`
+    (next free id: 166) plus a commit on `dev`. The three files then import
+    **as delivered** — no Excel bytes touched, no `docs/reparaturen.md` entry.
+    The admin GUI is the inspection surface, not the vehicle: it writes
+    `fish_species` rows **only**, and the cutover builds the fresh production
+    table from the JSON master *before* the first import, so a GUI-created row
+    would be gone after the rebuild and the files would be rejected again.
+  - **A mis-entry for id 106** (`Salvelinus alpinus x Salvelinus fontinalis`) →
+    repair the 16 cells in the data repo, master unchanged.
+
+  Lena decides (`CatchLogX-Data#7`). **Ordering rule whichever way it goes:**
+  the JSON master is edited **before** anyone clicks the species into a GUI —
+  a GUI row takes a sequence id, and a later `insert-fish.ts` against a rebuilt
+  database dies with `P2002` on the unique name (the same trap as the 125 → 165
+  seed, `PITFALLS.md`). **Hard gate:** #80 rejects a whole file on an unknown
+  species, so `2026_E_F`, `2026_I` and `2026_S` import nothing until one of the
+  two routes lands.
+- `2026_D` needs **two** repairs, not one. Its 2 `Proterorhinus marmoratus`
+  cells are a taxonomic synonym of `Proterorhinus semilunaris` (id 80) and need
+  the file repaired. Independently, the dry run (2026-11-15) showed the file
+  carries only a `DATA` sheet — **no `List`, no `Instructions`** — so since
+  #80 it is rejected as a **structural** error *before* the species check.
+  Fixing the two cells alone changes nothing: the file needs its `List` sheet
+  back or it stays out of the window. `CatchLogX-Data#7` carries both halves.
