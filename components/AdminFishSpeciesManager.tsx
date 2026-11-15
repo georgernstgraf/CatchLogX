@@ -1,13 +1,15 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
+import React, { Fragment, useEffect, useMemo, useState } from "react";
+import { Check, ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   createFishSpecies,
   deleteFishSpecies,
   fetchFishSpecies,
+  fetchSpeciesImports,
   FishSpeciesRecord,
   normalizeSpeciesInput,
+  SpeciesImportRecord,
   updateFishSpecies,
 } from "@/lib/fish-species-client";
 
@@ -34,6 +36,16 @@ function draftFromRecord(record: FishSpeciesRecord): SpeciesDraft {
 const inputClassName =
   "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200";
 
+/** Import dates are shown in the local format the admin page uses elsewhere. */
+function formatImportDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown";
+  }
+
+  return new Intl.DateTimeFormat("de-AT", { dateStyle: "medium" }).format(date);
+}
+
 const AdminFishSpeciesManager = () => {
   const [species, setSpecies] = useState<FishSpeciesRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,11 +58,22 @@ const AdminFishSpeciesManager = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  // Imports per species (#224): fetched only when the catch count is expanded,
+  // then cached until the list is refreshed or a species changes.
+  const [expandedSpeciesId, setExpandedSpeciesId] = useState<number | null>(null);
+  const [importsBySpecies, setImportsBySpecies] = useState<
+    Record<number, SpeciesImportRecord[]>
+  >({});
+  const [loadingImportsFor, setLoadingImportsFor] = useState<number | null>(null);
+  const [importsError, setImportsError] = useState("");
 
   const loadSpecies = async () => {
     try {
       const records = await fetchFishSpecies();
       setSpecies(records);
+      setImportsBySpecies({});
+      setExpandedSpeciesId(null);
+      setImportsError("");
       setErrorMessage("");
     } catch (error) {
       console.error("Could not load fish species:", error);
@@ -103,6 +126,40 @@ const AdminFishSpeciesManager = () => {
   }, [species, search]);
 
   const normalizedNewName = normalizeSpeciesInput(createDraft.speciesName);
+
+  /**
+   * Expands or collapses the imports of one species (#224). The list is
+   * fetched on first expand and cached; collapsing never refetches.
+   */
+  const toggleImports = async (entry: FishSpeciesRecord) => {
+    if (expandedSpeciesId === entry.id) {
+      setExpandedSpeciesId(null);
+      return;
+    }
+
+    setExpandedSpeciesId(entry.id);
+    setImportsError("");
+
+    if (importsBySpecies[entry.id]) {
+      return;
+    }
+
+    setLoadingImportsFor(entry.id);
+
+    try {
+      const imports = await fetchSpeciesImports(entry.id);
+      setImportsBySpecies((current) => ({ ...current, [entry.id]: imports }));
+    } catch (error) {
+      console.error("Could not load the imports of a fish species:", error);
+      setImportsError(
+        error instanceof Error
+          ? error.message
+          : "Imports of this species could not be loaded.",
+      );
+    } finally {
+      setLoadingImportsFor(null);
+    }
+  };
 
   const handleCreate = async () => {
     const speciesName = normalizeSpeciesInput(createDraft.speciesName);
@@ -314,146 +371,209 @@ const AdminFishSpeciesManager = () => {
               {filteredSpecies.map((entry) => {
                 const isEditing = editingId === entry.id;
                 const isConfirmingDelete = deleteConfirmId === entry.id;
+                const isExpanded = expandedSpeciesId === entry.id;
+                const speciesImports = importsBySpecies[entry.id];
 
                 return (
-                  <tr
-                    key={entry.id}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-700/60"
-                  >
-                    <td className="px-4 py-4 text-sm text-gray-900 dark:text-gray-100">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={editDraft.speciesName}
-                          onChange={(event) =>
-                            setEditDraft({
-                              ...editDraft,
-                              speciesName: event.target.value,
-                            })
-                          }
-                          className={inputClassName}
-                        />
-                      ) : (
-                        entry.speciesName
-                      )}
-                    </td>
-                    <td className="px-4 py-4 text-sm text-gray-600 dark:text-gray-400">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={editDraft.germanName}
-                          onChange={(event) =>
-                            setEditDraft({
-                              ...editDraft,
-                              germanName: event.target.value,
-                            })
-                          }
-                          className={inputClassName}
-                        />
-                      ) : (
-                        (entry.germanName ?? "—")
-                      )}
-                    </td>
-                    <td className="px-4 py-4 text-sm text-gray-600 dark:text-gray-400">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={editDraft.family}
-                          onChange={(event) =>
-                            setEditDraft({
-                              ...editDraft,
-                              family: event.target.value,
-                            })
-                          }
-                          className={inputClassName}
-                        />
-                      ) : (
-                        (entry.family ?? "—")
-                      )}
-                    </td>
-                    <td className="px-4 py-4 text-sm text-gray-600 dark:text-gray-400">
-                      {entry.catchCount}
-                    </td>
-                    <td className="px-4 py-4 text-sm">
-                      {isEditing ? (
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleSaveEdit(entry.id)}
-                            disabled={
-                              !normalizeSpeciesInput(editDraft.speciesName) ||
-                              isSaving
+                  <Fragment key={entry.id}>
+                    <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/60">
+                      <td className="px-4 py-4 text-sm text-gray-900 dark:text-gray-100">
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editDraft.speciesName}
+                            onChange={(event) =>
+                              setEditDraft({
+                                ...editDraft,
+                                speciesName: event.target.value,
+                              })
                             }
-                            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded text-white transition-colors ${
-                              !normalizeSpeciesInput(editDraft.speciesName) ||
-                              isSaving
-                                ? "bg-gray-400 cursor-not-allowed"
-                                : "bg-[#357174] hover:bg-[#2a5a5d]"
-                            }`}
-                            title="Save changes"
-                          >
-                            <Check size={14} />
-                            Save
-                          </button>
+                            className={inputClassName}
+                          />
+                        ) : (
+                          entry.speciesName
+                        )}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-gray-600 dark:text-gray-400">
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editDraft.germanName}
+                            onChange={(event) =>
+                              setEditDraft({
+                                ...editDraft,
+                                germanName: event.target.value,
+                              })
+                            }
+                            className={inputClassName}
+                          />
+                        ) : (
+                          (entry.germanName ?? "—")
+                        )}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-gray-600 dark:text-gray-400">
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editDraft.family}
+                            onChange={(event) =>
+                              setEditDraft({
+                                ...editDraft,
+                                family: event.target.value,
+                              })
+                            }
+                            className={inputClassName}
+                          />
+                        ) : (
+                          (entry.family ?? "—")
+                        )}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-gray-600 dark:text-gray-400">
+                        {entry.catchCount > 0 ? (
                           <button
-                            onClick={cancelEditing}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                            title="Cancel editing"
+                            onClick={() => toggleImports(entry)}
+                            aria-expanded={isExpanded}
+                            title="Show the imports this species comes from"
+                            className="inline-flex items-center gap-1 rounded text-[#357174] dark:text-[#8fc3c5] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#357174]"
                           >
-                            <X size={14} />
-                            Cancel
+                            {isExpanded ? (
+                              <ChevronDown size={14} />
+                            ) : (
+                              <ChevronRight size={14} />
+                            )}
+                            {entry.catchCount}
                           </button>
-                        </div>
-                      ) : isConfirmingDelete ? (
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleDelete(entry.id)}
-                            disabled={isDeleting}
-                            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded text-white transition-colors ${
-                              isDeleting
-                                ? "bg-gray-400 cursor-not-allowed"
-                                : "bg-red-600 hover:bg-red-700"
-                            }`}
-                            title="Confirm deletion"
-                          >
-                            <Trash2 size={14} />
-                            {isDeleting ? "Deleting..." : "Confirm"}
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirmId(null)}
-                            disabled={isDeleting}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                            title="Keep species"
-                          >
-                            <X size={14} />
-                            Cancel
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => startEditing(entry)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-                            title="Edit species"
-                          >
-                            <Pencil size={14} />
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => {
-                              setErrorMessage("");
-                              setEditingId(null);
-                              setDeleteConfirmId(entry.id);
-                            }}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 transition-colors"
-                            title="Delete species"
-                          >
-                            <Trash2 size={14} />
-                            Delete
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
+                        ) : (
+                          entry.catchCount
+                        )}
+                      </td>
+                      <td className="px-4 py-4 text-sm">
+                        {isEditing ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleSaveEdit(entry.id)}
+                              disabled={
+                                !normalizeSpeciesInput(editDraft.speciesName) ||
+                                isSaving
+                              }
+                              className={`inline-flex items-center gap-1 px-3 py-1.5 rounded text-white transition-colors ${
+                                !normalizeSpeciesInput(editDraft.speciesName) ||
+                                isSaving
+                                  ? "bg-gray-400 cursor-not-allowed"
+                                  : "bg-[#357174] hover:bg-[#2a5a5d]"
+                              }`}
+                              title="Save changes"
+                            >
+                              <Check size={14} />
+                              Save
+                            </button>
+                            <button
+                              onClick={cancelEditing}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                              title="Cancel editing"
+                            >
+                              <X size={14} />
+                              Cancel
+                            </button>
+                          </div>
+                        ) : isConfirmingDelete ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleDelete(entry.id)}
+                              disabled={isDeleting}
+                              className={`inline-flex items-center gap-1 px-3 py-1.5 rounded text-white transition-colors ${
+                                isDeleting
+                                  ? "bg-gray-400 cursor-not-allowed"
+                                  : "bg-red-600 hover:bg-red-700"
+                              }`}
+                              title="Confirm deletion"
+                            >
+                              <Trash2 size={14} />
+                              {isDeleting ? "Deleting..." : "Confirm"}
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirmId(null)}
+                              disabled={isDeleting}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                              title="Keep species"
+                            >
+                              <X size={14} />
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => startEditing(entry)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                              title="Edit species"
+                            >
+                              <Pencil size={14} />
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => {
+                                setErrorMessage("");
+                                setEditingId(null);
+                                setDeleteConfirmId(entry.id);
+                              }}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 transition-colors"
+                              title="Delete species"
+                            >
+                              <Trash2 size={14} />
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="bg-gray-50 dark:bg-gray-900/40">
+                        <td colSpan={5} className="px-4 py-4">
+                          <div className="pl-6">
+                            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                              Imports this species comes from
+                            </p>
+                            {loadingImportsFor === entry.id ? (
+                              <p className="text-sm text-gray-500 dark:text-gray-400">
+                                Loading imports...
+                              </p>
+                            ) : importsError ? (
+                              <p className="text-sm text-red-600 dark:text-red-400">
+                                {importsError}
+                              </p>
+                            ) : !speciesImports || speciesImports.length === 0 ? (
+                              <p className="text-sm text-gray-500 dark:text-gray-400">
+                                No imports.
+                              </p>
+                            ) : (
+                              <ul className="space-y-1">
+                                {speciesImports.map((item) => (
+                                  <li
+                                    key={item.id}
+                                    className="text-sm text-gray-700 dark:text-gray-300"
+                                  >
+                                    <span className="font-medium">
+                                      {item.fileName}
+                                    </span>{" "}
+                                    <span className="text-gray-500 dark:text-gray-400">
+                                      (
+                                      {item.importedByName ??
+                                        item.importedByUsername}
+                                      )
+                                    </span>{" "}
+                                    <span className="text-xs text-gray-400 dark:text-gray-500">
+                                      — {formatImportDate(item.createdAt)}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>

@@ -13,6 +13,19 @@ export type FishSpeciesRecord = {
   catchCount: number;
 };
 
+/**
+ * One import a species comes from (#224): the `Imports` row plus who created
+ * it. `importedByUsername`/`importedByName` mirror the import list payload
+ * (see `listImports`), so both admin tables read the same way.
+ */
+export type SpeciesImportRecord = {
+  id: string;
+  fileName: string;
+  createdAt: Date;
+  importedByUsername: string;
+  importedByName: string | null;
+};
+
 /** Input for {@link createFishSpecies}. */
 export type CreateFishSpeciesInput = {
   speciesName: string;
@@ -110,6 +123,47 @@ export async function listFishSpecies(): Promise<FishSpeciesRecord[]> {
   });
 
   return rows.map(flattenSpecies);
+}
+
+/**
+ * The imports a species comes from, newest first (#224).
+ *
+ * Every catch hangs off a sampling, and every sampling carries exactly one
+ * `importId`, so filtering imports by "has a sampling with a catch of this
+ * species" yields each import once — the distinctness is structural, not a
+ * `DISTINCT` on top.
+ *
+ * Returns `null` when the species does not exist, so the route can answer 404
+ * instead of an empty list that looks like "no catches".
+ */
+export async function listSpeciesImports(
+  speciesId: number,
+): Promise<SpeciesImportRecord[] | null> {
+  const species = await prisma.fishSpecies.findUnique({
+    where: { id: speciesId },
+    select: { id: true },
+  });
+
+  if (!species) {
+    return null;
+  }
+
+  const rows = await prisma.imports.findMany({
+    where: { samplings: { some: { catches: { some: { speciesId } } } } },
+    orderBy: [{ createdAt: "desc" }, { fileName: "asc" }],
+    select: {
+      id: true,
+      fileName: true,
+      createdAt: true,
+      user: { select: { username: true, name: true } },
+    },
+  });
+
+  return rows.map(({ user, ...row }) => ({
+    ...row,
+    importedByUsername: user.username,
+    importedByName: user.name,
+  }));
 }
 
 /** Creates a species; the scientific name is trimmed and must not be empty. */

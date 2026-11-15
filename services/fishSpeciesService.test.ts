@@ -8,6 +8,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     fishSpecies: {
       findMany: vi.fn(),
+      findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
@@ -17,6 +18,9 @@ vi.mock("@/lib/prisma", () => ({
       update: vi.fn(),
       updateMany: vi.fn(),
     },
+    imports: {
+      findMany: vi.fn(),
+    },
   },
 }));
 
@@ -25,6 +29,7 @@ import {
   createFishSpecies,
   deleteFishSpecies,
   listFishSpecies,
+  listSpeciesImports,
   updateFishSpecies,
 } from "@/services/fishSpeciesService";
 
@@ -311,5 +316,68 @@ describe("deleteFishSpecies", () => {
     vi.mocked(prisma.fishSpecies.delete).mockRejectedValue(prismaError("P2025"));
 
     expect(await deleteFishSpecies(1)).toEqual({ notFound: true });
+  });
+});
+
+describe("listSpeciesImports", () => {
+  it("lists the imports a species comes from, newest first", async () => {
+    vi.mocked(prisma.fishSpecies.findUnique).mockResolvedValue({ id: 7 } as any);
+    vi.mocked(prisma.imports.findMany).mockResolvedValue([
+      {
+        id: "imp-2",
+        fileName: "2026_B.xlsx",
+        createdAt: new Date("2026-11-14T10:00:00Z"),
+        user: { username: "georg", name: "Georg Ernst Graf" },
+      },
+      {
+        id: "imp-1",
+        fileName: "2026_A.xlsx",
+        createdAt: new Date("2026-06-18T10:00:00Z"),
+        user: { username: "lena", name: null },
+      },
+    ] as any);
+
+    const result = await listSpeciesImports(7);
+
+    expect(prisma.imports.findMany).toHaveBeenCalledWith({
+      where: { samplings: { some: { catches: { some: { speciesId: 7 } } } } },
+      orderBy: [{ createdAt: "desc" }, { fileName: "asc" }],
+      select: {
+        id: true,
+        fileName: true,
+        createdAt: true,
+        user: { select: { username: true, name: true } },
+      },
+    });
+    expect(result).toEqual([
+      {
+        id: "imp-2",
+        fileName: "2026_B.xlsx",
+        createdAt: new Date("2026-11-14T10:00:00Z"),
+        importedByUsername: "georg",
+        importedByName: "Georg Ernst Graf",
+      },
+      {
+        id: "imp-1",
+        fileName: "2026_A.xlsx",
+        createdAt: new Date("2026-06-18T10:00:00Z"),
+        importedByUsername: "lena",
+        importedByName: null,
+      },
+    ]);
+  });
+
+  it("returns null for an unknown species and does not query imports", async () => {
+    vi.mocked(prisma.fishSpecies.findUnique).mockResolvedValue(null);
+
+    expect(await listSpeciesImports(999)).toBeNull();
+    expect(prisma.imports.findMany).not.toHaveBeenCalled();
+  });
+
+  it("returns an empty list when the species has no catches", async () => {
+    vi.mocked(prisma.fishSpecies.findUnique).mockResolvedValue({ id: 7 } as any);
+    vi.mocked(prisma.imports.findMany).mockResolvedValue([]);
+
+    expect(await listSpeciesImports(7)).toEqual([]);
   });
 });

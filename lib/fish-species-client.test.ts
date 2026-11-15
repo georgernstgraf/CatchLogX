@@ -3,7 +3,9 @@ import {
   createFishSpecies,
   deleteFishSpecies,
   fetchFishSpecies,
+  fetchSpeciesImports,
   normalizeFishSpecies,
+  normalizeSpeciesImport,
   normalizeSpeciesInput,
   updateFishSpecies,
 } from "@/lib/fish-species-client";
@@ -237,6 +239,103 @@ describe("deleteFishSpecies", () => {
 
     await expect(deleteFishSpecies(1)).rejects.toThrow(
       "Fish species could not be deleted.",
+    );
+  });
+});
+
+describe("normalizeSpeciesImport", () => {
+  const validImport = {
+    id: "imp-1",
+    fileName: "2026_B.xlsx",
+    createdAt: "2026-11-14T10:00:00.000Z",
+    importedByUsername: "georg",
+    importedByName: "Georg Ernst Graf",
+  };
+
+  it("returns a clean record and drops unknown fields", () => {
+    expect(normalizeSpeciesImport({ ...validImport, extra: 1 })).toEqual(
+      validImport,
+    );
+  });
+
+  it("accepts a null name", () => {
+    expect(
+      normalizeSpeciesImport({ ...validImport, importedByName: null }),
+    ).toEqual({ ...validImport, importedByName: null });
+  });
+
+  it("rejects non-objects and missing or mistyped fields", () => {
+    expect(normalizeSpeciesImport(null)).toBeNull();
+    expect(normalizeSpeciesImport("2026_B.xlsx")).toBeNull();
+    expect(normalizeSpeciesImport({ ...validImport, id: 1 })).toBeNull();
+    expect(
+      normalizeSpeciesImport({ ...validImport, createdAt: 1763121600000 }),
+    ).toBeNull();
+    expect(
+      normalizeSpeciesImport({ ...validImport, importedByUsername: null }),
+    ).toBeNull();
+    expect(
+      normalizeSpeciesImport({ ...validImport, importedByName: 42 }),
+    ).toBeNull();
+  });
+});
+
+describe("fetchSpeciesImports", () => {
+  it("GETs the species' imports and returns them", async () => {
+    respond({
+      imports: [
+        {
+          id: "imp-1",
+          fileName: "2026_B.xlsx",
+          createdAt: "2026-11-14T10:00:00.000Z",
+          importedByUsername: "georg",
+          importedByName: "Georg Ernst Graf",
+        },
+      ],
+    });
+
+    const imports = await fetchSpeciesImports(7);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/admin/fish-species/7/imports",
+      { method: "GET", cache: "no-store" },
+    );
+    expect(imports).toEqual([
+      {
+        id: "imp-1",
+        fileName: "2026_B.xlsx",
+        createdAt: "2026-11-14T10:00:00.000Z",
+        importedByUsername: "georg",
+        importedByName: "Georg Ernst Graf",
+      },
+    ]);
+  });
+
+  it("drops malformed entries instead of failing the whole list", async () => {
+    respond({ imports: [{ id: "broken" }] });
+
+    await expect(fetchSpeciesImports(7)).resolves.toEqual([]);
+  });
+
+  it("returns an empty list when the payload has no imports array", async () => {
+    respond({});
+
+    await expect(fetchSpeciesImports(7)).resolves.toEqual([]);
+  });
+
+  it("uses the server error message", async () => {
+    respond({ error: "Fish species not found" }, false);
+
+    await expect(fetchSpeciesImports(99)).rejects.toThrow(
+      "Fish species not found",
+    );
+  });
+
+  it("falls back to a generic error", async () => {
+    respond({}, false);
+
+    await expect(fetchSpeciesImports(7)).rejects.toThrow(
+      "Imports of this species could not be loaded.",
     );
   });
 });

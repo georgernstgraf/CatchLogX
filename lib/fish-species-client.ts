@@ -11,6 +11,18 @@ export type FishSpeciesRecord = {
   catchCount: number;
 };
 
+/**
+ * One import a species comes from (#224). `createdAt` stays the ISO string the
+ * API sends; the component formats it for display.
+ */
+export type SpeciesImportRecord = {
+  id: string;
+  fileName: string;
+  createdAt: string;
+  importedByUsername: string;
+  importedByName: string | null;
+};
+
 /** Input for {@link createFishSpecies}. */
 export type FishSpeciesInput = {
   speciesName: string;
@@ -28,6 +40,7 @@ export type FishSpeciesUpdateInput = {
 type ApiPayload = {
   fishSpecies?: unknown;
   species?: unknown;
+  imports?: unknown;
   error?: string;
 };
 
@@ -105,6 +118,73 @@ export async function fetchFishSpecies(): Promise<FishSpeciesRecord[]> {
   return payload.fishSpecies
     .map((entry) => normalizeFishSpecies(entry))
     .filter((entry): entry is FishSpeciesRecord => entry !== null);
+}
+
+/**
+ * Validates one import entry of the species API (#224). Same contract check as
+ * {@link normalizeFishSpecies}: a changed server shape yields `null` here
+ * instead of `undefined` inside the component.
+ */
+// Exported for unit tests (see lib/fish-species-client.test.ts, #224).
+export function normalizeSpeciesImport(
+  value: unknown,
+): SpeciesImportRecord | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  const validName =
+    candidate.importedByName === null ||
+    typeof candidate.importedByName === "string";
+
+  if (
+    typeof candidate.id !== "string" ||
+    typeof candidate.fileName !== "string" ||
+    typeof candidate.createdAt !== "string" ||
+    typeof candidate.importedByUsername !== "string" ||
+    !validName
+  ) {
+    return null;
+  }
+
+  return {
+    id: candidate.id,
+    fileName: candidate.fileName,
+    createdAt: candidate.createdAt,
+    importedByUsername: candidate.importedByUsername,
+    importedByName: candidate.importedByName as string | null,
+  };
+}
+
+/**
+ * Loads the imports a species comes from, newest first (#224). Called when the
+ * admin expands the catch count, so nothing is fetched for collapsed rows.
+ */
+export async function fetchSpeciesImports(
+  speciesId: number,
+): Promise<SpeciesImportRecord[]> {
+  const response = await fetch(`/api/admin/fish-species/${speciesId}/imports`, {
+    method: "GET",
+    cache: "no-store",
+  });
+
+  const payload = await readPayload(response);
+
+  if (!response.ok) {
+    throw new Error(
+      payload.error || "Imports of this species could not be loaded.",
+    );
+  }
+
+  if (!Array.isArray(payload.imports)) {
+    return [];
+  }
+
+  return payload.imports
+    .map((entry) => normalizeSpeciesImport(entry))
+    .filter((entry): entry is SpeciesImportRecord => entry !== null);
 }
 
 /** Creates a fish species. */
