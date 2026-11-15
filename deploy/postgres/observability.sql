@@ -130,8 +130,10 @@ SELECT CASE
 
   -- The extension grants SELECT to PUBLIC (pg_stat_statements--1.10.sql).
   -- Without this REVOKE the published clx_readonly password could read the
-  -- query text of every role, including the auth flows.
+  -- query text of every role, including the auth flows. The extension ships a
+  -- second view (pg_stat_statements_info) with its own PUBLIC grant (#187).
   REVOKE SELECT ON pg_stat_statements FROM PUBLIC;
+  REVOKE SELECT ON pg_stat_statements_info FROM PUBLIC;
 
   SELECT count(*) AS statements_tracked FROM pg_stat_statements;
 \else

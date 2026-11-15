@@ -1,3 +1,12 @@
+---
+type: History Archive
+title: History
+description: Append-only-Archiv ueberholter Wissenseintraege.
+tags: [catchlogx, history-archive]
+generated: { by: opencode/knowledge-persistence, at: 2026-11-14T19:40:00Z }
+status: stable
+---
+
 # History
 
 Append-only archive of superseded knowledge entries.
@@ -36,3 +45,16 @@ Each entry keeps its date, title, origin file, reason, and original text.
 
 ## 2026-10-29 (SUPERSEDED 2026-10-29, origin: DECISIONS.md, reason: Messung beim #171-Rollout): „`pg_stat_statements` ist nach einem Restart leer"
 Ursprünglicher Satz (Tradeoff-Eintrag zu #169 am 2026-10-29): *„pg_stat_statements liegt im Shared Memory und ist nach einem Restart leer — die Historie ist dann nur noch der zuletzt gezogene Report."* Beim Rollout von #171 gemessen: `pg_stat_statements.save` ist per Default `on`, die Zähler werden beim **sauberen** Shutdown geschrieben und beim Start geladen — `tracked_shapes = 198` und unveränderter `stats_reset` nach `systemctl restart postgresql@16-main`. Ersetzt durch den korrigierten Satz in `DECISIONS.md` und den neuen `PITFALLS.md`-Eintrag (nur `pg_stat_statements_reset()`/`pg_stat_reset()` oder ein Crash leeren das Fenster).
+
+## 2026-10-16: SQL guard keyword blocklist (from PITFALLS.md)
+- **Reason superseded**: #121 removed the heuristic; the read-only role `clx_readonly` (whitelist) is now the boundary.
+- **Original**: - `validateSQLQuery` (`services/queryService.ts`) is a keyword blocklist (whole-word match since #116), not a security boundary — it can't see through e.g. Postgres unicode-escaped identifiers. Real protection for the query UI would be a read-only DB role.
+
+## 2026-10-30 (SUPERSEDED 2026-11-04, origin: HANDOFF.md / deploy/prod/postgres/README.md, reason: #121 Plan-Änderung durch Georg): Eigene Rolle `clx_query` für die SQL-Seite
+- **Original**: Die SQL-Seite sollte als eigene Rolle `clx_query` laufen (Whitelist, `default_transaction_read_only = on`, `statement_timeout = 10s`), angelegt auf Hosts mit `deploy/prod/postgres/query-role.sh`, lokal mit `npm run db:query-role`; `clx_readonly` hätte breit bleiben und nur `QueryLog` per `AUTH_TABLES` ausschließen sollen. HANDOFF-Punkt 18 hieß „#121 Rollout `clx_query`".
+- **Reason**: Georg (`0380c9b`, Kommentar in #121): ein Read-only-Account für Forschungsgruppe und SQL-Seite, `clx_readonly` ist jetzt selbst die Whitelist. `query-role.sh` gelöscht, Skript zu `scripts/ops/create-readonly-role.ts` (`npm run db:readonly-role`) umgebaut. Entfallen sind dabei das Read-only-Default und das `statement_timeout` der Rolle.
+
+## 2026-10-29 (SUPERSEDED 2026-11-09, origin: PITFALLS.md / AGENTS.md, reason: #189, beobachtet am 2026-11-06 auf `claw`): „Dev-VPS `claw` ist am öffentlichen SSH-Port nicht erreichbar, kein Checkout auf dem Host"
+- **Original** (`PITFALLS.md`, Commit `28fd233`): - **The dev VPS `claw` is not reachable on the public SSH port** — `85.215.162.182:22` (`claw.graf.priv.at` / `catchlogx.graf.priv.at`) refuses connections while 443 and 5432 are open. The way in is the WireGuard/OpenVPN tunnel: `ssh claw` uses `Hostname 10.8.0.2`, `User georg` (`ssh clawc` is the same host as `catchlogx`), and `georg` has passwordless sudo. There is **no source checkout** on that host: the app is published by the self-hosted runner into `~/releases/<sha>` for the `catchlogx` user, so config files are copied there (`scp … claw:/tmp/`) or fetched from raw.githubusercontent.com.
+- **Original** (`AGENTS.md` „Agent Sessions" und `PITFALLS.md`, Commit `613af36`): Host-Check mit `systemctl --user list-units | grep -i clx`.
+- **Reason**: Port 22 ist nicht zu, sondern per Port-Knocking geschützt (Georg per Mail, 2026-11-06); nach dem Klopfen funktioniert der Login als `catchlogx` mit persönlichem Key (2026-11-06 durchgeführt). Auf dem Host liegt der Checkout `~/repos/georgernstgraf/CatchLogX`, aus dessen `.env` `catchlogx.service` seine Umgebung lädt (`systemctl --user cat catchlogx.service`). `grep -i clx` liefert auf `claw` eine leere Ausgabe, weil beide Units `catchlogx` im Namen tragen. Der Tunnelweg über `10.8.0.2` bleibt gültig und steht weiter im korrigierten `PITFALLS.md`-Eintrag.

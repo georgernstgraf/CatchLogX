@@ -62,7 +62,6 @@ ORDER BY rs."riverName", fs."speciesName";`,
     query: `SELECT DISTINCT
   fs."speciesName" AS "Fish Species",
   fs."germanName" AS "German Name",
-  fs."latinName" AS "Latin Name",
   fs."family" AS "Family",
   COUNT(fc.id) AS "Catch Count"
 FROM fish_catches fc
@@ -70,7 +69,7 @@ JOIN fish_species fs ON fc."speciesId" = fs.id
 JOIN samplings s ON fc."samplingId" = s.id
 JOIN river_sites rs ON s."siteId" = rs.id
 WHERE rs."riverName" ILIKE '%{{PARAMETER}}%' OR rs."siteName" ILIKE '%{{PARAMETER}}%'
-GROUP BY fs.id, fs."speciesName", fs."germanName", fs."latinName", fs."family"
+GROUP BY fs.id, fs."speciesName", fs."germanName", fs."family"
 ORDER BY "Catch Count" DESC;`,
     hasParameter: true,
     parameterLabel: "River or Site Name",
@@ -235,7 +234,7 @@ const SqlQueryUIDesign: React.FC = () => {
         setSavedQueries(data.data || []);
       }
     } catch (err) {
-      console.error("Fehler beim Laden der gespeicherten Queries:", err);
+      console.error("Failed to load saved queries:", err);
     }
   }, []);
 
@@ -282,7 +281,7 @@ const SqlQueryUIDesign: React.FC = () => {
         showToast("Query saved successfully.", "success");
       }
     } catch (err) {
-      console.error("Fehler beim Speichern:", err);
+      console.error("Failed to save:", err);
       showToast("Error while saving the query.", "error");
     } finally {
       setIsSaving(false);
@@ -338,7 +337,7 @@ const SqlQueryUIDesign: React.FC = () => {
           setEditingName("");
         }
       } catch (err) {
-        console.error("Fehler beim Umbenennen:", err);
+        console.error("Failed to rename:", err);
       }
     },
     [editingName, fetchSavedQueries],
@@ -356,7 +355,7 @@ const SqlQueryUIDesign: React.FC = () => {
           await fetchSavedQueries();
         }
       } catch (err) {
-        console.error("Fehler beim Löschen:", err);
+        console.error("Failed to delete:", err);
       }
     },
     [fetchSavedQueries],
@@ -398,7 +397,7 @@ const SqlQueryUIDesign: React.FC = () => {
   fs."speciesName" AS "Fish Species",
   fs."germanName" AS "German Name",
   COUNT(fc.id) AS "Count",
-  ROUND(AVG(fc."lengthMm")::numeric, 1) AS "Ø Länge (mm)",
+  ROUND(AVG(fc."lengthMm")::numeric, 1) AS "Avg Length (mm)",
   MIN(fc."lengthMm") AS "Min Length (mm)",
   MAX(fc."lengthMm") AS "Max Length (mm)",
   ROUND(AVG(fc."totalWeightGr")::numeric, 1) AS "Ø Mass (g)"
@@ -455,7 +454,7 @@ ORDER BY "Count" DESC;`;
 
       if (!response.ok) {
         // Handle error response
-        setError(data.details || data.error || "Ein Fehler ist aufgetreten");
+        setError(data.details || data.error || "Something went wrong");
         setResults([]);
       } else {
         // Handle success response

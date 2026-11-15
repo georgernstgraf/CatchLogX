@@ -85,7 +85,7 @@ jobs:
         run: npx prisma migrate deploy
 
       - name: Publish release
-        run: ./scripts/publish-release.sh "$DEPLOY_SHA"
+        run: ./scripts/ops/publish-release.sh "$DEPLOY_SHA"
 
       - name: Restart service
         run: systemctl --user restart catchlogx.service

@@ -28,6 +28,10 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 -- the published clx_readonly password could read the auth flows and every app
 -- query (#169).
 REVOKE SELECT ON pg_stat_statements FROM PUBLIC;
+-- The extension ships a SECOND view with its own PUBLIC grant (row: dealloc /
+-- stats_reset). Nothing needs it, and on prod it stayed readable long after the
+-- line above — one leak fewer to explain (#187).
+REVOKE SELECT ON pg_stat_statements_info FROM PUBLIC;
 
 -- Constants become $1, so the report never contains research values.
 SELECT name, setting

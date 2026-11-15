@@ -152,8 +152,9 @@ Two additions from 2026-10-27 that are not part of the web topology:
   restore rehearsal. Runs as `clxadmin` (peer auth to the native cluster),
   config in `/etc/catchlogx-backup.env`; see `backup/README.md`.
 
-The VPS side of the off-site path (nginx PUT endpoint, rotation timer) lives in
-`deploy/vps/offsite-backup/`.
+The VPS side of the off-site path (forced `rrsync` receiver, rotation timer,
+plaintext archive since #192) lives in `deploy/vps/offsite-backup/`; the dev
+re-seed that consumes those archives is `deploy/vps/dev-restore/` (#188).
 
 ## PostgreSQL (#170)
 

@@ -58,16 +58,20 @@ docker compose up -d db db-shadow-init
 # 3. Prisma-Client generieren (nach jeder Schema-Änderung wiederholen)
 npx prisma generate
 
-# 4. Schema in die Datenbank übernehmen (Migrations-History, nie db push)
-npx prisma migrate deploy
+# 4. Schema übernehmen und Demo-Datensatz anlegen (Dev-Benutzer, Arten,
+#    Standorte, Befischungen, Fänge, Vorlagedateien) — ein Aufruf
+npm run db:init
 
-# 5. Dev-Benutzer + Demo-Datensatz (Arten, Standorte, Befischungen, Fänge,
-#    Vorlagedateien) anlegen — idempotent, mehrfach ausführbar
-npm run seed:demo
-
-# 6. Entwicklungsserver starten
+# 5. Entwicklungsserver starten
 npm run dev
 ```
+
+`npm run db:init` ist **einmal pro Datenbank** gedacht: der Seed-Guard
+(`lib/seedGuard.ts`) verweigert, sobald die DB einen einzigen Fang enthält —
+ab dann sind Arten und Standorte Betriebsdaten (siehe
+`docs/ai/DECISIONS.md`, „Basisdaten-Cutover"). Für einen frischen
+Demo-Bestand vorher wischen: `npx tsx scripts/demo/wipe-and-seed.ts`
+(verlangt `ALLOW_DESTRUCTIVE_SEED=<hostname>/<db>`).
 
 ## 🏗️ Datenbank-Schema
 
@@ -128,9 +132,13 @@ CatchLogX/
 │   └── csv.ts                # CSV-Export-Escaping
 ├── prisma/
 │   └── schema.prisma         # DB-Schema (Änderungen via `prisma migrate dev`)
-├── scripts/                  # create-user, Seed- und Wipe-Scripts
+├── assets/                   # Master-Artenliste (Artliste + Eingabemaske V.6, siehe #183)
+├── scripts/                  # nach Risikoklasse getrennt (siehe docs/ai/CONVENTIONS.md)
+│   ├── demo/                 # Seed + Wipe — nur auf leerer DB, seedGuard
+│   ├── data/                 # Datenpflege (Artlisten-Generator)
+│   ├── prod/                 # Einmal-Runbooks für die Produktion
+│   └── ops/                  # create-user, readonly-role, release, hooks
 ├── docs/ai/                  # Projektwissen (Architektur, Entscheidungen, ...)
-├── samples/                  # Beispieldaten
 ├── middleware.ts             # Edge-Cookie-Check für /api/admin/*
 └── docker-compose.yml        # PostgreSQL 16 + App
 ```
@@ -159,7 +167,10 @@ npm test
 # Prüfen, ob der Pre-push Hook aktiv ist
 npm run check:hooks
 
-# Vollständigen Demo-Datensatz anlegen (idempotent)
+# Schema übernehmen + Demo-Datensatz anlegen (Einstieg für eine neue DB)
+npm run db:init
+
+# Demo-Datensatz allein (einmal pro DB — der Seed-Guard verweigert danach)
 npm run seed:demo
 ```
 

@@ -1,9 +1,9 @@
 # Production backup (BOKU host, #86)
 
 Daily logical backup of the production database plus the runtime env, kept on
-the host and mirrored encrypted to the VPS. A monthly **restore rehearsal**
-proves that the newest set can actually be read back — an untested backup is an
-assumption, not a backup.
+the host and mirrored to the VPS over SSH/port-knocking. A monthly **restore
+rehearsal** proves that the newest set can actually be read back — an untested
+backup is an assumption, not a backup.
 
 ## What is backed up
 
@@ -32,9 +32,11 @@ accepts messages up to 50 MB; the dump is ~56 MB and growing.
 | `catchlogx-alert@.service` | `/etc/systemd/system/` | `644 root:root` |
 | `catchlogx-backup.env.example` | `/etc/catchlogx-backup.env` (filled in, **no** `.example`) | `600 root:root` |
 
-Packages: `age` (`apt install age`), `zstd`, `curl`, `postgresql-client-16` (from
-PGDG, matching the cluster), `postfix` (see `../postfix/`). Runner: the units
-run as `clxadmin` because the native cluster maps that OS user to the DB role
+Packages: `age` (`apt install age`), `zstd`, `rsync`, `postgresql-client-16` (from
+PGDG, matching the cluster), `postfix` (see `../postfix/`), and the knock
+**client** — `apt install knockd` ships `/usr/bin/knock`, the daemon is not
+needed here (mask it, see "Off-site transport" below). Runner: the units run as
+`clxadmin` because the native cluster maps that OS user to the DB role
 `clxadmin` via `local all clxadmin peer` in `pg_hba.conf` (#170) — that is what
 makes `pg_dump`/`psql`/`pg_restore` work without any password.
 `EnvironmentFile` is read by systemd as root, so secrets stay unreadable for the
@@ -50,7 +52,7 @@ install -m 644 deploy/prod/backup/catchlogx-backup.service \
              deploy/prod/backup/catchlogx-backup-probe.timer \
              deploy/prod/backup/catchlogx-alert@.service /etc/systemd/system/
 install -m 600 deploy/prod/backup/catchlogx-backup.env.example /etc/catchlogx-backup.env
-$EDITOR /etc/catchlogx-backup.env       # MAIL_TO, age recipient, off-site
+$EDITOR /etc/catchlogx-backup.env       # MAIL_TO, age recipient, off-site (see below)
 systemctl daemon-reload
 systemctl enable --now catchlogx-backup.timer catchlogx-backup-probe.timer
 ```
@@ -64,9 +66,12 @@ systemctl enable --now catchlogx-backup.timer catchlogx-backup-probe.timer
    `sum(length("FileBlob".data))` are frozen into `rowcounts.txt`. The restore
    probe compares against **these** numbers, never against live production.
 3. `.env` → `env.age` (public key only; nothing to decrypt on this host).
-4. Off-site: the whole set becomes one `age`-encrypted `tar.zst`, uploaded with
-   `curl -T` and verified by comparing the remote `Content-Length` with the
-   local byte count. Skipped with a warning when `OFFSITE_URL` is empty.
+4. Off-site: the set becomes one `tar.zst` (plain, #192), the sender knocks the
+   VPS SSH port open and pushes archive + `.sha256` with `rsync -c`. rsync
+   verifies the transferred file with its own checksums; the receiving side
+   re-hashes it nightly and the dev restore verifies it before use. Three
+   attempts, each with a fresh knock. Skipped with a warning when
+   `OFFSITE_HOST` is empty.
 5. Prune: newest `KEEP_DAILY` sets, plus the 1st-of-month sets (up to
    `KEEP_MONTHLY`). Hand-made sets (`cutover-…`, `pre-apt-…`) are never removed.
 6. One report per run. By default it is delivered **locally** into
@@ -75,7 +80,48 @@ systemctl enable --now catchlogx-backup.timer catchlogx-backup-probe.timer
    through `catchlogx-alert@…` (systemd `OnFailure`), which mails the journal
    tail of the failing unit to the same place.
 
-## Reports: the local mailbox is the default
+## Off-site transport: knock + rsync (#192)
+
+The dev VPS (`claw`, `catchlogx.graf.priv.at`) keeps its SSH port closed until
+the sender knocks (#189). The archive is pushed as the unprivileged user
+`catchlogx` into `~/backups` there. One-time setup on the production host:
+
+```sh
+# 1. the knock client. The package also contains the daemon - mask it, this
+#    host must never run one.
+DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends knockd
+systemctl disable --now knockd && systemctl mask knockd
+which knock        # /usr/bin/knock
+
+# 2. the upload key (no passphrase: systemd has no agent)
+ssh-keygen -t ed25519 -N '' -C clxadmin@clx-prod -f /home/clxadmin/.ssh/catchlogx-offsite
+chown clxadmin:clxadmin /home/clxadmin/.ssh/catchlogx-offsite*
+chmod 600 /home/clxadmin/.ssh/catchlogx-offsite
+
+# 3. pin the host key instead of answering "yes" blindly (fingerprint in
+#    PITFALLS.md). Run this as clxadmin, not root - the file must end up in
+#    clxadmin's known_hosts.
+ssh-keyscan -t ed25519 claw.graf.priv.at >> /home/clxadmin/.ssh/known_hosts
+
+# 4. put the public key into ~catchlogx/.ssh/authorized_keys on the VPS, with
+#    the forced command from deploy/vps/offsite-backup/README.md:
+#      command="/usr/bin/rrsync -wo -no-del -no-overwrite /home/catchlogx/backups",restrict,from="141.244.222.191"
+
+# 5. fill the knobs and run once
+$EDITOR /etc/catchlogx-backup.env     # OFFSITE_HOST, OFFSITE_SSH_KEY, OFFSITE_KNOCK_PORTS (secret!)
+systemctl start catchlogx-backup.service
+journalctl -u catchlogx-backup -n 20 --no-pager
+```
+
+The knock sequence is a **secret**: it lives only in `/etc/catchlogx-backup.env`
+(root, 0600) and must never appear in the repo, an issue, a commit message or a
+log. The script knocks before every attempt because the daemon closes the port
+again after ~30 s; an already established transfer keeps running.
+
+On the receiving side nothing needs root: directory, script and timer belong to
+`catchlogx`. See `deploy/vps/offsite-backup/README.md`.
+
+
 
 The operator does not have a mailbox to fetch mail from, so the reports stay on
 the machine:
@@ -144,8 +190,9 @@ age -d -i ~/clx-backup-key.txt "$SET/env.age" > /tmp/restored.env
 
 ## Key ceremony (once)
 
-The `age` identity is the recovery key for `env.age` and for every off-site
-archive. It **must not** live on the host: a key on the machine encrypts
+The `age` identity is the recovery key for `env.age` — the only part of the
+backup that is still encrypted (the database archive travels in clear text
+since #192). It **must not** live on the host: a key on the machine encrypts
 nothing for whoever holds the machine. On the operator's machine it lives in
 `pass` as `boku/age` (the public half, `age1…`, is in `BACKUP_AGE_RECIPIENT`).
 
@@ -154,8 +201,8 @@ nothing for whoever holds the machine. On the operator's machine it lives in
 pass show boku/age > /tmp/clx-age.key && chmod 600 /tmp/clx-age.key
 ```
 
-Rehearsed end to end on **2026-10-27** (newest off-site archive, pulled back
-from the VPS):
+Rehearsed end to end on **2026-10-27** (age-encrypted archive, pulled back from
+the VPS). The read-back chain is unchanged for `env.age`:
 
 ```sh
 NAME=20261027T205026Z.tar.zst.age
@@ -168,8 +215,9 @@ age -d -i /tmp/clx-age.key 20261027T205026Z/env.age      # all 7 keys
 shred -u /tmp/clx-age.key                                 # dump + key gone
 ```
 
-That proves the whole chain: upload → storage → checksum → decryption → a dump
-that `pg_restore` can list. Repeat once a year and after every key change; the
+Since #192 the archive itself no longer needs the key: `tar -x` +
+`pg_restore --list` are enough to prove the dump. Only `env.age` still requires
+`pass show boku/age`. Repeat once a year and after every key change; the
 plaintext dump and the key are shredded immediately afterwards, because the dump
 contains production data.
 
@@ -191,6 +239,12 @@ sudo -u clxadmin psql -U clxadmin -d postgres -c '\l'   # no clx_restore_probe l
 - **Off-site is a stopgap.** #86 wants a directory on the institute's file
   server. The transport is one function (`upload_offsite`); switching targets
   changes configuration, not code.
+- **The off-site archive is not encrypted (#192).** The dump on the VPS is
+  readable for `catchlogx` (and root) — accepted, because the dev instance
+  restores it and then holds the same data anyway. What is *not* accepted: the
+  production secrets stay in `env.age` inside that archive and never land
+  there in clear text. If the transport target ever changes to a host outside
+  our control, re-encrypt before the switch.
 - **`env.age` is only as good as the key copy.** Lose the identity and the env
   backup is worthless; the database dump stays readable, and the secrets can be
   reissued (`ALTER ROLE`, `deploy/prod/postgres/readonly-role.sh`, a new

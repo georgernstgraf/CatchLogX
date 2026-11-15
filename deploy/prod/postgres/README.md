@@ -302,7 +302,38 @@ Nothing about the connection changed except that it can now be encrypted:
 | role | `clx_readonly` |
 | password | from the app (data-access page, #153) or out of band |
 | TLS | offered; `sslmode=prefer` (libpq default) encrypts automatically, `sslmode=require` enforces it |
-| limits | `CONNECTION LIMIT 108` (role-wide, not per client address), `SELECT` on all tables except `User`, `Session`, `PasswordResets`; no writes, no DDL. Several connections per client address are normal — PostgreSQL has no per-IP limit |
+| limits | `CONNECTION LIMIT 108` (role-wide, not per client address), `SELECT` **only** on `fish_catches`, `samplings`, `river_sites`, `fish_species`; no writes, no DDL. Several connections per client address are normal — PostgreSQL has no per-IP limit |
+
+**This is a whitelist since #121** — it used to be "all tables except the auth
+tables", which also covered `Uploads`, `FileBlob`, `TemplateFiles`,
+`UserQueries` and `_prisma_migrations`. Those are closed now, because the same
+role also drives the **SQL page of the app** (`QUERY_DATABASE_URL`): whatever
+the role may read, every signed-in user can read through the web UI. In
+particular `FileBlob.data` holds the raw Excel uploads, and `Uploads`/`UserQueries`
+carry other users' metadata. If the research group needs one of those tables
+later, add it to `READ_TABLES` in `readonly-role.sh` and re-run the script —
+**not** with a one-off `GRANT`: the script's first step revokes every table
+privilege of the role, so a manual grant would silently disappear on the next
+run.
+
+**Table names are visible, rows are not.** `\dt`, the RStudio/DBeaver trees and
+`information_schema` disagree because they read different catalogs: `pg_catalog`
+lists every relation to every role, `information_schema` only what the role may
+use. A closed table answers `ERROR: permission denied`, it does not disappear
+from the tree — that is not a leak (#187).
+
+The grant set is auditable in one read-only query, from anywhere in the BOKUnet
+(and it is the check that found the 2026-11-10 drift, not the table list):
+
+```sql
+-- as clxadmin (or any role): which relations can clx_readonly read?
+SELECT c.relname, c.relkind,
+       has_table_privilege('clx_readonly', c.oid, 'SELECT') AS sel
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' AND c.relkind IN ('r','p','v','m','f')
+ORDER BY 1;
+-- and: SELECT * FROM pg_default_acl;   -- must be empty for clxadmin/public
+```
 
 ```sh
 # psql
@@ -419,3 +450,39 @@ must show several `ESTAB` lines from the same `Local Address:Port`.
 - `deploy/postgres/README.md` (the apply path is no longer a dispatch job)
 - `.github/workflows/production-maintenance.yml` is retired; recurring
   operations are the scripts in this directory plus `deploy/postgres/report.sql`.
+
+## SQL query page (`QUERY_DATABASE_URL`, #121)
+
+The SQL page runs user SQL as **`clx_readonly`**, the same whitelisted role as the
+research group (see "For the research group — connecting" above) — there is no second role. The app
+reads it from `QUERY_DATABASE_URL` and has **no fallback** to the admin URL, so
+without the variable the SQL page answers 500 and the rest of the app keeps working.
+Every query is written to `QueryLog` through the admin connection; the migration
+`add_query_log` also revokes `QueryLog` from `clx_readonly` as a second line behind
+the whitelist.
+
+Keep the URL a **plain libpq URL** — no `?connection_limit=` and no `?schema=`:
+psql rejects both (`invalid URI query parameter`), and the same string should work
+in psql and R. The app caps its pool for this client in code (`lib/queryPrisma.ts`).
+Percent-encode the password (`/` and `+` from base64).
+
+Order on a host, after the release containing `add_query_log` is deployed:
+
+```bash
+cd /root/CatchLogX/deploy/prod/postgres && KEEP_PASSWORD=1 ./readonly-role.sh
+# then, in ~clxadmin/.config/catchlogx/.env:
+#   QUERY_DATABASE_URL=postgresql://clx_readonly:<READONLY_DB_PASSWORD, percent-encoded>@127.0.0.1:5432/clx
+sudo -u clxadmin XDG_RUNTIME_DIR=/run/user/1000 \
+  DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
+  systemctl --user restart catchlogx.service
+```
+
+The app reads the env at start, hence the restart. Locally, `npm run db:readonly-role`
+(`scripts/ops/create-readonly-role.ts`) creates the same role with the same whitelist in the
+compose database — keep both lists in sync.
+
+**The SQL page has a 10 s statement timeout, the research group does not.** It is
+`QUERY_TIMEOUT_MS` in `services/queryService.ts`, applied as `SET LOCAL statement_timeout`
+inside the transaction that runs the user's SQL — never as `ALTER ROLE … SET
+statement_timeout`, because the same role serves R analyses over 465k rows. That is also
+why the discarded `clx_query` role's setting has no successor on the role level (#187).

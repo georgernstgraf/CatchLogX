@@ -8,6 +8,8 @@ const eslintConfig = [
     ignores: [
       "app/generated/**",
       "prisma/migrations/**",
+      // Agent worktrees are full repo copies and are not versioned (#195).
+      ".claude/**",
       "node_modules/**",
       ".next/**",
       "out/**",

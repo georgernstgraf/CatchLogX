@@ -7,24 +7,27 @@ import {
   Users,
   FileSpreadsheet,
   Files,
+  Fish,
   Download,
-  Check,
-  X,
   Trash2,
   UserPlus,
   Edit,
 } from "lucide-react";
 import AdminTemplateFilesManager from "./AdminTemplateFilesManager";
+import AdminFishSpeciesManager from "./AdminFishSpeciesManager";
 import { useAuth } from "./AuthProvider";
 
-type Upload = {
+/** One `Imports` row (#202): an upload imports directly, no review step. */
+type ImportItem = {
   id: string;
   fileName: string;
-  uploaded_by: string;
+  fileHash: string;
+  rowCount: number;
   createdAt: string;
-  updatedAt: string;
-  state: string;
-  note?: string | null;
+  samplings: number;
+  userId: string;
+  uploadedByUsername: string;
+  uploadedByName: string | null;
 };
 
 type User = {
@@ -37,24 +40,44 @@ type User = {
   createdAt: string;
 };
 
+function formatDateTime(dateString: string): string {
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown";
+  }
+
+  return new Intl.DateTimeFormat("de-AT", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function formatDate(dateString: string): string {
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown";
+  }
+
+  return new Intl.DateTimeFormat("de-AT", { dateStyle: "medium" }).format(date);
+}
+
 const AdminPageComponent = () => {
   const { user: currentUser } = useAuth();
   const isCurrentUserSuperAdmin = currentUser?.role === "SUPER_ADMIN";
 
-  const [activeTab, setActiveTab] = useState("uploads");
-  const [uploads, setUploads] = useState<Upload[]>([]);
+  const [activeTab, setActiveTab] = useState("imports");
+  const [imports, setImports] = useState<ImportItem[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [showDenyModal, setShowDenyModal] = useState(false);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [showEditUserModal, setShowEditUserModal] = useState(false);
-  const [selectedUploadId, setSelectedUploadId] = useState<string | null>(null);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
-  const [denyReason, setDenyReason] = useState("");
   const [deleteConfirmUserId, setDeleteConfirmUserId] = useState<string | null>(
     null,
   );
-  const [uploadStateFilter, setUploadStateFilter] = useState<string>("ALL");
-  const [uploadSearch, setUploadSearch] = useState("");
+  const [importSearch, setImportSearch] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<ImportItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   // New user form state
   const [newUser, setNewUser] = useState({
@@ -74,7 +97,7 @@ const AdminPageComponent = () => {
     password: "",
   });
 
-  const fetchUsersAndUploads = useCallback(async () => {
+  const fetchUsersAndImports = useCallback(async () => {
     try {
       const response = await fetch("/api/admin/fetch-all/", {
         method: "GET",
@@ -85,7 +108,7 @@ const AdminPageComponent = () => {
       const data = await response.json();
       if (response.ok) {
         setUsers(data.users);
-        setUploads(data.uploads);
+        setImports(data.imports);
       }
     } catch (error) {
       console.error("Error fetching admin data:", error);
@@ -93,39 +116,25 @@ const AdminPageComponent = () => {
   }, []);
 
   useEffect(() => {
-    fetchUsersAndUploads();
-  }, [fetchUsersAndUploads]);
+    fetchUsersAndImports();
+  }, [fetchUsersAndImports]);
 
-  const uploadStates = useMemo(() => {
-    const states = new Set(uploads.map((upload) => upload.state));
-    return ["ALL", ...Array.from(states)];
-  }, [uploads]);
+  const filteredImports = useMemo(() => {
+    const search = importSearch.trim().toLowerCase();
 
-  const pendingUploadsCount = useMemo(
-    () => uploads.filter((upload) => upload.state === "UPLOADED").length,
-    [uploads],
-  );
-
-  const filteredUploads = useMemo(() => {
-    const search = uploadSearch.trim().toLowerCase();
-
-    return uploads.filter((upload) => {
-      const stateMatch =
-        uploadStateFilter === "ALL" || upload.state === uploadStateFilter;
-
-      const searchMatch =
-        search.length === 0 ||
-        upload.id.toLowerCase().includes(search) ||
-        upload.fileName.toLowerCase().includes(search) ||
-        upload.uploaded_by.toLowerCase().includes(search);
-
-      return stateMatch && searchMatch;
+    return imports.filter((item) => {
+      if (search.length === 0) return true;
+      return (
+        item.fileName.toLowerCase().includes(search) ||
+        item.uploadedByUsername.toLowerCase().includes(search) ||
+        (item.uploadedByName ?? "").toLowerCase().includes(search)
+      );
     });
-  }, [uploadSearch, uploadStateFilter, uploads]);
+  }, [importSearch, imports]);
 
-  const handleDownload = async (uploadId: string) => {
+  const handleDownload = async (importId: string) => {
     try {
-      const response = await fetch(`/api/admin/download/${uploadId}`, {
+      const response = await fetch(`/api/admin/download/${importId}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -140,14 +149,14 @@ const AdminPageComponent = () => {
         const a = document.createElement("a");
         a.style.display = "none";
         a.href = url;
-        a.download = match?.[1] ?? "upload.xlsx";
+        a.download = match?.[1] ?? "import.xlsx";
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
       } else {
         const errorData = await response.json();
-        alert(`Download failed: ${errorData.message || "Unknown error"}`);
+        alert(`Download failed: ${errorData.error || "Unknown error"}`);
       }
     } catch (error) {
       console.error("Error downloading file:", error);
@@ -155,79 +164,52 @@ const AdminPageComponent = () => {
     }
   };
 
-  const handleAccept = async (uploadId: string) => {
+  const openDeleteDialog = (item: ImportItem) => {
+    setPendingDelete(item);
+    setDeleteError("");
+  };
+
+  const closeDeleteDialog = () => {
+    setPendingDelete(null);
+    setDeleteError("");
+  };
+
+  const handleDeleteImport = async () => {
+    if (!pendingDelete || isDeleting) return;
+
+    setIsDeleting(true);
+    setDeleteError("");
+
     try {
-      const response = await fetch(`/api/admin/uploads/${uploadId}`, {
-        method: "PATCH",
+      const response = await fetch(`/api/admin/imports/${pendingDelete.id}`, {
+        method: "DELETE",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ action: "accept" }),
       });
 
       if (response.ok) {
-        setUploads(
-          uploads.map((upload) =>
-            upload.id === uploadId ? { ...upload, state: "ACCEPTED" } : upload,
-          ),
-        );
-        alert("Upload has been accepted.");
-      } else {
-        const errorData = await response.json();
-        alert(`Error: ${errorData.error || "Unknown error"}`);
+        const deletedId = pendingDelete.id;
+        setImports((current) => current.filter((item) => item.id !== deletedId));
+        setPendingDelete(null);
+        return;
       }
-    } catch (error) {
-      console.error("Error accepting upload:", error);
-      alert("Network error. Please try again.");
-    }
-  };
 
-  const handleDenyClick = (uploadId: string) => {
-    setSelectedUploadId(uploadId);
-    setShowDenyModal(true);
-  };
-
-  const handleDenyConfirm = async () => {
-    if (!denyReason.trim()) {
-      alert("Please provide a reason for rejection.");
-      return;
-    }
-
-    try {
-      const response = await fetch(`/api/admin/uploads/${selectedUploadId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          action: "deny",
-          reason: denyReason,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setUploads(
-          uploads.map((upload) =>
-            upload.id === selectedUploadId
-              ? { ...upload, state: "REJECTED", note: denyReason }
-              : upload,
-          ),
-        );
-
-        // Reset modal state
-        setShowDenyModal(false);
-        setDenyReason("");
-        setSelectedUploadId(null);
-
-        alert("Upload has been rejected.");
-      } else {
-        alert(`Rejection failed: ${data.error || "Unknown error"}`);
+      let message = "The import could not be deleted.";
+      try {
+        const payload = await response.json();
+        if (typeof payload?.error === "string") {
+          message = payload.error;
+        }
+      } catch {
+        // Ignore JSON parsing errors and keep the fallback message.
       }
+      setDeleteError(message);
     } catch (error) {
-      console.error("Error denying upload:", error);
-      alert("Network error while rejecting upload. Please try again.");
+      console.error("Error deleting import:", error);
+      setDeleteError("Network error while deleting the import.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -375,20 +357,15 @@ const AdminPageComponent = () => {
 
           <div className="flex space-x-4 mb-6 border-b border-gray-200 dark:border-gray-700">
             <button
-              onClick={() => setActiveTab("uploads")}
+              onClick={() => setActiveTab("imports")}
               className={`flex items-center px-4 py-2 border-b-2 transition-colors ${
-                activeTab === "uploads"
+                activeTab === "imports"
                   ? "border-[#357174] text-[#357174]"
                   : "border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
               }`}
             >
               <FileSpreadsheet className="mr-2" size={20} />
-              Upload Management
-              {pendingUploadsCount > 0 && (
-                <span className="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
-                  {pendingUploadsCount}
-                </span>
-              )}
+              Imports
             </button>
             <button
               onClick={() => setActiveTab("users")}
@@ -412,126 +389,135 @@ const AdminPageComponent = () => {
               <Files className="mr-2" size={20} />
               Template Files
             </button>
+            <button
+              onClick={() => setActiveTab("fish-species")}
+              className={`flex items-center px-4 py-2 border-b-2 transition-colors ${
+                activeTab === "fish-species"
+                  ? "border-[#357174] text-[#357174]"
+                  : "border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+              }`}
+            >
+              <Fish className="mr-2" size={20} />
+              Fish Species
+            </button>
           </div>
 
           {/* Tab Content */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-            {activeTab === "uploads" && (
+            {activeTab === "imports" && (
               <div>
                 <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-4">
-                  Upload Management
+                  Imports
                 </h2>
                 <p className="text-gray-600 dark:text-gray-400 mb-6">
-                  All uploads in the system with filtering and search.
+                  All imports in the system. Deleting an import removes its
+                  catches, its samplings and the original file.
                 </p>
 
                 <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <select
-                    value={uploadStateFilter}
-                    onChange={(event) =>
-                      setUploadStateFilter(event.target.value)
-                    }
-                    className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
-                  >
-                    {uploadStates.map((state) => (
-                      <option key={state} value={state}>
-                        {state === "ALL" ? "All statuses" : state}
-                      </option>
-                    ))}
-                  </select>
-
                   <input
                     type="text"
-                    value={uploadSearch}
-                    onChange={(event) => setUploadSearch(event.target.value)}
-                    placeholder="Search by file name, user ID, or upload ID"
+                    value={importSearch}
+                    onChange={(event) => setImportSearch(event.target.value)}
+                    placeholder="Search by file name or username"
                     className="w-full sm:max-w-md px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
                   />
 
                   <button
-                    onClick={fetchUsersAndUploads}
+                    onClick={fetchUsersAndImports}
                     className="px-4 py-2 bg-[#357174] text-white rounded hover:bg-[#2a5a5d] transition-colors"
                   >
                     Refresh
                   </button>
                 </div>
 
-                {filteredUploads.length === 0 ? (
+                {filteredImports.length === 0 ? (
                   <div className="text-center py-12 text-gray-500 dark:text-gray-400">
                     <FileSpreadsheet className="mx-auto mb-4" size={48} />
-                    <p>No uploads found for the current filter.</p>
+                    <p>No imports found.</p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {filteredUploads.map((upload) => (
-                      <div
-                        key={upload.id}
-                        className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center">
-                              <FileSpreadsheet
-                                className="mr-3 text-green-600"
-                                size={24}
-                              />
-                              <div>
-                                <h3 className="font-semibold text-gray-800 dark:text-gray-100">
-                                  {upload.fileName}
-                                </h3>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
-                                  Upload-ID: {upload.id}
-                                </p>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
-                                  Uploaded by {upload.uploaded_by} on{" "}
-                                  {upload.createdAt}
-                                </p>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
-                                  Status: {upload.state}
-                                </p>
-                                {upload.note && (
-                                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                                    Note: {upload.note}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => {
-                                handleDownload(upload.id);
-                              }}
-                              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors flex items-center"
-                              title="Download file"
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead className="bg-gray-50 dark:bg-gray-700">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            File
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Uploaded by
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Rows
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Samplings
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Imported at
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Status
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                        {filteredImports.map((item) => {
+                          return (
+                            <tr
+                              key={item.id}
+                              className="hover:bg-gray-50 dark:hover:bg-gray-700"
                             >
-                              <Download size={18} className="mr-2" />
-                              Download
-                            </button>
-                            {upload.state === "UPLOADED" && (
-                              <>
-                                <button
-                                  onClick={() => handleAccept(upload.id)}
-                                  className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center"
-                                  title="Accept upload"
-                                >
-                                  <Check size={18} className="mr-2" />
-                                  Accept
-                                </button>
-                                <button
-                                  onClick={() => handleDenyClick(upload.id)}
-                                  className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors flex items-center"
-                                  title="Reject upload"
-                                >
-                                  <X size={18} className="mr-2" />
-                                  Reject
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                              <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100 break-all">
+                                {item.fileName}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                {item.uploadedByUsername}
+                                {item.uploadedByName &&
+                                  ` (${item.uploadedByName})`}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                {item.rowCount}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                {item.samplings}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                {formatDateTime(item.createdAt)}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">
+                                  Active
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                <div className="flex items-center space-x-3">
+                                  <button
+                                    onClick={() => handleDownload(item.id)}
+                                    className="text-blue-600 hover:text-blue-800 flex items-center"
+                                    title="Download file"
+                                  >
+                                    <Download size={16} className="mr-1" />
+                                    Download
+                                  </button>
+                                  <button
+                                    onClick={() => openDeleteDialog(item)}
+                                    className="text-red-600 hover:text-red-800 flex items-center"
+                                    title="Delete import"
+                                  >
+                                    <Trash2 size={16} className="mr-1" />
+                                    Delete
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>
@@ -668,43 +654,63 @@ const AdminPageComponent = () => {
             )}
 
             {activeTab === "template-files" && <AdminTemplateFilesManager />}
+
+            {activeTab === "fish-species" && <AdminFishSpeciesManager />}
           </div>
         </div>
       </div>
 
-      {/* Deny Upload Modal */}
-      {showDenyModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+      {/* Delete Import Modal */}
+      {pendingDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full mx-4">
             <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-4">
-              Reject Upload
+              Delete this import?
             </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">
-              Please provide a reason for rejection:
-            </p>
-            <textarea
-              value={denyReason}
-              onChange={(e) => setDenyReason(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#357174] mb-4 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
-              rows={4}
-              placeholder="Reason for rejection..."
-            />
-            <div className="flex justify-end space-x-3">
+
+            <div className="text-sm text-gray-600 dark:text-gray-400 space-y-2">
+              <p className="font-medium text-gray-800 dark:text-gray-200 break-all">
+                {pendingDelete.fileName} — {pendingDelete.rowCount} rows,
+                imported {formatDate(pendingDelete.createdAt)}
+              </p>
+              <p>
+                {pendingDelete.rowCount} catches from{" "}
+                {pendingDelete.samplings} samplings will be deleted.
+              </p>
+              <p>
+                The original file and the import record itself will be deleted
+                from the database — this cannot be undone.
+              </p>
+              <p>recapture flags of other imports stay unchanged.</p>
+              <p>Analyses that already ran will not be corrected.</p>
+            </div>
+
+            {deleteError && (
+              <div className="mt-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2 text-sm text-red-800 dark:text-red-300">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="flex flex-wrap justify-end gap-3 mt-6">
               <button
-                onClick={() => {
-                  setShowDenyModal(false);
-                  setDenyReason("");
-                  setSelectedUploadId(null);
-                }}
+                onClick={() => handleDownload(pendingDelete.id)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Download a copy
+              </button>
+              <button
+                onClick={closeDeleteDialog}
+                disabled={isDeleting}
                 className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={handleDenyConfirm}
-                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                onClick={handleDeleteImport}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors disabled:bg-gray-400"
               >
-                Reject
+                {isDeleting ? "Deleting..." : "Delete import"}
               </button>
             </div>
           </div>

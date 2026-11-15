@@ -6,7 +6,7 @@ import { getSessionUser } from "@/lib/session";
 export async function GET(req: NextRequest) {
   const session = await getSessionUser(req);
   if (!session) {
-    return NextResponse.json({ error: "Nicht authentifiziert" }, { status: 401 });
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
   try {
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error("Error fetching saved queries:", error);
     return NextResponse.json(
-      { error: "Fehler beim Laden der gespeicherten Queries" },
+      { error: "Failed to load saved queries" },
       { status: 500 }
     );
   }
@@ -29,17 +29,17 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSessionUser(req);
   if (!session) {
-    return NextResponse.json({ error: "Nicht authentifiziert" }, { status: 401 });
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
   try {
     const { name, query } = await req.json();
 
     if (!name || !name.trim()) {
-      return NextResponse.json({ error: "Name darf nicht leer sein" }, { status: 400 });
+      return NextResponse.json({ error: "Name must not be empty" }, { status: 400 });
     }
     if (!query || !query.trim()) {
-      return NextResponse.json({ error: "Query darf nicht leer sein" }, { status: 400 });
+      return NextResponse.json({ error: "Query must not be empty" }, { status: 400 });
     }
 
     const saved = await prisma.userQueries.create({
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("Error saving query:", error);
     return NextResponse.json(
-      { error: "Fehler beim Speichern der Query" },
+      { error: "Failed to save the query" },
       { status: 500 }
     );
   }
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const session = await getSessionUser(req);
   if (!session) {
-    return NextResponse.json({ error: "Nicht authentifiziert" }, { status: 401 });
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
   try {
@@ -80,7 +80,7 @@ export async function PUT(req: NextRequest) {
     });
 
     if (!existing) {
-      return NextResponse.json({ error: "Query nicht gefunden" }, { status: 404 });
+      return NextResponse.json({ error: "Query not found" }, { status: 404 });
     }
 
     const updateData: { name?: string; query?: string } = {};
@@ -96,7 +96,7 @@ export async function PUT(req: NextRequest) {
   } catch (error) {
     console.error("Error updating query:", error);
     return NextResponse.json(
-      { error: "Fehler beim Aktualisieren der Query" },
+      { error: "Failed to update the query" },
       { status: 500 }
     );
   }
@@ -106,7 +106,7 @@ export async function PUT(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const session = await getSessionUser(req);
   if (!session) {
-    return NextResponse.json({ error: "Nicht authentifiziert" }, { status: 401 });
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
   try {
@@ -122,16 +122,16 @@ export async function DELETE(req: NextRequest) {
     });
 
     if (!existing) {
-      return NextResponse.json({ error: "Query nicht gefunden" }, { status: 404 });
+      return NextResponse.json({ error: "Query not found" }, { status: 404 });
     }
 
     await prisma.userQueries.delete({ where: { id } });
 
-    return NextResponse.json({ message: "Query gelöscht" });
+    return NextResponse.json({ message: "Query deleted" });
   } catch (error) {
     console.error("Error deleting query:", error);
     return NextResponse.json(
-      { error: "Fehler beim Löschen der Query" },
+      { error: "Failed to delete the query" },
       { status: 500 }
     );
   }

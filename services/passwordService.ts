@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import * as crypto from "crypto";
 import bcrypt from "bcrypt";
-import { createMailerTransporter } from "@/lib/mailer";
+import { createMailerTransporter, mailFrom } from "@/lib/mailer";
 
 type UserEmailType = {
   email: string;
@@ -209,7 +209,7 @@ export async function initiatePasswordReset(
 
   try {
     const mailResult = await transporter.sendMail({
-      from: `"CatchLogX" <${process.env.NODEMAILER_USER}>`,
+      from: mailFrom(),
       to: email,
       subject: "Password Reset Request",
       html: emailHtml,

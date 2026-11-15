@@ -1,0 +1,995 @@
+[
+  {
+    "id": 1,
+    "speciesName": "Abramis brama",
+    "germanName": "Brachse",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 2,
+    "speciesName": "Abramis brama hybrid",
+    "germanName": "Brachse Hybridd",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 3,
+    "speciesName": "Acipenser baerii",
+    "germanName": "Sibirischer Stör",
+    "family": "Acipenseridae"
+  },
+  {
+    "id": 4,
+    "speciesName": "Acipenser gueldenstaedtii",
+    "germanName": "Waxdick",
+    "family": "Acipenseridae"
+  },
+  {
+    "id": 5,
+    "speciesName": "Acipenser hybrid",
+    "germanName": "Stör Hybrid",
+    "family": "Acipenseridae"
+  },
+  {
+    "id": 6,
+    "speciesName": "Acipenser ruthenus",
+    "germanName": "Sterlet",
+    "family": "Acipenseridae"
+  },
+  {
+    "id": 7,
+    "speciesName": "Acipenser stellatus",
+    "germanName": "Sternhausen",
+    "family": "Acipenseridae"
+  },
+  {
+    "id": 8,
+    "speciesName": "Alburnoides bipunctatus",
+    "germanName": "Schneider",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 9,
+    "speciesName": "Alburnus alburnus",
+    "germanName": "Laube",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 10,
+    "speciesName": "Alburnus mento",
+    "germanName": "Seelaube",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 11,
+    "speciesName": "Ameiurus melas",
+    "germanName": "Schwarzer Katzenwels",
+    "family": "Ictaluridae"
+  },
+  {
+    "id": 12,
+    "speciesName": "Ameiurus nebulosus",
+    "germanName": "Zwergwels",
+    "family": "Ictaluridae"
+  },
+  {
+    "id": 13,
+    "speciesName": "Ameiurus sp.",
+    "germanName": "Zwergwels unbestimmt",
+    "family": "Ictaluridae"
+  },
+  {
+    "id": 14,
+    "speciesName": "Anguilla anguilla",
+    "germanName": "Aal",
+    "family": "Anguillidae"
+  },
+  {
+    "id": 15,
+    "speciesName": "Aspius aspius hybrid",
+    "germanName": "Schied Hybrid",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 16,
+    "speciesName": "Aspius aspius x Leuciscus idus",
+    "germanName": "Schied x Nerfling",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 17,
+    "speciesName": "Babka gymnotrachelus",
+    "germanName": "Nackthalsgrundel",
+    "family": "Gobiidae"
+  },
+  {
+    "id": 18,
+    "speciesName": "Ballerus ballerus",
+    "germanName": "Zope",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 19,
+    "speciesName": "Ballerus sapa",
+    "germanName": "Zobel",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 20,
+    "speciesName": "Ballerus sp.",
+    "germanName": "Ballerus sp.",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 21,
+    "speciesName": "Barbatula barbatula",
+    "germanName": "Bachschmerle",
+    "family": "Nemacheilidae"
+  },
+  {
+    "id": 22,
+    "speciesName": "Barbus balcanicus",
+    "germanName": "Semling",
+    "family": "Cyprinidae"
+  },
+  {
+    "id": 23,
+    "speciesName": "Barbus barbus",
+    "germanName": "Barbe",
+    "family": "Cyprinidae"
+  },
+  {
+    "id": 24,
+    "speciesName": "Blicca bjoerkna",
+    "germanName": "Güster",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 25,
+    "speciesName": "Carassius auratus",
+    "germanName": "Goldfisch",
+    "family": "Cyprinidae"
+  },
+  {
+    "id": 26,
+    "speciesName": "Carassius carassius",
+    "germanName": "Karausche",
+    "family": "Cyprinidae"
+  },
+  {
+    "id": 27,
+    "speciesName": "Carassius gibelio",
+    "germanName": "Giebel",
+    "family": "Cyprinidae"
+  },
+  {
+    "id": 28,
+    "speciesName": "Carassius gibelio x Blicca bjoerkna",
+    "germanName": "Giebel X Güster",
+    "family": "Cyprinidae"
+  },
+  {
+    "id": 29,
+    "speciesName": "Carassius hybrid",
+    "germanName": "Carassius Hybrid",
+    "family": "Cyprinidae"
+  },
+  {
+    "id": 30,
+    "speciesName": "Carassius sp.",
+    "germanName": "Carassius sp.",
+    "family": "Cyprinidae"
+  },
+  {
+    "id": 31,
+    "speciesName": "Chondrostoma nasus",
+    "germanName": "Nase",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 32,
+    "speciesName": "Chondrostoma nasus x Rutilus rutilus",
+    "germanName": "Nase x Rotauge",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 33,
+    "speciesName": "Cobitis elongatoides",
+    "germanName": "Donau-Steinbeisser",
+    "family": "Cobitidae"
+  },
+  {
+    "id": 34,
+    "speciesName": "Coregonus sp.",
+    "germanName": "Renke",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 35,
+    "speciesName": "Cottus gobio",
+    "germanName": "Koppe",
+    "family": "Cottidae"
+  },
+  {
+    "id": 36,
+    "speciesName": "Ctenopharyngodon idella",
+    "germanName": "Graskarpfen",
+    "family": "Xenocyprididae"
+  },
+  {
+    "id": 37,
+    "speciesName": "Cyprinidae",
+    "germanName": "Cyprinid unbestimmt",
+    "family": null
+  },
+  {
+    "id": 38,
+    "speciesName": "Cyprinidae hybrid",
+    "germanName": "Cyprinid Hybrid",
+    "family": null
+  },
+  {
+    "id": 39,
+    "speciesName": "Cyprinus carpio",
+    "germanName": "Karpfen",
+    "family": "Cyprinidae"
+  },
+  {
+    "id": 40,
+    "speciesName": "Esox lucius",
+    "germanName": "Hecht",
+    "family": "Esocidae"
+  },
+  {
+    "id": 41,
+    "speciesName": "Eudontomyzon mariae",
+    "germanName": "Ukrainisches Bachneunauge",
+    "family": "Petromyzontidae"
+  },
+  {
+    "id": 42,
+    "speciesName": "Gasterosteus aculeatus",
+    "germanName": "Stichling",
+    "family": "Gasterosteidae"
+  },
+  {
+    "id": 43,
+    "speciesName": "Gobio gobio",
+    "germanName": "Gründling",
+    "family": "Gobionidae"
+  },
+  {
+    "id": 44,
+    "speciesName": "Gobio obtusirostris",
+    "germanName": "Donautalgründling",
+    "family": "Cyprinidae",
+    "notInArtliste": true
+  },
+  {
+    "id": 45,
+    "speciesName": "Gobio/Romanogobio sp.",
+    "germanName": "Gründling unbestimmt",
+    "family": "Gobionidae"
+  },
+  {
+    "id": 46,
+    "speciesName": "Gymnocephalus baloni",
+    "germanName": "Donaukaulbarsch",
+    "family": "Percidae"
+  },
+  {
+    "id": 47,
+    "speciesName": "Gymnocephalus cernua",
+    "germanName": "Kaulbarsch",
+    "family": "Percidae"
+  },
+  {
+    "id": 48,
+    "speciesName": "Gymnocephalus schraetser",
+    "germanName": "Schrätzer",
+    "family": "Percidae"
+  },
+  {
+    "id": 49,
+    "speciesName": "Hucho hucho",
+    "germanName": "Huchen",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 50,
+    "speciesName": "Huso huso",
+    "germanName": "Hausen",
+    "family": "Acipenseridae"
+  },
+  {
+    "id": 51,
+    "speciesName": "Hypophthalmichthys molitrix",
+    "germanName": "Silberkarpfen",
+    "family": "Xenocyprididae"
+  },
+  {
+    "id": 52,
+    "speciesName": "Hypophthalmichthys nobilis",
+    "germanName": "Marmorkarpfen",
+    "family": "Xenocyprididae"
+  },
+  {
+    "id": 53,
+    "speciesName": "Hypophthalmichthys sp.",
+    "germanName": "Asiatischer Karpfen unbestimmt",
+    "family": "Xenocyprididae"
+  },
+  {
+    "id": 54,
+    "speciesName": "Ictalurus punctatus",
+    "germanName": "Getüpfelter Gabelwels",
+    "family": "Ictaluridae"
+  },
+  {
+    "id": 55,
+    "speciesName": "Lampetra planeri",
+    "germanName": "Bachneunauge",
+    "family": "Petromyzontidae"
+  },
+  {
+    "id": 56,
+    "speciesName": "Lepomis gibbosus",
+    "germanName": "Sonnenbarsch",
+    "family": "Centrarchidae"
+  },
+  {
+    "id": 57,
+    "speciesName": "Leucaspius delineatus",
+    "germanName": "Moderlieschen",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 58,
+    "speciesName": "Leuciscus aspius",
+    "germanName": "Schied",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 59,
+    "speciesName": "Leuciscus aspius hybrid",
+    "germanName": "Schied Hybrid",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 60,
+    "speciesName": "Leuciscus aspius/idus hyb",
+    "germanName": "Schied/Aland-Hybrid",
+    "family": "Cyprinidae",
+    "notInArtliste": true
+  },
+  {
+    "id": 61,
+    "speciesName": "Leuciscus idus",
+    "germanName": "Nerfling",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 62,
+    "speciesName": "Leuciscus idus hybrid",
+    "germanName": "Nerfling Hybrid",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 63,
+    "speciesName": "Leuciscus leuciscus",
+    "germanName": "Hasel",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 64,
+    "speciesName": "Leuciscus sp.",
+    "germanName": "Leuciscus unbestimmt",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 65,
+    "speciesName": "Lota lota",
+    "germanName": "Aalrutte",
+    "family": "Gadidae"
+  },
+  {
+    "id": 66,
+    "speciesName": "Micropterus salmoides",
+    "germanName": "Forellenbarsch",
+    "family": "Centrarchidae"
+  },
+  {
+    "id": 67,
+    "speciesName": "Misgurnus bipartitus",
+    "germanName": "Nordchinesischer Schlammpeitzger",
+    "family": "Cobitidae"
+  },
+  {
+    "id": 68,
+    "speciesName": "Misgurnus fossilis",
+    "germanName": "Schlammpeitzger",
+    "family": "Cobitidae"
+  },
+  {
+    "id": 69,
+    "speciesName": "Neogobius fluviatilis",
+    "germanName": "Fluss-Grundel",
+    "family": "Gobiidae"
+  },
+  {
+    "id": 70,
+    "speciesName": "Neogobius melanostomus",
+    "germanName": "Schwarzmundgrundel",
+    "family": "Gobiidae"
+  },
+  {
+    "id": 71,
+    "speciesName": "Neogobius sp.",
+    "germanName": "Grundel unbestimmt",
+    "family": "Gobiidae"
+  },
+  {
+    "id": 72,
+    "speciesName": "Nicht Beprobbar",
+    "germanName": "Nicht Beprobbar",
+    "family": null
+  },
+  {
+    "id": 73,
+    "speciesName": "no catch",
+    "germanName": "no catch",
+    "family": null
+  },
+  {
+    "id": 74,
+    "speciesName": "Oncorhynchus kisutch",
+    "germanName": "Silberlachs",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 75,
+    "speciesName": "Oncorhynchus mykiss",
+    "germanName": "Regenbogenforelle",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 76,
+    "speciesName": "Pelecus cultratus",
+    "germanName": "Sichling",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 77,
+    "speciesName": "Perca fluviatilis",
+    "germanName": "Flussbarsch",
+    "family": "Percidae"
+  },
+  {
+    "id": 78,
+    "speciesName": "Phoxinus phoxinus",
+    "germanName": "Elritze",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 79,
+    "speciesName": "Ponticola kessleri",
+    "germanName": "Kesslergrundel",
+    "family": "Gobiidae"
+  },
+  {
+    "id": 80,
+    "speciesName": "Proterorhinus semilunaris",
+    "germanName": "Marmorierte Grundel",
+    "family": "Gobiidae"
+  },
+  {
+    "id": 81,
+    "speciesName": "Pseudorasbora parva",
+    "germanName": "Blaubandbärbling",
+    "family": "Gobionidae"
+  },
+  {
+    "id": 82,
+    "speciesName": "Pungitius pungitius",
+    "germanName": "Neunstachliger Stichling",
+    "family": "Gasterosteidae"
+  },
+  {
+    "id": 83,
+    "speciesName": "Rhodeus amarus",
+    "germanName": "Bitterling",
+    "family": "Acheilognathidae"
+  },
+  {
+    "id": 84,
+    "speciesName": "Romanogobio carpathorossicus",
+    "germanName": "Sandgressling",
+    "family": "Gobionidae"
+  },
+  {
+    "id": 85,
+    "speciesName": "Romanogobio kesslerii",
+    "germanName": "Kesslerscher Gründling",
+    "family": "Cyprinidae",
+    "notInArtliste": true
+  },
+  {
+    "id": 86,
+    "speciesName": "Romanogobio skywalkeri",
+    "germanName": "Smaragdgressling",
+    "family": "Gobionidae"
+  },
+  {
+    "id": 87,
+    "speciesName": "Romanogobio sp.",
+    "germanName": "Romanogobio unbestimmt",
+    "family": "Gobionidae"
+  },
+  {
+    "id": 88,
+    "speciesName": "Romanogobio uranoscopus",
+    "germanName": "Steingressling",
+    "family": "Gobionidae"
+  },
+  {
+    "id": 89,
+    "speciesName": "Romanogobio vladykovi",
+    "germanName": "Donau-Weißflossengründling",
+    "family": "Gobionidae"
+  },
+  {
+    "id": 91,
+    "speciesName": "Rutilus meidingeri",
+    "germanName": "Perlfisch",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 92,
+    "speciesName": "Rutilus rutilus",
+    "germanName": "Rotauge",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 93,
+    "speciesName": "Rutilus rutilus hybrid",
+    "germanName": "Rotauge Hybrid",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 95,
+    "speciesName": "Rutilus rutilus x Abramis brama",
+    "germanName": "Rotauge x Brachse",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 96,
+    "speciesName": "Rutilus rutilus x Rutilus virgo",
+    "germanName": "Rotauge x Frauennerfling",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 97,
+    "speciesName": "Rutilus rutilus x Scardinus erythrophthalamus",
+    "germanName": "Rotauge x Rotfeder",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 98,
+    "speciesName": "Rutilus virgo",
+    "germanName": "Frauennerfling",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 99,
+    "speciesName": "Rutilus virgo hybrid",
+    "germanName": "Frauennerfling Hybrid",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 100,
+    "speciesName": "Rutilus virgo x Rutilus rutilus",
+    "germanName": "Frauennerfling x Rotauge",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 101,
+    "speciesName": "Sabanejewia balcanica",
+    "germanName": "Balkan-Goldsteinbeisser",
+    "family": "Cobitidae"
+  },
+  {
+    "id": 102,
+    "speciesName": "Salmo trutta",
+    "germanName": "Bachforelle",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 103,
+    "speciesName": "Salmo trutta x Salvelinus fontinalis",
+    "germanName": "Tigerforelle",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 104,
+    "speciesName": "Salmonidae",
+    "germanName": "Salmonidae unbestimmt",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 105,
+    "speciesName": "Salvelinus fontinalis",
+    "germanName": "Bachsaibling",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 106,
+    "speciesName": "Salvelinus alpinus x Salvelinus fontinalis",
+    "germanName": "Elsässer",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 107,
+    "speciesName": "Salvelinus namaycush",
+    "germanName": "Amerikanischer Seesaibling",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 108,
+    "speciesName": "Salvelinus sp.",
+    "germanName": "Salvelinus unbestimmt",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 109,
+    "speciesName": "Salvelinus umbla",
+    "germanName": "Seesaibling",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 110,
+    "speciesName": "Sander lucioperca",
+    "germanName": "Zander",
+    "family": "Percidae"
+  },
+  {
+    "id": 111,
+    "speciesName": "Sander volgensis",
+    "germanName": "Wolgazander",
+    "family": "Percidae"
+  },
+  {
+    "id": 112,
+    "speciesName": "Scardinius erythrophthalmus",
+    "germanName": "Rotfeder",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 113,
+    "speciesName": "Silurus glanis",
+    "germanName": "Wels",
+    "family": "Siluridae"
+  },
+  {
+    "id": 114,
+    "speciesName": "Squalius cephalus",
+    "germanName": "Aitel",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 115,
+    "speciesName": "Squalius cephalus x Alburnus mento",
+    "germanName": "Aitel x Seelaube",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 116,
+    "speciesName": "Telestes souffia",
+    "germanName": "Strömer",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 117,
+    "speciesName": "Thymallus thymallus",
+    "germanName": "Äsche",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 118,
+    "speciesName": "Tinca tinca",
+    "germanName": "Schleie",
+    "family": "Tincidae"
+  },
+  {
+    "id": 119,
+    "speciesName": "Umbra krameri",
+    "germanName": "Hundsfisch",
+    "family": "Umbridae"
+  },
+  {
+    "id": 120,
+    "speciesName": "Vimba vimba",
+    "germanName": "Rußnase",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 121,
+    "speciesName": "Vimba vimba hybrid",
+    "germanName": "Rußnase Hybrid",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 122,
+    "speciesName": "Vimba vimba x Blicca bjoerkna",
+    "germanName": "Rußnase x Güster",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 123,
+    "speciesName": "Zingel streber",
+    "germanName": "Streber",
+    "family": "Percidae"
+  },
+  {
+    "id": 124,
+    "speciesName": "Zingel zingel",
+    "germanName": "Zingel",
+    "family": "Percidae"
+  },
+  {
+    "id": 125,
+    "speciesName": "unknown",
+    "germanName": "unknown",
+    "family": null
+  },
+  {
+    "id": 126,
+    "speciesName": "Eudontomyzon danfordi",
+    "germanName": "Donauneunauge",
+    "family": "Petromyzontidae"
+  },
+  {
+    "id": 127,
+    "speciesName": "Acipenser brevirostrum",
+    "germanName": "Kurznasenstör",
+    "family": "Acipenseridae"
+  },
+  {
+    "id": 128,
+    "speciesName": "Acipenser naccarii",
+    "germanName": "Adriatischer Stör",
+    "family": "Acipenseridae"
+  },
+  {
+    "id": 129,
+    "speciesName": "Acipenser nudiventris",
+    "germanName": "Glattdick",
+    "family": "Acipenseridae"
+  },
+  {
+    "id": 130,
+    "speciesName": "Acipenser oxyrinchus",
+    "germanName": "Atlantischer Stör",
+    "family": "Acipenseridae"
+  },
+  {
+    "id": 131,
+    "speciesName": "Acipenser sturio",
+    "germanName": "Europäischer Stör",
+    "family": "Acipenseridae"
+  },
+  {
+    "id": 132,
+    "speciesName": "Acipenser transmontanus",
+    "germanName": "Weißer Stör",
+    "family": "Acipenseridae"
+  },
+  {
+    "id": 133,
+    "speciesName": "Polyodon spathula",
+    "germanName": "Löffelstör",
+    "family": "Polydontidae"
+  },
+  {
+    "id": 134,
+    "speciesName": "Coregonus arenicolus",
+    "germanName": "Sandfelchen",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 135,
+    "speciesName": "Coregonus atterensis",
+    "germanName": "Reinanke",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 136,
+    "speciesName": "Coregonus austriacus",
+    "germanName": "Kröpfling",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 137,
+    "speciesName": "Coregonus danneri",
+    "germanName": "Riedling",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 138,
+    "speciesName": "Coregonus gutturosus",
+    "germanName": "Kilch",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 139,
+    "speciesName": "Coregonus macrophthalmus",
+    "germanName": "Gangfisch",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 140,
+    "speciesName": "Coregonus renke „Traun EZG“",
+    "germanName": "Renke",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 141,
+    "speciesName": "Coregonus wartmanni",
+    "germanName": "Blaufelchen",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 142,
+    "speciesName": "Coregonus sp. „Kärnten“",
+    "germanName": "",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 143,
+    "speciesName": "Coregonus sp. „Klopeiner See“",
+    "germanName": "",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 144,
+    "speciesName": "Coregonus sp. „Tirol“",
+    "germanName": "",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 145,
+    "speciesName": "Coregonus sp. „Trumer Seen“",
+    "germanName": "",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 146,
+    "speciesName": "Coregonus sp. „Besatz“",
+    "germanName": "",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 147,
+    "speciesName": "Coregonus maraena",
+    "germanName": "Ostseeschnäpel",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 148,
+    "speciesName": "Coregonus peled",
+    "germanName": "Peledmaräne",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 149,
+    "speciesName": "Salmo marmoratus",
+    "germanName": "Marmorataforelle",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 150,
+    "speciesName": "Salmo salar",
+    "germanName": "Atlantischer Lachs",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 151,
+    "speciesName": "Salvelinus alpinus",
+    "germanName": "Wandersaibling",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 152,
+    "speciesName": "Salvelinus profundus",
+    "germanName": "Tiefseesaibling",
+    "family": "Salmonidae"
+  },
+  {
+    "id": 153,
+    "speciesName": "Micropterus dolomieu",
+    "germanName": "Schwarzbarsch",
+    "family": "Centrarchidae"
+  },
+  {
+    "id": 154,
+    "speciesName": "Morone saxatilia x Morone chrysops",
+    "germanName": "Streifenbarsch Hybrid",
+    "family": "Moronidae"
+  },
+  {
+    "id": 155,
+    "speciesName": "Perccottus glenii",
+    "germanName": "Amur-Schläfergrundel",
+    "family": "Odontobutidae"
+  },
+  {
+    "id": 156,
+    "speciesName": "Alosa immaculata",
+    "germanName": "Donauhering",
+    "family": "Alosidae"
+  },
+  {
+    "id": 157,
+    "speciesName": "Sabanejewia bulgarica",
+    "germanName": "Donau-Goldsteinbeisser",
+    "family": "Cobitidae"
+  },
+  {
+    "id": 158,
+    "speciesName": "Alburnus sava",
+    "germanName": "Sava-Shemaya",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 159,
+    "speciesName": "Phoxinus csikii",
+    "germanName": "Csikis Elritze",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 160,
+    "speciesName": "Phoxinus lumaireul",
+    "germanName": "Italienische Elritze",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 161,
+    "speciesName": "Phoxinus marsilii",
+    "germanName": "Wiener Elritze",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 162,
+    "speciesName": "Vimba elongata",
+    "germanName": "Seerüssling",
+    "family": "Leuciscidae"
+  },
+  {
+    "id": 163,
+    "speciesName": "Carassius langsdorfii",
+    "germanName": "Ginbuna",
+    "family": "Cyprinidae"
+  },
+  {
+    "id": 164,
+    "speciesName": "Cyprinus rubrofuscus",
+    "germanName": "Ostasiatischer Karpfen, Koi",
+    "family": "Cyprinidae"
+  },
+  {
+    "id": 165,
+    "speciesName": "Mylopharyngodon piceus",
+    "germanName": "Schwarzer Amurkarpfen",
+    "family": "Xenocyprididae"
+  },
+  {
+    "id": 166,
+    "speciesName": "Ictiobius cyprinellus",
+    "germanName": "Großmäuliger Büffelfisch",
+    "family": "Catostomidae"
+  },
+  {
+    "id": 167,
+    "speciesName": "Tachysurus sinensis",
+    "germanName": "Drachenwels ohne Artname",
+    "family": "Bagridae"
+  }
+]

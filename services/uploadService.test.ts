@@ -6,14 +6,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Prisma is mocked; workbooks are built in memory, nothing is stored.
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    fishCatch: { findFirst: vi.fn() },
-    uploads: { create: vi.fn() },
+    fishCatch: { findFirst: vi.fn(), findMany: vi.fn() },
+    fishSpecies: { findMany: vi.fn() },
+    imports: { findMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
 
+// The write path is its own unit (services/importService.test.ts, and the
+// end-to-end fixture in services/uploadPipeline.test.ts); here it is stubbed so
+// these tests stay about validation and the bulk decision.
+vi.mock("@/services/importService", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/importService")>()),
+  writeImports: vi.fn(),
+}));
+
 import { prisma } from "@/lib/prisma";
 import { getArchive } from "@/lib/errorArchive";
+import { buildSpeciesIndex } from "@/lib/fishSpecies";
+import { writeImports, fileHash } from "@/services/importService";
 import {
   buildAnnotatedWorkbook,
   buildSchema,
@@ -48,7 +59,7 @@ const validRow = {
 // --- workbook helpers -------------------------------------------------------
 
 type Row = Record<string, unknown>;
-const headers = [...Object.keys(validRow), "pit_dec"];
+const headers = [...Object.keys(validRow), "pit_dec", "recapture"];
 
 function toCells(row: Row) {
   return headers.map((h) => {
@@ -68,6 +79,9 @@ function buildWorkbook(sheets: Record<string, unknown[][]>): Buffer {
 function dataFile(rows: Row[], extraSheets: Record<string, unknown[][]> = {}) {
   return buildWorkbook({
     DATA: [headers, ...rows.map(toCells)],
+    // Most real files carry a List sheet; where it is missing the list checks
+    // are skipped (#213), so the helper writes one by default.
+    List: [["country"], ["Austria"]],
     ...extraSheets,
   });
 }
@@ -85,20 +99,29 @@ async function readErrorNotes(fileBuffer: Buffer) {
   return notes;
 }
 
+// The species master the validator checks against (#80). `validRow` uses
+// "Brown trout"; "Pike" exists so a PIT/species mismatch can be expressed.
+const masterSpecies = [
+  { id: 1, speciesName: "Brown trout" },
+  { id: 2, speciesName: "Pike" },
+];
+const speciesIndex = buildSpeciesIndex(masterSpecies);
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(prisma.fishCatch.findFirst).mockResolvedValue(null);
-  vi.mocked(prisma.$transaction).mockImplementation((async (ops: any) =>
-    Promise.all(ops)) as any);
-  vi.mocked(prisma.uploads.create).mockImplementation((async ({
-    data,
-  }: any) => ({
-    id: `up-${data.blob.create.fileName}`,
-    state: data.state,
-    note: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    blob: { fileName: data.blob.create.fileName },
+  vi.mocked(prisma.fishCatch.findMany).mockResolvedValue([]);
+  vi.mocked(prisma.fishSpecies.findMany).mockResolvedValue(masterSpecies as any);
+  vi.mocked(prisma.imports.findMany).mockResolvedValue([]);
+  vi.mocked(writeImports).mockImplementation((async (files: any[]) => ({
+    imports: files.map((file) => ({
+      id: `imp-${file.fileName}`,
+      fileName: file.fileName,
+      rowCount: 1,
+      createdAt: new Date("2026-11-15T10:00:00Z"),
+    })),
+    samplings: files.length,
+    catches: files.length,
   })) as any);
 });
 
@@ -204,6 +227,7 @@ describe("validateWorkbook", () => {
           headers.map(() => ""),
           toCells({ ...validRow, year: 1800 }),
         ],
+        List: [["country"], ["Austria"]],
       }),
     );
     expect(file.errors).toEqual([]);
@@ -218,9 +242,128 @@ describe("validateWorkbook", () => {
         { ...validRow, pit_dec: "123", species: "Pike" },
       ]),
     );
+    // Both rows are marked: a PIT tag is unique, so the second occurrence is
+    // as wrong as the first (#80).
+    expect(file.errors).toHaveLength(2);
+    expect(file.errors[0]).toMatchObject({ row: 2, column: "pit_dec", value: "123" });
+    expect(file.errors[1]).toMatchObject({ row: 3, column: "pit_dec", value: "123" });
+    expect(file.errors[1].message).toMatch(/PIT DEC 123.*row 2.*different species.*Brown trout/);
+  });
+
+  it("flags the same PIT tag twice in one file, even with the same species", () => {
+    const file = validateWorkbook(
+      "x.xlsx",
+      dataFile([
+        { ...validRow, pit_dec: "123" },
+        { ...validRow, pit_dec: "123" },
+      ]),
+    );
+    expect(file.errors).toHaveLength(2);
+    expect(file.errors[0]).toMatchObject({ row: 2, column: "pit_dec", value: "123" });
+    expect(file.errors[1]).toMatchObject({ row: 3, column: "pit_dec", value: "123" });
+    // Both rows point at the other occurrence; the later row carries the
+    // "unique" wording.
+    expect(file.errors[0].message).toMatch(/PIT DEC 123 already appears in row 3 of this file/);
+    expect(file.errors[1].message).toMatch(/PIT DEC 123 already appears in row 2 of this file/);
+    expect(file.errors[1].message).toMatch(/a PIT tag is unique per sampling/);
+  });
+
+  it("accepts the same PIT tag on a different catch date (recapture)", () => {
+    // One file is a delivery for a river over many dates; the same individual
+    // may be caught again later — only the same date is a copy error (#184).
+    const file = validateWorkbook(
+      "x.xlsx",
+      dataFile([
+        { ...validRow, pit_dec: "123", date: new Date("2024-05-01") },
+        { ...validRow, pit_dec: "123", date: new Date("2024-06-01") },
+      ]),
+      speciesIndex,
+    );
+
+    expect(file.errors).toEqual([]);
+  });
+
+  it("rejects a species that is not in the master, with the row and the value", () => {
+    const file = validateWorkbook(
+      "x.xlsx",
+      dataFile([validRow, { ...validRow, species: "Neogobius sp." }]),
+      speciesIndex,
+    );
+
     expect(file.errors).toHaveLength(1);
-    expect(file.errors[0]).toMatchObject({ row: 3, column: "pit_dec", value: "123" });
-    expect(file.errors[0].message).toMatch(/PIT DEC 123.*row 2.*Brown trout/);
+    expect(file.errors[0]).toMatchObject({
+      row: 3,
+      column: "species",
+      value: "Neogobius sp.",
+    });
+    expect(file.errors[0].message).toMatch(/not in the species master/);
+  });
+
+  it("names every unknown species, not just the first", () => {
+    const file = validateWorkbook(
+      "x.xlsx",
+      dataFile([
+        { ...validRow, species: "Ballerus sp." },
+        validRow,
+        { ...validRow, species: "Salvelinus namaycush" },
+        { ...validRow, species: "Ballerus sp." },
+      ]),
+      speciesIndex,
+    );
+
+    const groups = groupErrors(file.errors);
+    expect(groups).toHaveLength(2);
+    expect(groups.map((g) => [g.value, g.rows])).toEqual([
+      ["Ballerus sp.", [2, 5]],
+      ["Salvelinus namaycush", [4]],
+    ]);
+  });
+
+  it("matches the master tolerantly (NBSP, trailing spaces, case)", () => {
+    const file = validateWorkbook(
+      "x.xlsx",
+      dataFile([
+        { ...validRow, species: "Brown\u00A0trout" },
+        { ...validRow, species: "  brown trout   " },
+      ]),
+      speciesIndex,
+    );
+
+    expect(file.errors).toEqual([]);
+  });
+
+  it("ignores the file's own List sheet for species when a master is given", () => {
+    // The file claims "Unlisted fish" is a species; the master does not.
+    const file = validateWorkbook(
+      "x.xlsx",
+      dataFile([{ ...validRow, species: "Unlisted fish" }], {
+        List: [
+          ["country", "name of species"],
+          ["Austria", "Unlisted fish"],
+        ],
+      }),
+      speciesIndex,
+    );
+
+    expect(file.errors).toHaveLength(1);
+    expect(file.errors[0].message).toMatch(/not in the species master/);
+  });
+
+  it("accepts a file without a List sheet and skips the list checks", () => {
+    // The List sheet only carries the Excel dropdowns; it is not a precondition
+    // for the import (#213). Without one, country/method/… are free text — the
+    // species is still checked against the master.
+    const file = validateWorkbook(
+      "x.xlsx",
+      buildWorkbook({
+        DATA: [headers, toCells({ ...validRow, country: "Nowhere" })],
+      }),
+      speciesIndex,
+    );
+
+    expect(file.structuralError).toBeUndefined();
+    expect(file.dataRowCount).toBe(1);
+    expect(file.errors).toEqual([]);
   });
 });
 
@@ -293,7 +436,7 @@ describe("buildAnnotatedWorkbook", () => {
 // --- processBulkUpload ------------------------------------------------------
 
 describe("processBulkUpload", () => {
-  it("stores every file of a clean bulk in one transaction", async () => {
+  it("validates every file and hands the clean bulk to the import", async () => {
     const files = [
       { fileName: "a.xlsx", buffer: dataFile([validRow]) },
       { fileName: "b.xlsx", buffer: dataFile([{ ...validRow, site_name: "B" }]) },
@@ -304,19 +447,19 @@ describe("processBulkUpload", () => {
     expect(result.success).toBe(true);
     if (!result.success) return;
     expect(result.report.map((r) => r.status)).toEqual(["passed", "passed"]);
-    expect(result.uploads.map((u) => u.fileName)).toEqual(["a.xlsx", "b.xlsx"]);
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(prisma.uploads.create).toHaveBeenCalledTimes(2);
-    expect(prisma.uploads.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          user: { connect: { id: "u1" } },
-          state: "UPLOADED",
-          blob: {
-            create: expect.objectContaining({ fileName: "a.xlsx" }),
-          },
-        }),
-      }),
+    expect(result.imports.map((i) => i.fileName)).toEqual(["a.xlsx", "b.xlsx"]);
+    expect(result.samplings).toBe(2);
+    expect(result.catches).toBe(2);
+    // One transaction for the whole bulk is the import service's job (#202).
+    expect(writeImports).toHaveBeenCalledOnce();
+    expect(writeImports).toHaveBeenCalledWith(
+      [
+        { fileName: "a.xlsx", buffer: files[0].buffer },
+        { fileName: "b.xlsx", buffer: files[1].buffer },
+      ],
+      "u1",
+      undefined,
+      expect.anything(),
     );
   });
 
@@ -332,9 +475,85 @@ describe("processBulkUpload", () => {
     if (result.success) return;
     expect(result.report.map((r) => r.status)).toEqual(["passed", "failed"]);
     expect(result.zipToken).toBeTruthy();
-    // The whole bulk is rejected: no transaction, no upload rows.
-    expect(prisma.$transaction).not.toHaveBeenCalled();
-    expect(prisma.uploads.create).not.toHaveBeenCalled();
+    // The whole bulk is rejected: nothing is imported.
+    expect(writeImports).not.toHaveBeenCalled();
+  });
+
+  it("rejects a file whose bytes an earlier import already holds", async () => {
+    const buffer = dataFile([validRow]);
+    vi.mocked(prisma.imports.findMany).mockResolvedValue([
+      {
+        id: "imp-old",
+        fileName: "a.xlsx",
+        fileHash: fileHash(buffer),
+        createdAt: new Date("2026-11-01T00:00:00Z"),
+      },
+    ] as any);
+
+    const result = await processBulkUpload([{ fileName: "a.xlsx", buffer }], "u1");
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.report[0].errors[0]).toMatchObject({ column: "-" });
+    expect(result.report[0].errors[0].message).toMatch(/already imported on 2026-11-01/);
+    expect(writeImports).not.toHaveBeenCalled();
+  });
+
+  // A deleted import is a deleted row now (#184), so there is no `deletedAt`
+  // filter left in the hash check that could drift out of sync.
+  it("checks the file hash against every import, without a deletion filter", async () => {
+    const buffer = dataFile([validRow]);
+
+    await processBulkUpload([{ fileName: "a.xlsx", buffer }], "u1");
+
+    const call = vi.mocked(prisma.imports.findMany).mock.calls[0][0]!;
+    expect(call.where).toEqual({ fileHash: { in: [fileHash(buffer)] } });
+  });
+
+  it("rejects the same file twice in one bulk", async () => {
+    const buffer = dataFile([validRow]);
+
+    const result = await processBulkUpload(
+      [
+        { fileName: "a.xlsx", buffer },
+        { fileName: "a-copy.xlsx", buffer },
+      ],
+      "u1",
+    );
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.report[1].errors[0].message).toMatch(/Identical file to "a.xlsx"/);
+    expect(writeImports).not.toHaveBeenCalled();
+  });
+
+  it("propagates a write failure (nothing half-written)", async () => {
+    vi.mocked(writeImports).mockRejectedValueOnce(new Error("database down"));
+
+    await expect(
+      processBulkUpload(
+        [{ fileName: "a.xlsx", buffer: dataFile([validRow]) }],
+        "u1",
+      ),
+    ).rejects.toThrow("database down");
+  });
+
+  it("loads the species master once and rejects a file with an unknown species", async () => {
+    const result = await processBulkUpload(
+      [
+        { fileName: "a.xlsx", buffer: dataFile([validRow]) },
+        { fileName: "b.xlsx", buffer: dataFile([{ ...validRow, species: "Ballerus sp." }]) },
+      ],
+      "u1",
+    );
+
+    expect(prisma.fishSpecies.findMany).toHaveBeenCalledTimes(1);
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.report.map((r) => r.status)).toEqual(["passed", "failed"]);
+    expect(result.report[1].errors[0].message).toMatch(/not in the species master.*Ballerus sp\./);
+    // A file with an unknown species imports nothing — not even the good file.
+    expect(writeImports).not.toHaveBeenCalled();
   });
 
   it("puts only the failed files in the error archive", async () => {
@@ -355,9 +574,9 @@ describe("processBulkUpload", () => {
   });
 
     it("runs the database PIT check even when the bulk has other errors (#102)", async () => {
-    vi.mocked(prisma.fishCatch.findFirst).mockResolvedValue({
-      species: { speciesName: "Pike" },
-    } as any);
+    vi.mocked(prisma.fishCatch.findMany).mockResolvedValue([
+      { pitDec: "123", species: { speciesName: "Pike" } },
+    ] as any);
 
     const files = [
       { fileName: "bad.xlsx", buffer: dataFile([{ ...validRow, year: 1800, pit_dec: "123" }]) },
@@ -365,8 +584,10 @@ describe("processBulkUpload", () => {
 
     const result = await processBulkUpload(files, "u1");
 
-    expect(prisma.fishCatch.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { pitDec: "123", recapture: false } }),
+    // One lookup for the whole bulk, and no `recapture: false` filter: a PIT
+    // belongs to the same individual whether or not it was a recapture (#184).
+    expect(prisma.fishCatch.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { pitDec: { in: ["123"] } } }),
     );
     expect(result.success).toBe(false);
     if (result.success) return;
@@ -391,13 +612,13 @@ describe("processBulkUpload", () => {
     expect(result.report[0].status).toBe("failed");
     expect(result.report[1].status).toBe("failed");
     expect(result.report[0].errors[0].message).toMatch(/different species in file "b.xlsx"/);
-    expect(prisma.uploads.create).not.toHaveBeenCalled();
+    expect(writeImports).not.toHaveBeenCalled();
   });
 
   it("flags a PIT DEC already stored with another species", async () => {
-    vi.mocked(prisma.fishCatch.findFirst).mockResolvedValue({
-      species: { speciesName: "Pike" },
-    } as any);
+    vi.mocked(prisma.fishCatch.findMany).mockResolvedValue([
+      { pitDec: "123", species: { speciesName: "Pike" } },
+    ] as any);
 
     const result = await processBulkUpload(
       [{ fileName: "a.xlsx", buffer: dataFile([{ ...validRow, pit_dec: "123" }]) }],
@@ -407,28 +628,50 @@ describe("processBulkUpload", () => {
     expect(result.success).toBe(false);
     if (result.success) return;
     expect(result.report[0].errors[0].message).toMatch(/already exists.*\(Pike\)/);
+    expect(result.report[0].errors[0].message).toMatch(/always belongs to the same individual/);
   });
 
-  it("accepts a known PIT tag of the same species", async () => {
-    vi.mocked(prisma.fishCatch.findFirst).mockResolvedValue({
-      species: { speciesName: "Brown trout" },
-    } as any);
+  it("accepts a known PIT tag of the same species marked as recapture", async () => {
+    vi.mocked(prisma.fishCatch.findMany).mockResolvedValue([
+      { pitDec: "123", species: { speciesName: "Brown trout" } },
+    ] as any);
 
     const result = await processBulkUpload(
-      [{ fileName: "a.xlsx", buffer: dataFile([{ ...validRow, pit_dec: "123" }]) }],
+      [
+        {
+          fileName: "a.xlsx",
+          buffer: dataFile([{ ...validRow, pit_dec: "123", recapture: 1 }]),
+        },
+      ],
       "u1",
     );
     expect(result.success).toBe(true);
   });
 
-  it("propagates a write failure (nothing half-written)", async () => {
-    vi.mocked(prisma.$transaction).mockRejectedValueOnce(new Error("database down"));
+  it("flags a known PIT tag of the same species without recapture = 1 (#102)", async () => {
+    vi.mocked(prisma.fishCatch.findMany).mockResolvedValue([
+      { pitDec: "123", species: { speciesName: "Brown trout" } },
+    ] as any);
 
-    await expect(
-      processBulkUpload(
-        [{ fileName: "a.xlsx", buffer: dataFile([validRow]) }],
-        "u1",
-      ),
-    ).rejects.toThrow("database down");
+    const result = await processBulkUpload(
+      [
+        {
+          fileName: "a.xlsx",
+          buffer: dataFile([
+            { ...validRow, pit_dec: "123", date: new Date("2024-05-01") },
+            { ...validRow, pit_dec: "123", date: new Date("2024-06-01"), recapture: 0 },
+          ]),
+        },
+      ],
+      "u1",
+    );
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    const group = result.report[0].errors.find((e) =>
+      /must be marked as a recapture/.test(e.message),
+    );
+    expect(group?.rows).toEqual([2, 3]);
   });
+
 });

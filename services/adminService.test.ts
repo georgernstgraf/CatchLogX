@@ -1,12 +1,10 @@
-import * as XLSX from "xlsx";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Tests for the admin service (#112): user management permissions and
-// upload approval (reject mail / Excel import into the DB).
-// Prisma, the mailer and bcrypt are mocked — this file is the
-// template for testing I/O-bound services without real infrastructure.
-const sendMail = vi.hoisted(() => vi.fn());
-
+// Tests for the admin service (#112): user management permissions.
+// The import side (write path, delete, download, list) lives in
+// services/importService.test.ts since #202.
+// Prisma and bcrypt are mocked — this file is the template for testing
+// I/O-bound services without real infrastructure.
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     user: {
@@ -18,39 +16,21 @@ vi.mock("@/lib/prisma", () => ({
       update: vi.fn(),
       delete: vi.fn(),
     },
-    uploads: {
-      findUnique: vi.fn(),
-      findFirst: vi.fn(),
-      findMany: vi.fn(),
-      update: vi.fn(),
-    },
-    fileBlob: { findUnique: vi.fn() },
-    riverSite: { upsert: vi.fn() },
-    sampling: { create: vi.fn() },
-    fishSpecies: { findUnique: vi.fn() },
-    fishCatch: { findFirst: vi.fn(), create: vi.fn() },
   },
 }));
-vi.mock("@/lib/mailer", () => ({
-  createMailerTransporter: vi.fn(() => ({ sendMail })),
+vi.mock("@/services/importService", () => ({
+  listImports: vi.fn(),
 }));
 vi.mock("bcrypt", () => ({
   default: { hash: vi.fn(async (pw: string) => `hashed:${pw}`) },
 }));
 
 import { prisma } from "@/lib/prisma";
+import { listImports } from "@/services/importService";
 import {
-  buildRejectEmailHtml,
   createUser,
   deleteUser,
-  downloadFile,
   fetchAllData,
-  getContentType,
-  parseDate,
-  toBoolean,
-  toFloat,
-  toInt,
-  updateUpload,
   updateUser,
 } from "@/services/adminService";
 
@@ -69,7 +49,6 @@ beforeEach(() => {
   for (const method of ["log", "info", "warn", "error"] as const) {
     vi.spyOn(console, method).mockImplementation(() => {});
   }
-  sendMail.mockResolvedValue({ messageId: "m1" });
   vi.mocked(prisma.user.update).mockImplementation((async ({ data }: any) => ({
     id: "target",
     username: "target",
@@ -81,158 +60,25 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// --- pure helpers -----------------------------------------------------------
-
-describe("getContentType", () => {
-  it("returns the xlsx MIME type", () => {
-    expect(getContentType()).toBe(
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    );
-  });
-});
-
-describe("parseDate", () => {
-  it("returns null for empty values", () => {
-    expect(parseDate(null)).toBeNull();
-    expect(parseDate("")).toBeNull();
-    expect(parseDate(0)).toBeNull();
-  });
-
-  it("passes Date objects through", () => {
-    const date = new Date("2024-05-01");
-    expect(parseDate(date)).toBe(date);
-  });
-
-  it("converts Excel serial numbers", () => {
-    expect(parseDate(45000)).toEqual(new Date("2023-03-15T00:00:00Z"));
-  });
-
-  it("parses German dd.mm.yyyy dates", () => {
-    expect(parseDate("01.05.2024")).toEqual(new Date(2024, 4, 1));
-  });
-
-  it("parses ISO strings", () => {
-    expect(parseDate("2024-05-01T10:00:00Z")).toEqual(
-      new Date("2024-05-01T10:00:00Z"),
-    );
-  });
-
-  it("returns null for garbage", () => {
-    expect(parseDate("not a date")).toBeNull();
-    expect(parseDate({})).toBeNull();
-  });
-});
-
-describe("toFloat / toInt", () => {
-  it("map empty values to null", () => {
-    for (const value of [null, undefined, ""]) {
-      expect(toFloat(value)).toBeNull();
-      expect(toInt(value)).toBeNull();
-    }
-  });
-
-  it("parse numbers and numeric strings", () => {
-    expect(toFloat("3.75")).toBe(3.75);
-    expect(toFloat(2)).toBe(2);
-    expect(toInt("12.9")).toBe(12);
-  });
-
-  it("stop at a decimal comma (current behaviour)", () => {
-    expect(toFloat("3,5")).toBe(3);
-  });
-
-  it("return null for non-numeric strings", () => {
-    expect(toFloat("abc")).toBeNull();
-    expect(toInt("abc")).toBeNull();
-  });
-});
-
-describe("toBoolean", () => {
-  it("understands yes/no case-insensitively", () => {
-    expect(toBoolean(" Yes ")).toBe(true);
-    expect(toBoolean("NO")).toBe(false);
-  });
-
-  it("returns null for anything else", () => {
-    for (const value of [null, undefined, "", "true", 1]) {
-      expect(toBoolean(value)).toBeNull();
-    }
-  });
-});
-
-describe("buildRejectEmailHtml", () => {
-  const upload = {
-    id: "up-42",
-    createdAt: new Date("2024-05-01T10:00:00Z"),
-    note: "Wrong species list",
-  } as any;
-
-  it("contains the upload id, the user name and the reason", () => {
-    const html = buildRejectEmailHtml(upload, {
-      name: "Alice",
-      username: "alice",
-    });
-    expect(html).toContain("up-42");
-    expect(html).toContain("Hello <strong>Alice</strong>");
-    expect(html).toContain("Wrong species list");
-  });
-
-  it("falls back to the username and a default reason", () => {
-    const html = buildRejectEmailHtml(
-      { ...upload, note: null },
-      { name: null, username: "alice" },
-    );
-    expect(html).toContain("Hello <strong>alice</strong>");
-    expect(html).toContain("No specific reason was provided.");
-  });
-});
-
-// --- simple delegations -----------------------------------------------------
+// --- aggregate for the admin panel ------------------------------------------
 
 describe("fetchAllData", () => {
-  it("returns users and uploads, newest uploads first", async () => {
-    vi.mocked(prisma.user.findMany).mockResolvedValue([{ id: "u1" }] as any);
-    vi.mocked(prisma.uploads.findMany).mockResolvedValue([
-      { id: "up1", blob: { fileName: "upload_1_u1.xlsx" } },
+  it("returns users and the import list, never password hashes", async () => {
+    vi.mocked(prisma.user.findMany).mockResolvedValue([
+      { id: "u1", username: "u1", email: "u1@x.at", name: null, role: "VIEWER", isActive: true, createdAt: new Date() },
+    ] as any);
+    vi.mocked(listImports).mockResolvedValue([
+      { id: "imp-1", fileName: "a.xlsx" },
     ] as any);
 
-    expect(await fetchAllData()).toEqual({
-      users: [{ id: "u1" }],
-      uploads: [{ id: "up1", fileName: "upload_1_u1.xlsx" }],
-    });
-    expect(vi.mocked(prisma.uploads.findMany).mock.calls[0][0]).toMatchObject({
-      orderBy: { createdAt: "desc" },
-    });
-  });
+    const result = await fetchAllData();
 
-  it("never selects password hashes", async () => {
-    vi.mocked(prisma.user.findMany).mockResolvedValue([]);
-    vi.mocked(prisma.uploads.findMany).mockResolvedValue([]);
-    await fetchAllData();
+    expect(result.users).toHaveLength(1);
+    expect(result.imports).toEqual([{ id: "imp-1", fileName: "a.xlsx" }]);
+    expect(listImports).toHaveBeenCalledOnce();
+
     const select = vi.mocked(prisma.user.findMany).mock.calls[0][0]!.select!;
     expect(select).not.toHaveProperty("hashedPassword");
-  });
-});
-
-describe("downloadFile", () => {
-  it("returns the stored blob for an upload id", async () => {
-    vi.mocked(prisma.uploads.findUnique).mockResolvedValue({
-      blob: { fileName: "upload_1_u1.xlsx", data: new Uint8Array([120]) },
-    } as any);
-
-    const stored = await downloadFile("up1");
-
-    expect(stored?.fileName).toBe("upload_1_u1.xlsx");
-    expect(stored?.fileBuffer.toString()).toBe("x");
-    expect(prisma.uploads.findUnique).toHaveBeenCalledWith({
-      where: { id: "up1" },
-      select: { blob: { select: { fileName: true, data: true } } },
-    });
-  });
-
-  it("returns null for an unknown upload", async () => {
-    vi.mocked(prisma.uploads.findUnique).mockResolvedValue(null);
-    expect(await downloadFile("nope")).toBeNull();
   });
 });
 
@@ -475,276 +321,3 @@ describe("deleteUser", () => {
   });
 });
 
-// --- upload approval --------------------------------------------------------
-
-describe("updateUpload", () => {
-  const upload = {
-    id: "up1",
-    blobId: "blob-1",
-    state: "UPLOADED",
-    uploaded_by: "u1",
-    note: null,
-    createdAt: new Date("2024-05-01T10:00:00Z"),
-    updatedAt: new Date("2024-05-01T10:00:00Z"),
-  };
-
-  beforeEach(() => {
-    vi.mocked(prisma.uploads.findUnique).mockResolvedValue(upload as any);
-    vi.mocked(prisma.uploads.update).mockImplementation((async ({
-      data,
-    }: any) => ({ ...upload, ...data })) as any);
-  });
-
-  /** Data of the last `uploads.update` call (the import result). */
-  const finalState = () =>
-    vi.mocked(prisma.uploads.update).mock.calls.at(-1)![0].data as {
-      state: string;
-      note: string | null;
-    };
-
-  it("returns null for an unknown upload", async () => {
-    vi.mocked(prisma.uploads.findUnique).mockResolvedValue(null);
-    expect(await updateUpload("x", "accept", undefined)).toBeNull();
-    expect(prisma.uploads.update).not.toHaveBeenCalled();
-  });
-
-  describe("reject", () => {
-    it("stores the reason and mails the uploader", async () => {
-      vi.mocked(prisma.uploads.findFirst).mockResolvedValue({
-        user: { email: "u1@x.at", name: "Uwe", username: "u1" },
-      } as any);
-
-      const result = await updateUpload("up1", "deny", "Bad data");
-
-      expect(result?.upload).toMatchObject({ state: "REJECTED", note: "Bad data" });
-      expect(result?.emailError).toBeUndefined();
-      expect(sendMail).toHaveBeenCalledWith(
-        expect.objectContaining({
-          to: "u1@x.at",
-          subject: "Your Upload Has Been Rejected",
-        }),
-      );
-      expect(sendMail.mock.calls[0][0].html).toContain("Bad data");
-    });
-
-    it("flags a mail error but keeps the rejection", async () => {
-      vi.mocked(prisma.uploads.findFirst).mockResolvedValue({
-        user: { email: null },
-      } as any);
-
-      const result = await updateUpload("up1", "deny", "Bad data");
-
-      expect(result).toMatchObject({
-        upload: { state: "REJECTED" },
-        emailError: true,
-      });
-      expect(sendMail).not.toHaveBeenCalled();
-    });
-
-    it("treats every action other than 'accept' as reject", async () => {
-      vi.mocked(prisma.uploads.findFirst).mockResolvedValue(null);
-      const result = await updateUpload("up1", "whatever" as any, undefined);
-      expect(result?.upload.state).toBe("REJECTED");
-    });
-  });
-
-  describe("accept", () => {
-    function givenExcel(rows: Record<string, unknown>[], sheetName = "DATA") {
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), sheetName);
-      const fileBuffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-      vi.mocked(prisma.fileBlob.findUnique).mockResolvedValue({
-        fileName: "upload_1_u1.xlsx",
-        data: fileBuffer,
-      } as any);
-    }
-
-    const newRow = {
-      river_name: "Danube",
-      site_name: "Site A",
-      lat_up: 48.2,
-      long_up: 16.3,
-      date: "2024-05-01",
-      year: 2024,
-      approval_required: "yes",
-      species: "Brown trout",
-      total_length: 250,
-      weight: 180.5,
-    };
-
-    beforeEach(() => {
-      vi.mocked(prisma.riverSite.upsert).mockResolvedValue({ id: 10 } as any);
-      let samplingId = 100;
-      vi.mocked(prisma.sampling.create).mockImplementation((async () => ({
-        id: samplingId++,
-      })) as any);
-      vi.mocked(prisma.fishSpecies.findUnique).mockResolvedValue({
-        id: 5,
-      } as any);
-      vi.mocked(prisma.fishCatch.findFirst).mockResolvedValue(null);
-    });
-
-    it("reads the accepted file from its stored blob", async () => {
-      givenExcel([newRow]);
-      await updateUpload("up1", "accept", undefined);
-      expect(prisma.fileBlob.findUnique).toHaveBeenCalledWith({
-        where: { id: "blob-1" },
-        select: { fileName: true, data: true },
-      });
-    });
-
-    it("marks the upload DB_ERROR when the stored file is missing", async () => {
-      vi.mocked(prisma.fileBlob.findUnique).mockResolvedValue(null);
-      const result = await updateUpload("up1", "accept", undefined);
-      expect(result?.upload.state).toBe("ACCEPTED");
-      expect(finalState()).toEqual({
-        state: "DB_ERROR",
-        note: "Failed to read Excel file.",
-      });
-    });
-
-    it("marks the upload DB_ERROR when the file has no data rows", async () => {
-      givenExcel([{ river_name: null }]);
-      await updateUpload("up1", "accept", undefined);
-      expect(finalState()).toEqual({
-        state: "DB_ERROR",
-        note: "Excel file contains no data rows.",
-      });
-    });
-
-    it("imports new-schema rows and marks the upload SAVED_IN_DB", async () => {
-      givenExcel([newRow, { ...newRow, total_length: 300 }]);
-
-      await updateUpload("up1", "accept", undefined);
-
-      const siteCode = "Danube__Site A__48.2__16.3";
-      expect(vi.mocked(prisma.riverSite.upsert).mock.calls[0][0]).toMatchObject(
-        {
-          where: { siteCode },
-          create: { siteCode, riverName: "Danube", latitude: 48.2 },
-        },
-      );
-      // Same site + date → one sampling for both catches
-      expect(prisma.sampling.create).toHaveBeenCalledOnce();
-      expect(
-        vi.mocked(prisma.sampling.create).mock.calls[0][0].data,
-      ).toMatchObject({
-        siteId: 10,
-        year: 2024,
-        askProviderBeforeUse: true,
-        catchDate: new Date("2024-05-01"),
-      });
-      expect(prisma.fishCatch.create).toHaveBeenCalledTimes(2);
-      expect(
-        vi.mocked(prisma.fishCatch.create).mock.calls[0][0].data,
-      ).toMatchObject({
-        samplingId: 100,
-        speciesId: 5,
-        lengthMm: 250,
-        totalWeightGr: 180.5,
-        recapture: false,
-      });
-      expect(finalState()).toEqual({ state: "SAVED_IN_DB", note: null });
-    });
-
-    it("creates a new sampling per catch date", async () => {
-      givenExcel([newRow, { ...newRow, date: "2024-06-01" }]);
-      await updateUpload("up1", "accept", undefined);
-      expect(prisma.sampling.create).toHaveBeenCalledTimes(2);
-    });
-
-    it("imports legacy rows keyed by site_code", async () => {
-      givenExcel([
-        {
-          site_code: "S1",
-          river_name: "Danube",
-          catchdate: "01.05.2024",
-          species: "Brown trout",
-          "length [mm]": 250,
-          "PIT DEC": " 999 ",
-        },
-      ]);
-
-      await updateUpload("up1", "accept", undefined);
-
-      expect(
-        vi.mocked(prisma.riverSite.upsert).mock.calls[0][0].where,
-      ).toEqual({ siteCode: "S1" });
-      expect(
-        vi.mocked(prisma.sampling.create).mock.calls[0][0].data.catchDate,
-      ).toEqual(new Date(2024, 4, 1));
-      expect(
-        vi.mocked(prisma.fishCatch.create).mock.calls[0][0].data,
-      ).toMatchObject({ lengthMm: 250, pitDec: "999" });
-      expect(finalState().state).toBe("SAVED_IN_DB");
-    });
-
-    it("collects row errors and marks the upload DB_ERROR", async () => {
-      vi.mocked(prisma.fishSpecies.findUnique)
-        .mockResolvedValueOnce(null)
-        .mockResolvedValue({ id: 5 } as any);
-      givenExcel([
-        { ...newRow, species: "Nessie" },
-        { ...newRow, river_name: "" },
-        newRow,
-      ]);
-
-      await updateUpload("up1", "accept", undefined);
-
-      expect(prisma.fishCatch.create).toHaveBeenCalledOnce();
-      const { state, note } = finalState();
-      expect(state).toBe("DB_ERROR");
-      expect(note?.split("\n")).toEqual([
-        'Row 2: Fish species "Nessie" not found in database, skipping fish catch.',
-        "Row 3: Missing river_name, skipping row.",
-      ]);
-    });
-
-    it("keeps going when a single DB write fails", async () => {
-      vi.mocked(prisma.fishCatch.create)
-        .mockRejectedValueOnce(new Error("constraint"))
-        .mockResolvedValue({} as any);
-      givenExcel([newRow, newRow]);
-
-      await updateUpload("up1", "accept", undefined);
-
-      expect(prisma.fishCatch.create).toHaveBeenCalledTimes(2);
-      expect(finalState()).toEqual({
-        state: "DB_ERROR",
-        note: "Row 2: Failed to create FishCatch: constraint",
-      });
-    });
-
-    describe("recapture detection", () => {
-      const recaptureFlags = () =>
-        vi
-          .mocked(prisma.fishCatch.create)
-          .mock.calls.map((call) => call[0].data.recapture);
-
-      it("marks PIT tags occurring twice in the file", async () => {
-        givenExcel([
-          { ...newRow, pit_dec: "123" },
-          { ...newRow, pit_dec: "123" },
-          { ...newRow, pit_dec: "456" },
-        ]);
-        await updateUpload("up1", "accept", undefined);
-        expect(recaptureFlags()).toEqual([true, true, false]);
-        // Only the unique tag needs a DB lookup
-        expect(prisma.fishCatch.findFirst).toHaveBeenCalledOnce();
-        expect(prisma.fishCatch.findFirst).toHaveBeenCalledWith({
-          where: { pitDec: "456", recapture: false },
-          select: { id: true },
-        });
-      });
-
-      it("marks PIT tags already stored in the DB", async () => {
-        vi.mocked(prisma.fishCatch.findFirst).mockResolvedValue({
-          id: 1,
-        } as any);
-        givenExcel([{ ...newRow, pit_dec: "123" }, newRow]);
-        await updateUpload("up1", "accept", undefined);
-        expect(recaptureFlags()).toEqual([true, false]);
-      });
-    });
-  });
-});

@@ -41,15 +41,14 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# eslint cache (#195)
+.eslintcache
+
 /app/generated/prisma
 /prisma/prisma/test_db.sqlite
-samples/.~lock.data.xlsx#
 
 # commit-scripts
 /commit-scripts
 
 # Uploads
 /uploads
-
-# Samples
-/samples

@@ -1,3 +1,12 @@
+---
+type: Architecture
+title: Architecture
+description: Lebende Strukturkarte des Systems; wird bei strukturellen Aenderungen ueberschrieben.
+tags: [catchlogx, architecture]
+generated: { by: opencode/knowledge-persistence, at: 2026-11-14T19:40:00Z }
+status: stable
+---
+
 # Architecture
 
 Living structural map of the system as of 2026-10-17.
@@ -20,11 +29,11 @@ Infrastructure: PostgreSQL 16 — `docker compose` for local development and CI;
   - Node is a pinned official tarball under `~/tools/node-v22.23.3` (`~/tools/node` symlink; glibc — the runner's `actions/setup-node` uses the same major 22);
   - the runtime env lives **on the machine** in `/home/clxadmin/.config/catchlogx/.env` (mode 600, outside the repo so no checkout can overwrite it); since #122 **nothing of `clxadmin` lives outside its home** — the Actions runner is a user unit (`~/.config/systemd/user/actions.runner.AlphaVIE-CatchLogX…`, `~/actions-runner`), the old `/opt/CatchLogX` checkout is deleted and the runbook checkout is root-owned and re-cloned on demand into `/root/CatchLogX` (`deploy/prod/postgres/*`, `deploy/postgres/*`);
   - **PostgreSQL is a native cluster since 2026-10-30 (#170)**: `postgresql@16-main` (PGDG 16), config in `/etc/postgresql/16/main/conf.d/99-catchlogx.conf`, data in `/var/lib/postgresql/16/main`, running on `0.0.0.0:5432` — deliberately BOKU-wide open, see #152: the boundary is the `clx_readonly` role, not the port. TLS is offered (self-signed, `sslmode=prefer` encrypts automatically) but not enforced. The old container `clx-postgres` is **stopped with `restart=no`, volume `catchlogx_clx_pgdata` intact** as the rollback path; `docker-compose.prod.yml` puts every base service behind never-activated profiles, so `docker compose up -d` on the machine starts **nothing** (see `PITFALLS.md`). The MinIO containers were removed on 2026-10-27; the volume `catchlogx_clx_miniodata` is kept until the 2026-10-18 backup set (21 objects, 54 M) is judged dispensable.
-  Until the gated pipeline (#144) lands, deploys go through the **interim, manual** `production-deploy.yml`: it ships a deliberately chosen `master` commit, builds once in the job with native glibc Node 22 (never an alpine container build — the traced `bcrypt`/Prisma binaries would not run on the host), applies migrations, publishes an immutable release (`scripts/publish-release.sh`), retires the interim `clx-web` container if it still exists, restarts the unit and health-checks `127.0.0.1:3001`. Its **adopted-schema guard** queries the native cluster over the local socket (peer auth as `clxadmin`) and refuses to deploy unless `_prisma_migrations` exists, the baseline is recorded and no migration is half-applied. **Rollback = re-dispatch the same job with `ref` set to the full SHA of the previous `master` commit** — the job rebuilds that commit (a deploy always builds; only a restart is build-free) and republishes it, so the result is deterministic. Short SHAs do **not** work: `actions/checkout` resolves branches and tags only (#163).
+  Until the gated pipeline (#144) lands, deploys go through the **interim, manual** `production-deploy.yml`: it ships a deliberately chosen `master` commit, builds once in the job with native glibc Node 22 (never an alpine container build — the traced `bcrypt`/Prisma binaries would not run on the host), applies migrations, publishes an immutable release (`scripts/ops/publish-release.sh`), retires the interim `clx-web` container if it still exists, restarts the unit and health-checks `127.0.0.1:3001`. Its **adopted-schema guard** queries the native cluster over the local socket (peer auth as `clxadmin`) and refuses to deploy unless `_prisma_migrations` exists, the baseline is recorded and no migration is half-applied. **Rollback = re-dispatch the same job with `ref` set to the full SHA of the previous `master` commit** — the job rebuilds that commit (a deploy always builds; only a restart is build-free) and republishes it, so the result is deterministic. Short SHAs do **not** work: `actions/checkout` resolves branches and tags only (#163).
 - **Dev instance `catchlogx.graf.priv.at`** — CNAME to `claw.graf.priv.at` (Georg's own VPS). Since 2026-10-17 the students' development copy runs there (#126), entirely under the dedicated system user `catchlogx` with **no root at runtime**. This is also a machine where agent sessions (opencode) run directly — the repo clone lives here, so an agent's shell shares the host with the live app unit and the deploy runner (see `AGENTS.md` "Agent Sessions" and `PITFALLS.md`):
   - rootless Docker (socket `/run/user/1003/docker.sock`) ran only PostgreSQL 16 from `~/dev-stack/docker-compose.yml`, bound to `127.0.0.1:5432`; volume `clx_pgdata`. **Since 2026-10-28 (#168) the dev database is native**: PostgreSQL 16.15 (PGDG) as system service `postgresql@16-main` on `0.0.0.0:5432` — see the dev-instance decision below and DECISIONS.md ("Dev-VPS: Postgres nativ"); the container is kept stopped as a fallback (volume `clx_pgdata` intact);
   - file bytes are stored in this PostgreSQL (table `FileBlob`); the former MinIO binary/`minio.service` unit and the `mc` client are obsolete since #131 (upload/download need no second service);
-  - the app serves an **immutable release**: user unit `catchlogx.service` runs `node ~/current/server.js` (`~/current` → `~/releases/<sha>/`, Next.js `output: "standalone"`), on `127.0.0.1:40873`; repo clone at `~/repos/georgernstgraf/CatchLogX` (branch `dev`). Deploys are push-driven (see the deploy-paths table below): the `deploy` job builds in the self-hosted runner, `scripts/publish-release.sh` publishes `~/releases/<sha>/` and atomically swaps `~/current`, then `prisma migrate deploy` → `systemctl --user restart catchlogx.service` → health check. A plain restart is therefore ~2 s with no build; rollback = repoint `~/current` and restart. The superseded `clx-app.service` and `catchlogx-update.service` (and `~/.config/catchlogx/deploy.sh`) are retired — `clx-app.service`'s file remains in `~/.config/systemd/user/`;
+  - the app serves an **immutable release**: user unit `catchlogx.service` runs `node ~/current/server.js` (`~/current` → `~/releases/<sha>/`, Next.js `output: "standalone"`), on `127.0.0.1:40873`; repo clone at `~/repos/georgernstgraf/CatchLogX` (branch `dev`). Deploys are push-driven (see the deploy-paths table below): the `deploy` job builds in the self-hosted runner, `scripts/ops/publish-release.sh` publishes `~/releases/<sha>/` and atomically swaps `~/current`, then `prisma migrate deploy` → `systemctl --user restart catchlogx.service` → health check. A plain restart is therefore ~2 s with no build; rollback = repoint `~/current` and restart. The superseded `clx-app.service` and `catchlogx-update.service` (and `~/.config/catchlogx/deploy.sh`) are retired — `clx-app.service`'s file remains in `~/.config/systemd/user/`;
   - nginx on 443 terminates TLS (Let's Encrypt, certbot) and reverse-proxies to `127.0.0.1:40873`. The certificate and its private key are additionally copied to `~/certs/` (`fullchain.pem` 0644, `privkey.pem` 0600) by the certbot deploy hook `deploy/vps/certs/catchlogx-certs-sync.sh` (#167), so processes running as `catchlogx` can serve TLS themselves; the hook runs on every renewal because certbot rotates the key (no `--reuse-key`). nginx keeps reading the Let's Encrypt paths directly;
   - secrets live only in `~/dev-stack/.env` and the app's `.env` (mode 600, gitignored) — never in this repo or in SVN docs; the deploy job reads the app `.env` from that host path (the runner's checkout has no `.env`);
   - the nginx vhost, the systemd user units and the dev-stack compose file are mirrored in the claw deployment tree (SVN), not in this repo (the 2026-10-17 `catchlogx` unit and the new `actions.runner.catchlogx-vps.service` are not yet mirrored there; the retired `catchlogx-update` unit and `~/.config/catchlogx/deploy.sh` are gone).
@@ -35,7 +44,7 @@ Infrastructure: PostgreSQL 16 — `docker compose` for local development and CI;
 |---|---|---|---|
 | `ci.yml` | push/PR to `dev`, `master` | GitHub-hosted | lint + typecheck + test (the correctness gate) + `migration-drift` |
 | `deploy-dev.yml` | `CI` concluded successfully on `dev`, or manual dispatch | `[self-hosted, vps]` | builds a standalone release on push to `dev`, publishes `~/releases/<sha>`, runs `prisma migrate deploy`, restarts `catchlogx.service` and health-checks it. `needs:` cannot cross workflows, so the gate is `workflow_run` + an `if` on the job |
-| `production-deploy.yml` | **manual dispatch only** (interim, #142→#143; the push trigger returns with #144) | `[self-hosted, boku]` | Interim production deploy. Verifies the requested `ref` is reachable from `master`, then an **adopted-schema guard** queries the native cluster over the local socket and refuses to run unless `_prisma_migrations` exists, the baseline is recorded as applied and no migration is half-applied. Copies the on-machine env file (`/home/clxadmin/.config/catchlogx/.env`) into the workspace (the build inlines `NEXT_PUBLIC_*`), builds **once in the job** with native glibc Node 22 (never an alpine container build, #143), runs `prisma migrate deploy`, publishes an immutable release via `scripts/publish-release.sh` (`~/releases/<sha>` + atomic `~/current` swap), restarts the systemd user unit `catchlogx.service`, health-checks `127.0.0.1:3001` and reports the deployed commit. Rollback = re-dispatch with `ref=<full SHA of the previous master commit>` (the job rebuilds that commit — a short SHA is not resolvable, #163) |
+| `production-deploy.yml` | **manual dispatch only** (interim, #142→#143; the push trigger returns with #144) | `[self-hosted, boku]` | Interim production deploy. Verifies the requested `ref` is reachable from `master`, then an **adopted-schema guard** queries the native cluster over the local socket and refuses to run unless `_prisma_migrations` exists, the baseline is recorded as applied and no migration is half-applied. Copies the on-machine env file (`/home/clxadmin/.config/catchlogx/.env`) into the workspace (the build inlines `NEXT_PUBLIC_*`), builds **once in the job** with native glibc Node 22 (never an alpine container build, #143), runs `prisma migrate deploy`, publishes an immutable release via `scripts/ops/publish-release.sh` (`~/releases/<sha>` + atomic `~/current` swap), restarts the systemd user unit `catchlogx.service`, health-checks `127.0.0.1:3001` and reports the deployed commit. Rollback = re-dispatch with `ref=<full SHA of the previous master commit>` (the job rebuilds that commit — a short SHA is not resolvable, #163) |
 
 **Production maintenance is no longer a workflow** (#170). `production-maintenance.yml` held eight dispatch-only jobs: five one-shot operations that had already run (audit #138, rehearsal #140, cutover #141, smoke user #150, release topology #143) and three recurring ones. Since 2026-10-27 there is direct SSH as `root` over the BOKU VPN — the sanctioned path per `DECISIONS.md` (2026-10-16) — so the file was deleted instead of being converted from 67 `docker exec` calls to host commands. What remains recurring lives next to the code and is run from a root-owned checkout of this repo (`git clone https://github.com/georgernstgraf/CatchLogX /root/CatchLogX`, re-clone whenever it is stale — the old `/opt/CatchLogX` checkout is gone with #122): `deploy/prod/postgres/readonly-role.sh` (role grants + password rotation, `KEEP_PASSWORD=1` for verify-only), `deploy/prod/postgres/observability-extension.sql`, `deploy/postgres/report.sql`, and `deploy/prod/postgres/README.md` as the runbook (migration window, rollback, research-group access). Dumps and query texts still never leave the machine — the repo is public.
 
@@ -49,13 +58,13 @@ app/                    Next.js App Router pages + API routes
   globals.css           Tailwind import + dark mode CSS variables
   login/page.jsx        Login page
   upload/page.tsx       File upload page
-  admin/page.tsx        Admin panel (user/upload management)
+  admin/page.tsx        Admin panel (user/import management)
   about/page.tsx        About page with contact info
-  my-uploads/page.tsx   User's uploaded files list
+  my-uploads/page.tsx   User's own imports (with delete + download)
   reset-password/page.tsx   Password reset page
   first-login/page.tsx      First-login password change page
   api/auth/             Sign-in, logout, session, change-initial-password
-  api/admin/            Admin CRUD (users, uploads, files)
+  api/admin/            Admin CRUD (users, imports, files)
   api/query/            SQL query execution + save
   api/upload/           Excel upload (new = bulk 1..N files, my, error-report, template-file)
   api/forgot-password/  Forgot password request
@@ -75,9 +84,11 @@ components/             React components (all client-side)
   MapComponent.tsx          Leaflet map with marker support
   AdminPageComponent.tsx    Admin user/upload management
   AdminTemplateFilesManager.tsx Template file management UI
+  AdminFishSpeciesManager.tsx Fish species management UI (admin, #201)
   MyUploadsPageComponent.tsx User's upload list
 lib/                    Server-side utilities
   prisma.ts             Prisma singleton (imports from app/generated/prisma)
+  queryPrisma.ts        Second Prisma client as read-only role clx_readonly (query UI only, #121)
   session.ts            Custom session management (cookie → Session table → user)
   auth.ts               NextAuth config (credentials provider, JWT sessions — unused by UI)
   auth-middleware.ts    requireAuth() + withAuth() wrappers for API routes
@@ -85,18 +96,24 @@ lib/                    Server-side utilities
   fileBlobs.ts          FileBlob helpers (bytes in PostgreSQL)
   mailer.ts             Nodemailer SMTP transport (password reset emails)
   template-files.ts      Template file tracking helpers
+  fishSpecies.ts        Artliste master merge + normalizeSpeciesName (pure, #183)
+  fish-species-client.ts Fish species admin API client (browser, #201)
+  seedSequences.ts      Moves id sequences past fixed ids written by seed scripts
 services/               Business logic layer (API routes delegate here)
   authService.ts        Sign-in, session validation
   passwordService.ts    Forgot-password, reset, change-initial-password
-  adminService.ts       User CRUD, upload approval/rejection, file downloads
+  adminService.ts       User CRUD + the admin panel aggregate (users + imports)
+  importService.ts      The one import write path, deleteImport, list, download (#202)
   templateFileService.ts  Template file list, upload, visibility, soft delete, download
-  queryService.ts       SQL query validation, execution, save/delete
-  uploadService.ts      Excel bulk upload: validate all files, all-or-nothing store, report (#88)
+  fishSpeciesService.ts Fish species list, create, rename, delete (delete refused while catches exist, #201)
+  queryService.ts       SQL query execution as clx_readonly + QueryLog audit
+  uploadService.ts      Excel bulk upload: validate all files (species against fish_species, #80), all-or-nothing store, report (#88)
 prisma/
   schema.prisma         Data model + generator (output: app/generated/prisma)
   migrations/           Migration history — single baseline `*_init` (schema source of truth)
 scripts/                Dev utilities
   create-user.ts        User creation (admin/admin)
+  create-readonly-role.ts  Local (compose) setup of read-only role clx_readonly (npm run db:readonly-role)
   insert-fish.ts        Seed fish species
   insert-river-sites.ts Seed river sites
   insert-samplings.ts   Seed samplings
@@ -111,17 +128,63 @@ docker-compose.prod.yml Production override (#143): disables the base `app` serv
 ## Data Model
 ```
 User ──< Session             (custom auth)
-User ──< Uploads             (excel upload tracking)
+User ──< Imports             (one row per imported Excel file, #202)
+User ──< Imports             (as deletedBy: who deleted it)
 User ──< UserQueries          (saved SQL queries)
-UploadStates: UPLOADED | ACCEPTED | REJECTED | DB_ERROR | SAVED_IN_DB
+User ──< QueryLog             (audit log of executed SQL, #121)
 PasswordResetStates: REQUESTED | EXPIRED | DONE
 
 TemplateFiles ── FileBlob       (template bytes + metadata, #131)
-Uploads ── FileBlob             (uploaded Excel bytes, #131)
+Imports ── FileBlob             (the original Excel file; null after deletion, #184)
 
 RiverSite ──< Sampling ──< FishCatch ── FishSpecies
-FishCatch: added pitDec, pitHex, recapture fields for PIT tag tracking
+Sampling.importId NOT NULL ──> Imports   (provenance by construction, #202)
+FishCatch: pitDec, pitHex, recapture; @@index([pitDec])
 ```
+
+`Uploads` and the `UploadStates` enum are gone (#202): an upload imports
+directly, there is no admin review step. Deleting an import removes its
+catches, its samplings, the stored file **and the `Imports` row itself** — no
+tombstone (#184, decided 2026-11-15); the only trace is a log line in the
+journal.
+
+## Upload Validation (#80, #88)
+
+`processBulkUpload` validates every file before anything is written; one
+erroring file rejects the whole bulk.
+
+- **Species** are checked against the master in `fish_species`, loaded once per
+  bulk and matched with `normalizeSpeciesName` (NBSP, `×`→`x`, `(hybrid)`/`hyb`,
+  case, whitespace). The file's own `List` sheet is **not** authoritative for
+  the species column. An unknown species rejects the whole file and names every
+  unknown name with its Excel row numbers.
+- A **missing `List` sheet is not an error** (since #213, was a structural
+  error in #80/#204). The sheet carries the Excel dropdowns, not the import
+  contract: without it `country`/`method`/`sampling_time`/`assessment` accept
+  free text, and the species is checked against the master in every case. That
+  is why `2026_D_valid_final_DaniohnePIT.xlsx` (only a `DATA` sheet) reaches the
+  species check instead of being rejected up front. A list that is missing
+  *within* a present sheet still leaves its own column unchecked.
+- **PIT DEC**: the same tag twice in one file **on the same catch date** is a
+  hard error (both rows are marked). On a different date it is a legitimate
+  recapture — one file is a delivery for a river over many dates. Across files
+  a repeated tag is allowed; a different species for the same tag is not.
+- The database PIT check runs in one batched lookup per bulk (not one query per
+  tag) and runs even when the file already has other errors (#102).
+- **Duplicate bytes** are rejected globally: the sha256 of the received file is
+  checked against every `Imports` row (a deleted import leaves no row, #184) and
+  within the bulk, and re-checked under an advisory lock inside the write
+  transaction (#184, #202).
+
+## Import Write Path (#202)
+
+`writeImports` (services/importService.ts) is the only writer of catch data.
+One transaction for the whole bulk: per file an `Imports` row plus the stored
+original file, then one `RiverSite` upsert per distinct synthetic site code
+(`river__site__lat__long`), one `Sampling` per site and catch date (carrying
+`importId`), and the catches as `createMany` batches. `recapture` is computed
+from earlier PITs — the database first, then the files of the same bulk in
+file order. A failure rolls back the whole bulk, including the stored files.
 
 ## Auth Flow
 ```

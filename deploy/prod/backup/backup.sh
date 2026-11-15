@@ -3,6 +3,7 @@
 #
 # One script, four modes:
 #   run            daily backup: dump, verify, encrypt the env, prune, push off-site
+#                  (off-site = knock + rsync over SSH, plain tar.zst - see #192)
 #   probe          monthly restore rehearsal: restore the newest set into a scratch
 #                  database and compare it against the row counts recorded at dump time
 #   status         human-readable state: sets, ages, last results, config warnings
@@ -48,9 +49,16 @@ KEEP_MONTHLY="${KEEP_MONTHLY:-3}"
 APP_ENV_FILE="${APP_ENV_FILE:-/home/clxadmin/.config/catchlogx/.env}"
 
 BACKUP_AGE_RECIPIENT="${BACKUP_AGE_RECIPIENT:-}"
-OFFSITE_URL="${OFFSITE_URL:-}"
-OFFSITE_USER="${OFFSITE_USER:-}"
-OFFSITE_PASSWORD="${OFFSITE_PASSWORD:-}"
+
+# Off-site target: the dev VPS receives as the unprivileged user `catchlogx`,
+# whose SSH port only opens after a port-knock sequence (#189). The sequence is
+# a secret and lives in this env file only - never in the repo, not even here.
+# The key is restricted on the receiving side to `rrsync -wo` (#192).
+OFFSITE_HOST="${OFFSITE_HOST:-}"
+OFFSITE_USER="${OFFSITE_USER:-catchlogx}"
+OFFSITE_DIR="${OFFSITE_DIR:-/home/catchlogx/backups}"
+OFFSITE_SSH_KEY="${OFFSITE_SSH_KEY:-$HOME/.ssh/catchlogx-offsite}"
+OFFSITE_KNOCK_PORTS="${OFFSITE_KNOCK_PORTS:-}"
 
 MAIL_TO="${MAIL_TO:-}"
 MAIL_COPY_TO="${MAIL_COPY_TO:-}"
@@ -233,7 +241,7 @@ cmd_run() {
   log "run: Dump verifiziert ($(du -h "$dest/db.dump" | cut -f1), $(wc -l < "$dest/db.dump.list") Einträge)"
 
   # 6. Off-site before pruning, so a failed upload never costs the local copy.
-  if [ -n "$OFFSITE_URL" ]; then
+  if [ -n "$OFFSITE_HOST" ]; then
     offsite_note=$(upload_offsite "$stamp") || die "Off-site-Upload fehlgeschlagen"
   fi
 
@@ -261,42 +269,63 @@ Die monatliche Restore-Probe läuft am 1. um 04:30 UTC."
 
 # --------------------------------------------------------------- offsite -----
 
+knock_offsite() {
+  # The VPS hides its SSH port behind port knocking (#189). The sequence is a
+  # secret: it comes from this root-only env file and is never written to the
+  # repo, an issue or a log line.
+  [ -n "$OFFSITE_KNOCK_PORTS" ] \
+    || die "OFFSITE_KNOCK_PORTS ist nicht gesetzt - ohne Knock bleibt Port 22 zu"
+  command -v knock >/dev/null \
+    || die "knock fehlt (apt install knockd liefert /usr/bin/knock; den Daemon danach maskieren)"
+  # shellcheck disable=SC2086  # the port list is intentionally word-split
+  knock -d 100 "$OFFSITE_HOST" $OFFSITE_KNOCK_PORTS \
+    || die "Knock-Sequenz gegen $OFFSITE_HOST fehlgeschlagen"
+}
+
 upload_offsite() {
-  local stamp="$1" tmp name size remote_size
-  [ -n "$BACKUP_AGE_RECIPIENT" ] || die "Off-site ist konfiguriert, aber BACKUP_AGE_RECIPIENT fehlt (Off-site wird immer verschlüsselt)"
-  command -v age >/dev/null || die "age fehlt"
-  command -v curl >/dev/null || die "curl fehlt"
+  local stamp="$1" tmp name attempt=0 rc=0 bytes
+  [ -n "$OFFSITE_HOST" ] || die "Off-site ist konfiguriert, aber OFFSITE_HOST fehlt"
+  [ -r "$OFFSITE_SSH_KEY" ] || die "SSH-Key $OFFSITE_SSH_KEY nicht lesbar"
+  command -v rsync >/dev/null || die "rsync fehlt"
 
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' RETURN
 
-  # One encrypted tar: nothing readable on the VPS, not even the fish data or
-  # the password hashes in the dump.
-  tar -C "$BACKUP_ROOT" -cf - "$stamp" | zstd -q -19 -T0 | age -r "$BACKUP_AGE_RECIPIENT" -o "$tmp/$stamp.tar.zst.age" \
-    || die "Archivierung/Verschlüsselung fehlgeschlagen"
+  # Plain tar.zst since #192: the receiving dev instance reads the dump without
+  # a key (after the restore its own database holds the same data in clear text
+  # anyway). env.age stays encrypted *inside* the archive - the production
+  # secrets (DATABASE_URL, NEXTAUTH_SECRET, READONLY_DB_PASSWORD) must not land
+  # on the VPS in clear text.
+  tar -C "$BACKUP_ROOT" -cf - "$stamp" | zstd -q -19 -T0 > "$tmp/$stamp.tar.zst" \
+    || die "Archivierung fehlgeschlagen"
 
-  name="$stamp.tar.zst.age"
-  size=$(stat -c%s "$tmp/$name")
+  name="$stamp.tar.zst"
+  bytes=$(stat -c%s "$tmp/$name")
   ( cd "$tmp" && sha256sum "$name" > "$name.sha256" )
 
-  curl -fsS --retry 3 --retry-delay 15 --max-time 1800 \
-    --user "$OFFSITE_USER:$OFFSITE_PASSWORD" \
-    -T "$tmp/$name" "$OFFSITE_URL" \
-    || die "Upload von $name fehlgeschlagen"
-  curl -fsS --retry 3 --retry-delay 15 --max-time 300 \
-    --user "$OFFSITE_USER:$OFFSITE_PASSWORD" \
-    -T "$tmp/$name.sha256" "$OFFSITE_URL" \
-    || die "Upload der Prüfsumme fehlgeschlagen"
+  # The knock window is ~30 s, so every attempt knocks again. rsync verifies
+  # the transferred file with its own checksums; the receiving side re-hashes it
+  # against the .sha256 (prune timer) and the restore verifies it before use.
+  while [ "$attempt" -lt 3 ]; do
+    attempt=$((attempt + 1))
+    knock_offsite
+    if rsync -c --partial --timeout=600 \
+         -e "ssh -i $OFFSITE_SSH_KEY -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20" \
+         "$tmp/$name" "$tmp/$name.sha256" \
+         "$OFFSITE_USER@$OFFSITE_HOST:"; then
+      rc=0
+      break
+    else
+      rc=$?
+      log "offsite: Versuch $attempt fehlgeschlagen (rsync exit $rc)"
+      [ "$attempt" -lt 3 ] && sleep 20
+    fi
+  done
+  [ "$rc" -eq 0 ] || die "Upload von $name fehlgeschlagen (3 Versuche)"
 
-  # Trust nothing: the remote object must have exactly our byte count.
-  remote_size=$(curl -fsS --max-time 120 --user "$OFFSITE_USER:$OFFSITE_PASSWORD" \
-    -I "$OFFSITE_URL$name" | awk 'tolower($1)=="content-length:"{print $2}' | tr -d '\r' | tail -n1)
-  [ "$remote_size" = "$size" ] \
-    || die "Größenprüfung fehlgeschlagen: lokal $size, off-site ${remote_size:-unbekannt}"
-
-  write_json_result "last-offsite.json" "ok" "stamp=$stamp" "name=$name" "bytes=$size"
-  log "offsite: $name ($size Bytes) hochgeladen und geprüft"
-  printf '%s (%s Bytes, geprüft)' "$name" "$size"
+  write_json_result "last-offsite.json" "ok" "stamp=$stamp" "name=$name" "bytes=$bytes"
+  log "offsite: $name ($bytes Bytes) hochgeladen und aufgelegt"
+  printf '%s (%s Bytes, per rsync verifiziert)' "$name" "$bytes"
 }
 
 # ----------------------------------------------------------------- prune -----
@@ -452,7 +481,13 @@ cmd_status() {
 
   printf '\nKonfiguration\n'
   printf '  Aufbewahrung   %s täglich / %s monatlich\n' "$KEEP_DAILY" "$KEEP_MONTHLY"
-  printf '  Off-site       %s\n' "${OFFSITE_URL:-NICHT KONFIGURIERT (nur lokal)}"
+  if [ -n "$OFFSITE_HOST" ]; then
+    printf '  Off-site       %s@%s:%s (SSH, Klartext-Archiv)\n' "$OFFSITE_USER" "$OFFSITE_HOST" "$OFFSITE_DIR"
+    printf '  SSH-Key        %s\n' "${OFFSITE_SSH_KEY:-FEHLT}"
+    printf '  Knock          %s\n' "$([ -n "$OFFSITE_KNOCK_PORTS" ] && echo 'konfiguriert' || echo 'FEHLT - Port 22 bleibt zu')"
+  else
+    printf '  Off-site       NICHT KONFIGURIERT (nur lokal)\n'
+  fi
   printf '  age-Recipient  %s\n' "${BACKUP_AGE_RECIPIENT:-NICHT GESETZT (env.age entfällt)}"
   printf '  Mailziel       %s\n' "${MAIL_TO:-NICHT GESETZT (nur journald)}"
 

@@ -4,7 +4,7 @@
 Agents (opencode) are started **on every machine that clones this repo** — a clone can sit
 on live infrastructure, and there is **no sandbox**: the agent's shell shares the host with
 whatever runs there. **At session start, identify the host before touching anything**
-(`hostname`, `whoami`, `systemctl --user list-units | grep -i clx`):
+(`hostname`, `whoami`, `systemctl --user list-units | grep -i catchlogx`):
 - On the dev VPS (`claw.graf.priv.at`, served as `catchlogx.graf.priv.at`, user `catchlogx`)
   the shell shares the machine with `catchlogx.service` (app, port 40873) and
   `actions.runner.catchlogx-vps.service` (the `vps` deploy runner). Never stop/restart units
@@ -29,7 +29,7 @@ On the dev instance `catchlogx.graf.priv.at` the app runs as a systemd **user** 
 Deploys are **push-driven**: the `deploy` job in `.github/workflows/deploy-dev.yml` (gated by
 the `CI` workflow via `workflow_run`) builds on the self-hosted runner
 `actions.runner.catchlogx-vps.service` (label `vps`, running under the same `catchlogx` user
-manager), publishes the release with `scripts/publish-release.sh`, applies `prisma migrate deploy`,
+manager), publishes the release with `scripts/ops/publish-release.sh`, applies `prisma migrate deploy`,
 restarts `catchlogx.service` and health-checks `127.0.0.1:40873`. So
 `systemctl --user restart catchlogx.service` is a plain ~2 s restart with **no build**, and a
 rollback is "point `~/current` at the previous release and restart". Units live in
@@ -43,9 +43,12 @@ npm run lint          # ESLint directly (eslint .) — Next 16 removed `next lin
 npm run typecheck     # tsc --noEmit
 npm test              # Vitest, single run (vitest run) — pure service-logic tests, no DB needed
 npm run create-user   # create admin user (hardcoded admin/admin, dev only)
+npm run db:init       # migrate deploy + demo seed — the entry point for a new database
+npm run seed:demo     # demo seed only; one-shot per DB (the seed guard refuses once a catch exists)
 npm run prisma:generate  # regenerate Prisma client (required after schema changes; also runs via postinstall)
 npm run prisma:migrate -- --name <name>  # schema change (dev): create + apply a migration
 npm run prisma:deploy   # apply pending migrations (dev instance, production)
+npm run db:readonly-role  # local: create/refresh read-only role clx_readonly for the SQL query UI (hosts: deploy/prod/postgres/readonly-role.sh)
 ```
 
 ## Tests (Vitest, #112)
@@ -169,6 +172,7 @@ Uploaded files and template files are stored as **PostgreSQL blobs** (`FileBlob`
 - `@/*` path alias resolves to project root
 - Files using hooks or browser APIs need `"use client"` directive
 - `no-explicit-any` ESLint rule is disabled (`@typescript-eslint/no-explicit-any: off`)
+- `scripts/` is split by risk class — `demo/` (seed + wipe, guarded by `lib/seedGuard.ts`), `data/`, `prod/`, `ops/` (#198). Anything that writes base data lives in `demo/` and imports the guard.
 
 ## Key Files
 
@@ -182,9 +186,10 @@ Uploaded files and template files are stored as **PostgreSQL blobs** (`FileBlob`
 | API auth middleware (server) | `lib/auth-middleware.ts` |
 | Admin auth middleware (server) | `lib/admin-middleware.ts` |
 | File blob helpers | `lib/fileBlobs.ts` |
+| Read-only query client | `lib/queryPrisma.ts` (`QUERY_DATABASE_URL`, role `clx_readonly`, #121) |
 | Email sender (nodemailer) | `lib/mailer.ts` |
 | Admin panel page | `app/admin/page.tsx` |
-| User creation (dev seed) | `scripts/create-user.ts` |
+| User creation (dev seed) | `scripts/ops/create-user.ts` |
 | Supervision log (hours) | `docs/Betreuung.md` |
 | Meeting minutes | `docs/meetings/` (one file per meeting: `YYYY-MM-DD-topic.md`, German) |
 
@@ -197,12 +202,17 @@ When committing, consult the `issue-workflow` skill. Every commit must reference
 Skills live in `.opencode/skills/` and are **committed to the repo** — every clone discovers them without extra setup.
 
 - `engineering/` — vendored snapshot of [mattpocock/skills](https://github.com/mattpocock/skills) (`skills/engineering/`). 18 skills (code-review, implement, tdd, diagnosing-bugs, …). Not auto-updated.
-- `issue-workflow/` — project-owned; backs the commit rule below.
-- `knowledge-persistence/` — project-owned; maintains the `docs/ai/*` knowledge files.
+- `issue-workflow/` — vendored from `georgernstgraf/opencode-helpers` (`skills/issue-workflow`, commit `547b70f`, synced 2026-10-31); backs the commit rule below. CatchLogX-specific parts are marked in the file (dev trunk, `.githooks`); SVN support is deliberately not ported (#124).
+- `knowledge-persistence/` — vendored from `georgernstgraf/opencode-helpers` (`skills/knowledge-persistence`); maintains the `docs/ai/*` knowledge files. Same language/SVN policy as `issue-workflow` (#124).
+
+**Update the two vendored skills** (manual — there is no script for them yet):
+copy the upstream `SKILL.md` over, re-apply the CatchLogX-specific parts, and
+record the upstream commit in the header. `scripts/ops/update-engineering-skills.sh`
+covers only `engineering/`.
 
 **Update engineering skills** (run when you want upstream changes; review the diff before committing):
 ```
-bash scripts/update-engineering-skills.sh
+bash scripts/ops/update-engineering-skills.sh
 git diff .opencode/skills/engineering
 ```
 
@@ -222,3 +232,13 @@ Before starting any task, read the following files in order:
 
 If `HANDOFF.md` contains open tasks, complete them before starting
 any new work unless the user explicitly says otherwise.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

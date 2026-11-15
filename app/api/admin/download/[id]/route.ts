@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminAuth } from "@/lib/admin-middleware";
-import { downloadFile, getContentType } from "@/services/adminService";
+import { getContentType, getImportFile } from "@/services/importService";
 
+/** Downloads the stored original file of an import (#202). */
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
@@ -14,7 +15,7 @@ export async function GET(
   try {
     const { id } = await context.params;
 
-    const stored = await downloadFile(id);
+    const stored = await getImportFile(id);
 
     if (!stored) {
       return NextResponse.json({ error: "File not found" }, { status: 404 });

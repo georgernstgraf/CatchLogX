@@ -15,7 +15,8 @@ export default defineConfig({
   test: {
     environment: "node",
     // `.next/standalone/` (output: "standalone", #135) copies the source tree,
-    // so test files would otherwise be discovered and run a second time.
-    exclude: ["**/node_modules/**", "**/dist/**", ".next/**"],
+    // so test files would otherwise be discovered and run a second time. The same
+    // goes for agent worktrees under `.claude/worktrees/`.
+    exclude: ["**/node_modules/**", "**/dist/**", ".next/**", ".claude/**"],
   },
 });

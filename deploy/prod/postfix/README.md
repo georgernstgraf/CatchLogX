@@ -11,8 +11,19 @@ app / scripts → 127.0.0.1:25 → postfix → STARTTLS + SASL → mailauth.boku
 ```
 
 Two consumers: `catchlogx-backup` (backup and restore-probe reports) and the
-app itself once #160 is closed (`NODEMAILER_HOST=127.0.0.1`, `PORT=25`, no auth
-— the credential lives in postfix only).
+app itself (#160) — no auth on the app side, the credential lives in postfix
+only. Since #160 the app supports this directly; its runtime env
+(`~clxadmin/.config/catchlogx/.env`) needs:
+
+```
+NODEMAILER_HOST=127.0.0.1
+NODEMAILER_PORT=25
+NODEMAILER_FROM=<address of the BOKU SMTP account>
+# NODEMAILER_USER / NODEMAILER_PASSWORD: leave unset (setting only one is an error)
+```
+
+`NODEMAILER_FROM` must be the authenticated account's address (see "Sender"
+below), then restart the unit.
 
 ## Smarthost facts
 

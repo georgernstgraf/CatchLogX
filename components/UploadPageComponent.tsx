@@ -9,6 +9,7 @@ import {
   fetchTemplateFiles,
 } from "@/lib/template-files";
 import { downloadErrorArchive, uploadFiles } from "@/lib/upload-client";
+import type { ImportedFile } from "@/lib/upload-client";
 import {
   FileReport,
   MAX_UPLOAD_FILES,
@@ -37,6 +38,10 @@ const isExcelFile = (file: File) => {
     file.name.endsWith(".xls")
   );
 };
+
+/** `3 rows`, `1 row` — keeps the import summary readable. */
+const plural = (count: number, singular: string) =>
+  `${count} ${singular}${count === 1 ? "" : "s"}`;
 
 /** Per-file validation report, shared by the single and bulk upload. */
 const FileReportRow = ({ report }: { report: FileReport }) => {
@@ -107,6 +112,9 @@ const UploadPageComponent = () => {
     "idle" | "uploading" | "success" | "error"
   >("idle");
   const [report, setReport] = useState<FileReport[]>([]);
+  const [imports, setImports] = useState<ImportedFile[]>([]);
+  const [samplings, setSamplings] = useState(0);
+  const [catches, setCatches] = useState(0);
   const [zipToken, setZipToken] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -156,6 +164,9 @@ const UploadPageComponent = () => {
 
     setUploadStatus("idle");
     setReport([]);
+    setImports([]);
+    setSamplings(0);
+    setCatches(0);
     setZipToken(null);
     setErrorMessage("");
 
@@ -214,6 +225,9 @@ const UploadPageComponent = () => {
     setUploadStatus("uploading");
     setErrorMessage("");
     setReport([]);
+    setImports([]);
+    setSamplings(0);
+    setCatches(0);
     setZipToken(null);
 
     try {
@@ -231,6 +245,9 @@ const UploadPageComponent = () => {
 
       setUploadStatus("success");
       setReport(outcome.report);
+      setImports(outcome.imports);
+      setSamplings(outcome.samplings);
+      setCatches(outcome.catches);
       setSelectedFiles([]);
     } catch (error) {
       console.error("Upload error:", error);
@@ -243,6 +260,9 @@ const UploadPageComponent = () => {
     setSelectedFiles([]);
     setUploadStatus("idle");
     setReport([]);
+    setImports([]);
+    setSamplings(0);
+    setCatches(0);
     setZipToken(null);
     setErrorMessage("");
     if (fileInputRef.current) {
@@ -270,7 +290,8 @@ const UploadPageComponent = () => {
   };
 
   const uploadFailed = report.some((entry) => entry.status === "failed");
-  const showSuccess = uploadStatus === "success" && report.length > 0;
+  const showSuccess = uploadStatus === "success";
+  const importedRows = imports.reduce((sum, file) => sum + file.rowCount, 0);
 
   return (
     <div className="flex flex-row min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -285,9 +306,9 @@ const UploadPageComponent = () => {
               Upload Excel Files
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
-              Upload one or more Excel files for administrator review. A bulk
-              upload is treated as a whole: either every file passes validation
-              or none is submitted.
+              Upload one or more Excel files. A bulk upload is treated as a
+              whole: either every file passes validation and is imported, or
+              nothing is imported.
             </p>
           </div>
           {/* Disclaimer Box */}
@@ -335,7 +356,7 @@ const UploadPageComponent = () => {
                   <p className="mt-3 text-xs bg-orange-100 dark:bg-orange-900/40 p-2 rounded">
                     <strong>Important:</strong> All uploaded files are validated
                     together. If a single file fails, the whole upload is
-                    rejected and nothing is submitted for review.
+                    rejected and nothing is imported.
                   </p>
                 </div>
               </div>
@@ -345,15 +366,14 @@ const UploadPageComponent = () => {
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8">
             {showSuccess ? (
               <div className="space-y-6">
-                {/* Success Message */}
+                {/* Import summary */}
                 <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
                   <p className="text-green-700 dark:text-green-300 font-medium">
-                    {report.length} file{report.length === 1 ? "" : "s"} passed
-                    validation and are waiting for administrator review.
+                    Imported {plural(imports.length, "file")} —{" "}
+                    {plural(importedRows, "row")},{" "}
+                    {plural(samplings, "sampling")},{" "}
+                    {plural(catches, "catch")}.
                   </p>
-                  <div className="mt-2 text-sm text-green-600 dark:text-green-400">
-                    You will be notified once the review is complete.
-                  </div>
                 </div>
 
                 {/* Upload report */}
@@ -540,10 +560,10 @@ const UploadPageComponent = () => {
                     }`}
                   >
                     {uploadStatus === "uploading"
-                      ? "Uploading..."
-                      : `Submit ${selectedFiles.length} File${
+                      ? "Importing..."
+                      : `Import ${selectedFiles.length} File${
                           selectedFiles.length === 1 ? "" : "s"
-                        } for Review`}
+                        }`}
                   </button>
                   <button
                     onClick={resetUpload}
@@ -579,7 +599,7 @@ const UploadPageComponent = () => {
                     <h3 className="text-sm font-medium text-red-800 mb-2">
                       {report.length > 0
                         ? "Upload rejected — files were not imported"
-                        : "Upload failed"}
+                        : "Import failed"}
                     </h3>
                     <p className="text-sm text-red-700">{errorMessage}</p>
                     {zipToken && (
