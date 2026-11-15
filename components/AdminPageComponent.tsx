@@ -457,9 +457,6 @@ const AdminPageComponent = () => {
                             Imported at
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Status
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                             Actions
                           </th>
                         </tr>
@@ -487,11 +484,6 @@ const AdminPageComponent = () => {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                                 {formatDateTime(item.createdAt)}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">
-                                  Active
-                                </span>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm">
                                 <div className="flex items-center space-x-3">
