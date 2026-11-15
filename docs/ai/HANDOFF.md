@@ -3,7 +3,7 @@ type: Handoff
 title: Handoff
 description: Offene Aufgaben fuer die naechste Session.
 tags: [catchlogx, handoff]
-generated: { by: opencode/knowledge-persistence, at: 2026-11-15T12:53:11Z }
+generated: { by: opencode/knowledge-persistence, at: 2026-11-15T17:10:00Z }
 status: stable
 ---
 
@@ -481,6 +481,15 @@ Superuser-Slots.
     Cutover-Verifikation. Reproduzieren mit der gespeicherten Query und die
     Fehlermeldung an der Oberfläche prüfen, bevor #121/#153 als erledigt gelten.
 
+
+21. [ ] **#174 Stufe 3 — Entscheidungen stehen, Umsetzung offen** (reisefertig,
+    2026-11-15): **xlsx → CDN-Pin** `https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz`
+    (Variante A; Rückfall A′ = Tarball unter `vendor/` + `file:`-Referenz). Danach ist
+    xlsx für Dependabot/Audit unsichtbar → Version manuell prüfen. **nodemailer
+    7.0.13 → 10.5.0** (räumt 3 der 4 high), Verifikation per echtem Reset-Mailversuch
+    auf Dev. **exceljs** bleibt gepinnt (Downgrade-Vorschlag 3.4.0 abgelehnt), optional
+    `overrides` auf `uuid ^11.1.1`. Ablauf, Gates und Begründung im Kommentar von #174;
+    danach erwartet `npm audit` 0 critical / 0 high. Prod-Deploy nötig (Runtime-Dep).
 
 Kontext: Das Epic #125 bleibt offen, solange `CatchLogX-Data#2` offen ist. Vom
 Produktions-Upgrade-Pfad #137–#153 sind #138–#143 und #150/#152 erledigt; offen

@@ -1,5 +1,16 @@
 # Persistenz-Log
 
+## 2026-11-15 (Nachtrag) — #174 Stufe 3 reisefertig entschieden
+
+* **Update**: `HANDOFF.md` Aufgabe 21 — xlsx → CDN-Pin 0.20.3 (Variante A, Rückfall A′
+  `vendor/`), nodemailer 7.0.13 → 10.5.0, exceljs bleibt gepinnt (optional `overrides`
+  uuid ^11.1.1), eslint 10 / typescript 7 / lucide 1.x separat.
+* **Reason**: Das Advisory CVE-2023-30533 (CVSS 7.8) trifft genau unseren Lesepfad
+  (`XLSX.read` auf Nutzer-Uploads); 0.20.3 ist die aktuelle CDN-Version und von der
+  Prod-Maschine erreichbar (200, 61 ms). Paket-Bilanz als Nebenargument: xlsx 9 Pakete,
+  exceljs 102 (80 exklusiv) — der Aufräum-Kandidat wäre exceljs, nicht xlsx.
+* **Verifikation**: Entscheidung samt Zahlen im Kommentar von #174; Umsetzung offen.
+
 ## 2026-11-15 — Dependabot konfiguriert, 42 stale Alerts geschlossen (#109)
 
 * **Creation**: `.github/dependabot.yml` — npm + docker, wöchentlich (Mo 06:00
