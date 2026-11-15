@@ -61,7 +61,7 @@ systemctl enable --now catchlogx-backup.timer catchlogx-backup-probe.timer
 
 1. `pg_dump -Fc` → `db.dump`, then `pg_restore --list` — a dump that cannot be
    listed is treated as a failure and the set is discarded.
-2. Row counts (`User`, `Session`, `PasswordResets`, `Uploads`, `TemplateFiles`,
+2. Row counts (`User`, `Session`, `PasswordResets`, `Imports`, `TemplateFiles`,
    `FileBlob`, `UserQueries`, `fish_*`, `river_sites`, `samplings`) plus
    `sum(length("FileBlob".data))` are frozen into `rowcounts.txt`. The restore
    probe compares against **these** numbers, never against live production.

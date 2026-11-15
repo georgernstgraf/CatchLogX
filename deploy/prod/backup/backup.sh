@@ -67,11 +67,16 @@ SENDMAIL="${SENDMAIL:-/usr/sbin/sendmail}"
 
 # Row counts compared by `probe`. The restore must reproduce the dump exactly;
 # current production is expected to differ (the dump is up to a day old).
+#
+# This list must follow the schema: a table that a migration dropped makes the
+# whole run die ("Zeilen zählen fehlgeschlagen"), i.e. no backup at all. That is
+# how the cutover's `import_hard_delete` (which dropped `Uploads`) silently
+# broke the first post-cutover run (#204) — `Imports` is its successor.
 TABLES=(
   "User"
   "Session"
   "PasswordResets"
-  "Uploads"
+  "Imports"
   "TemplateFiles"
   "FileBlob"
   "UserQueries"
