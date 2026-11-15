@@ -531,6 +531,13 @@ Superuser-Slots.
     oder ist die Unit auf diesem Host überflüssig (dann `mask`, weil nichts auf
     `network-online.target` wartet) — und die Zahlen in `PITFALLS.md`/`STATE.md` nachziehen.
 
+23. [ ] **Repo-Zugänge nach Armins Ausscheiden** (2026-11-15, #226): `@Zdroba-Fisteag`
+    ist noch **Collaborator** auf `georgernstgraf/CatchLogX`, obwohl er aus dem Projekt
+    ausgeschieden ist und keinen Commit beigetragen hat. Entziehen oder bewusst behalten —
+    Entscheidung offen. Sein Themenstrang (Abfrage-UI/Visualisierung/KI: #154, #103, #97,
+    #90, #85) ist laut `docs/Themenstellungen.md` unbesetzt und trägt `diplomarbeit`
+    ohne Assignee.
+
 Kontext: Das Epic #125 bleibt offen, solange `CatchLogX-Data#2` offen ist. Vom
 Produktions-Upgrade-Pfad #137–#153 sind #138–#143 und #150/#152 erledigt; offen
 sind #144 (gated Pipeline), #153 (Data-Access-Seite) und #145 (Wissensbasis).
