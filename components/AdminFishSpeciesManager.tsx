@@ -1,7 +1,7 @@
 "use client";
 
 import React, { Fragment, useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   createFishSpecies,
   deleteFishSpecies,
@@ -434,13 +434,8 @@ const AdminFishSpeciesManager = () => {
                             onClick={() => toggleImports(entry)}
                             aria-expanded={isExpanded}
                             title="Show imports having this species"
-                            className="inline-flex items-center gap-1 rounded text-[#357174] dark:text-[#8fc3c5] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#357174]"
+                            className="inline-block min-w-[2.75rem] text-left text-sm text-[#357174] underline underline-offset-2 transition-[font-size] duration-150 hover:text-[1.1375rem] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#357174] dark:text-[#8fc3c5]"
                           >
-                            {isExpanded ? (
-                              <ChevronDown size={14} />
-                            ) : (
-                              <ChevronRight size={14} />
-                            )}
                             {entry.catchCount}
                           </button>
                         ) : (
