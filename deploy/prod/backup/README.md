@@ -113,6 +113,13 @@ systemctl start catchlogx-backup.service
 journalctl -u catchlogx-backup -n 20 --no-pager
 ```
 
+**Quote every value that contains a space** (`OFFSITE_KNOCK_PORTS="1234 5678 9012"`).
+systemd's `EnvironmentFile` keeps an unquoted value together, but `backup.sh`
+also **sources** this file for manual runs (`status`, `probe`, `keycheck`) — an
+unquoted port list makes bash execute the second port as a command and the
+diagnostic dies with `36291: command not found` (found and fixed on the host on
+2026-11-15, #220).
+
 The knock sequence is a **secret**: it lives only in `/etc/catchlogx-backup.env`
 (root, 0600) and must never appear in the repo, an issue, a commit message or a
 log. The script knocks before every attempt because the daemon closes the port
