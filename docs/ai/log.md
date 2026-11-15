@@ -24,6 +24,12 @@
   SearXNG-Container unverändert `Up` (`:8888` → 200), `clx_readonly`-Login über
   TCP grün (SELECT ok, DDL `permission denied`). Offsite vorher: Hand-Satz
   `cutover-20261018T085752Z` (48 399 960 B) auf `claw`, sha256 geprüft.
+  **Nebenbefund und mitgefixt**: `catchlogx-backup status` starb an
+  `36291: command not found`, weil `OFFSITE_KNOCK_PORTS` in
+  `/etc/catchlogx-backup.env` unquoted stand und `backup.sh` die Datei für
+  Handläufe sourced (systemd toleriert das, bash nicht) — auf dem Host gequotet,
+  Beispiel + README nachgezogen, echter Lauf grün (19M/104 Einträge, Offsite
+  19 110 143 B, 8 s).
 
 ## 2026-11-15 — Arten-Admin: Importe je Art, Index auf `FishCatch.speciesId` (#224)
 
