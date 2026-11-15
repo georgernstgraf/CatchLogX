@@ -1,0 +1,16 @@
+-- `FishCatch.samplingId` had no index, although the foreign key to `samplings`
+-- is `ON DELETE RESTRICT`: deleting a sampling made PostgreSQL look for
+-- referencing catches with a **sequential scan over the whole catch table**,
+-- once per deleted sampling (#211, measured 2026-11-15 on 464 654 catches /
+-- 10 497 samplings: the DELETE wipe took ~6 minutes at 100 % CPU, `TRUNCATE`
+-- 0.1 s; `deleteImport` went from 0.25 s for 7 304 catches to 8.3 s for
+-- 35 413 because it grows with the number of **samplings**).
+--
+-- Plain CREATE INDEX on purpose: this migration runs on an empty database in
+-- both paths — dev (wiped, 0 catches) and production in the cutover window
+-- (right after the wipe, see deploy/prod/cutover/README.md, "Phase 1c"). On a
+-- copy that still carries catches, create the index by hand with
+-- `CREATE INDEX CONCURRENTLY` outside a transaction instead of letting this
+-- migration run: Prisma wraps every migration in a transaction, so it would
+-- block the table for the duration of the build.
+CREATE INDEX "fish_catches_samplingId_idx" ON "fish_catches"("samplingId");

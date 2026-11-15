@@ -224,6 +224,12 @@ model FishCatch {
   // PIT lookups are per-tag (recapture detection, #184); without this index
   // they are sequential scans over the whole catch table.
   @@index([pitDec])
+  // The FK to `samplings` is `onDelete: Restrict`, so every deleted sampling
+  // makes PostgreSQL look for catches that still reference it. Without this
+  // index that check seq-scans the whole catch table once per sampling —
+  // measured on 464 654 catches / 10 497 samplings: a `DELETE` wipe took
+  // ~6 minutes, `TRUNCATE` 0.1 s (#211).
+  @@index([samplingId])
   @@map("fish_catches")
 }
 
