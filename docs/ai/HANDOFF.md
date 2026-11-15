@@ -463,6 +463,24 @@ Superuser-Slots.
     Unit-Restart im Cutover, Phase-2-Schritt 10); offen bleibt nur die In-App-Seite
     #153.
 
+19. [ ] **`deploy-dev.yml` feuert auch auf `master`-Pushes** (beobachtet 2026-11-15):
+    Der Workflow deklariert `workflow_run.branches: [dev]`, aber Run 43716280746
+    hat `event: workflow_run`, `head_branch: master`, `head_sha: 788be5b` und die
+    Dev-Instanz neu deployt (`completed/success`); dasselbe bei `9eefb21`. Der
+    `if`-Guard (`workflow_run.event == 'push'`) greift, der Branch-Filter
+    offenbar nicht. Folge: jeder `master`-Merge restartet `catchlogx.service` auf
+    `claw` und zieht `migrate deploy` gegen die Dev-DB. Inhaltlich heute harmlos
+    (dev == master), aber es widerspricht `ARCHITECTURE.md` („fires on dev") —
+    prüfen, ob der Filter auf `workflow_run.branches` gegen den **head branch des
+    auslösenden** Runs greift und ob ein `if` auf `github.event.workflow_run.head_branch == 'dev'`
+    nötig ist.
+20. [ ] **`P2010`/`42601` aus der SQL-Seite auf Prod** (beobachtet 2026-11-15, 11:45 UTC):
+    das Prod-Journal zeigt `code: 'P2010', meta: { code: '42601', message: 'ERROR:
+    syntax error at or near "select"' }` samt Stacktrace aus `_transactionWithCallback`.
+    Herkunft (Nutzer-Query vs. App-Code) unklar; die SQL-Seite lief bei der
+    Cutover-Verifikation. Reproduzieren mit der gespeicherten Query und die
+    Fehlermeldung an der Oberfläche prüfen, bevor #121/#153 als erledigt gelten.
+
 Kontext: Das Epic #125 bleibt offen, solange `CatchLogX-Data#2` offen ist. Vom
 Produktions-Upgrade-Pfad #137–#153 sind #138–#143 und #150/#152 erledigt; offen
 sind #144 (gated Pipeline), #153 (Data-Access-Seite) und #145 (Wissensbasis).

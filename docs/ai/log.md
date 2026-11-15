@@ -16,7 +16,12 @@
 * **Verifikation**: Prod-Deploy `9eefb21` grün (Health 200, 0 offene
   Migrationen); Backup-Satz `20261115T124937Z` gegen `sha256sum -c` auf `claw`
   geprüft; Dev-Reseed `EXIT=0`, Zählwerte identisch, `clx_readonly` auf vier
-  Tabellen, `clx_prev` weg, App 200.
+  Tabellen, `clx_prev` weg, App 200; Restore-Probe auf Prod (`catchlogx-backup
+  probe`) grün in 1 s; `okf-check` 8 Concepts, nur die bekannten Host-Tag-Warnungen.
+* **Offen (HANDOFF 19/20)**: `deploy-dev.yml` feuert auch auf `master`-Pushes
+  (Run 43716280746, `head_branch: master` trotz `branches: [dev]`);
+  `P2010`/`42601` aus der SQL-Seite im Prod-Journal (11:45 UTC) ohne bekannte
+  Herkunft.
 
 ## 2026-11-14 — Fischarten-Verwaltung im Admin-Panel (#201) und schnelleres Lint-Gate (#195)
 
