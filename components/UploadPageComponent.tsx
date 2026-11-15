@@ -303,10 +303,10 @@ const UploadPageComponent = () => {
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-              Upload Excel Files
+              Import Excel Files
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
-              Upload one or more Excel files. A bulk upload is treated as a
+              Import one or more Excel files. A bulk import is treated as a
               whole: either every file passes validation and is imported, or
               nothing is imported.
             </p>
@@ -350,12 +350,12 @@ const UploadPageComponent = () => {
                       At most {MAX_UPLOAD_FILES} files,{" "}
                       {MAX_UPLOAD_FILE_MB} MiB per file and{" "}
                       {Math.round(MAX_UPLOAD_TOTAL_BYTES / (1024 * 1024))} MiB in
-                      total per upload
+                      total per import
                     </li>
                   </ul>
                   <p className="mt-3 text-xs bg-orange-100 dark:bg-orange-900/40 p-2 rounded">
-                    <strong>Important:</strong> All uploaded files are validated
-                    together. If a single file fails, the whole upload is
+                    <strong>Important:</strong> All selected files are validated
+                    together. If a single file fails, the whole import is
                     rejected and nothing is imported.
                   </p>
                 </div>
@@ -376,10 +376,10 @@ const UploadPageComponent = () => {
                   </p>
                 </div>
 
-                {/* Upload report */}
+                {/* Import report */}
                 <div className="space-y-3">
                   <h3 className="font-semibold text-gray-900 dark:text-gray-100">
-                    Upload report
+                    Import report
                   </h3>
                   {report.map((entry) => (
                     <FileReportRow key={entry.fileName} report={entry} />
@@ -391,7 +391,7 @@ const UploadPageComponent = () => {
                     onClick={resetUpload}
                     className="px-6 py-3 rounded-lg font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   >
-                    Start new upload
+                    Start new import
                   </button>
                 </div>
               </div>
@@ -439,7 +439,7 @@ const UploadPageComponent = () => {
                     </p>
                     <p className="text-sm text-[#357174] mb-4 font-medium">
                       📋 Use the provided template files as the basis for your
-                      upload
+                      import
                     </p>
                     <button
                       onClick={() => fileInputRef.current?.click()}
@@ -541,7 +541,7 @@ const UploadPageComponent = () => {
                   {selectedFiles.length === 1 ? "" : "s"} ·{" "}
                   {formatFileSize(totalBytes)}
                   {tooManyFiles &&
-                    ` — at most ${MAX_UPLOAD_FILES} files per upload`}
+                    ` — at most ${MAX_UPLOAD_FILES} files per import`}
                   {tooLarge &&
                     ` — at most ${Math.round(
                       MAX_UPLOAD_TOTAL_BYTES / (1024 * 1024),
@@ -577,7 +577,7 @@ const UploadPageComponent = () => {
                 {report.length > 0 && (
                   <div className="space-y-3">
                     <h3 className="font-semibold text-gray-900 dark:text-gray-100">
-                      Upload report
+                      Import report
                     </h3>
                     {report.map((entry) => (
                       <FileReportRow key={entry.fileName} report={entry} />
@@ -598,13 +598,13 @@ const UploadPageComponent = () => {
                   <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                     <h3 className="text-sm font-medium text-red-800 mb-2">
                       {report.length > 0
-                        ? "Upload rejected — files were not imported"
+                        ? "Import rejected — files were not imported"
                         : "Import failed"}
                     </h3>
                     <p className="text-sm text-red-700">{errorMessage}</p>
                     {zipToken && (
                       <p className="text-sm text-red-700 mt-1">
-                        Fix the marked cells in the downloaded files and upload
+                        Fix the marked cells in the downloaded files and import
                         again.
                       </p>
                     )}

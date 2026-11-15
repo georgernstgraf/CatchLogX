@@ -472,8 +472,8 @@ export type ImportListItem = {
   createdAt: Date;
   samplings: number;
   userId: string;
-  uploadedByUsername: string;
-  uploadedByName: string | null;
+  importedByUsername: string;
+  importedByName: string | null;
 };
 
 /**
@@ -501,8 +501,8 @@ export async function listImports(options?: {
   return rows.map(({ user, _count, ...row }) => ({
     ...row,
     samplings: _count.samplings,
-    uploadedByUsername: user.username,
-    uploadedByName: user.name,
+    importedByUsername: user.username,
+    importedByName: user.name,
   }));
 }
 

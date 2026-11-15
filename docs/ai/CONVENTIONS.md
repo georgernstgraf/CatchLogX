@@ -16,6 +16,25 @@ Follow these without question. Do not deviate unless explicitly told.
 - UI text: English
 - Code comments and variable names: English
 
+## Terminology: Import vs. Upload (#223)
+- **Import** is the domain term: the `Imports` row and the finished action of
+  committing a file's data to the database. UI: "All Imports", "My Imports",
+  "New Import", "Imported by", "Imported at", "Import report", "Import Excel
+  files", "Importing…".
+- **Upload** is only the byte transport: file picker/dropzone, the HTTP routes
+  (`/api/upload/*`), the validation pipeline (`services/uploadService.ts`,
+  `lib/upload-client.ts`, `lib/uploadReport.ts`) and the transfer limits
+  (file count, MiB).
+- A **template file (Vorlage)** is *uploaded*, not imported — an admin uploads
+  it, users download and fill it in. `TemplateFiles.uploadedByUserId` keeps its
+  name for that reason.
+- Code identifiers follow the same rule: the import list payload carries
+  `importedByUsername` / `importedByName`; template files carry
+  `uploadedByUserId`.
+- URLs are deliberately unchanged (`/upload`, `/my-uploads`, `/api/upload/*`):
+  renaming them would break bookmarks and doc links. The page at `/upload` is
+  the **import** page.
+
 ## File Types
 - New components: `.tsx` (TypeScript + JSX)
 - Legacy files: some `.jsx` files exist (LoginForm, ForgotPasswordForm)

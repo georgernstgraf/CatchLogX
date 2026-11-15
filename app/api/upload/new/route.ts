@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
     if (files.length > MAX_UPLOAD_FILES) {
       return NextResponse.json(
-        { error: `Too many files: at most ${MAX_UPLOAD_FILES} per upload.` },
+        { error: `Too many files: at most ${MAX_UPLOAD_FILES} per import.` },
         { status: 400 },
       );
     }

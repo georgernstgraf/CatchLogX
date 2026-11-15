@@ -168,13 +168,13 @@ describe("uploadFiles", () => {
   });
 
   it("surfaces structural errors as a plain message", async () => {
-    respond({ error: "Too many files: at most 20 per upload." }, false);
+    respond({ error: "Too many files: at most 20 per import." }, false);
 
     const outcome = await uploadFiles([new File(["x"], "a.xlsx")]);
 
     expect(outcome).toMatchObject({
       ok: false,
-      error: "Too many files: at most 20 per upload.",
+      error: "Too many files: at most 20 per import.",
       report: [],
     });
   });

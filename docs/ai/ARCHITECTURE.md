@@ -59,7 +59,7 @@ app/                    Next.js App Router pages + API routes
   page.tsx              Dashboard (ProtectedRoute → DashboardComponent)
   globals.css           Tailwind import + dark mode CSS variables
   login/page.jsx        Login page
-  upload/page.tsx       File upload page
+  upload/page.tsx       Import page (select files + upload)
   admin/page.tsx        Admin panel (user/import management)
   about/page.tsx        About page with contact info
   my-uploads/page.tsx   User's own imports (with delete + download)
@@ -81,13 +81,13 @@ components/             React components (all client-side)
   ProtectedRoute.tsx        Route guard, redirects to /login
   Sidebar.tsx               Left sidebar (nav + user info + logout)
   DashboardComponent.tsx    Dashboard shell
-  UploadPageComponent.tsx   File upload page with validation
+  UploadPageComponent.tsx   Import page with validation (select + upload)
   SqlQueryComponent.tsx     SQL query UI with results table + map
   MapComponent.tsx          Leaflet map with marker support
-  AdminPageComponent.tsx    Admin user/upload management
+  AdminPageComponent.tsx    Admin user/import management
   AdminTemplateFilesManager.tsx Template file management UI
   AdminFishSpeciesManager.tsx Fish species management UI (admin, #201)
-  MyUploadsPageComponent.tsx User's upload list
+  MyUploadsPageComponent.tsx User's own imports list
 lib/                    Server-side utilities
   prisma.ts             Prisma singleton (imports from app/generated/prisma)
   queryPrisma.ts        Second Prisma client as read-only role clx_readonly (query UI only, #121)
@@ -144,7 +144,7 @@ Sampling.importId NOT NULL ──> Imports   (provenance by construction, #202)
 FishCatch: pitDec, pitHex, recapture; @@index([pitDec])
 ```
 
-`Uploads` and the `UploadStates` enum are gone (#202): an upload imports
+`Uploads` and the `UploadStates` enum are gone (#202): an import commits
 directly, there is no admin review step. Deleting an import removes its
 catches, its samplings, the stored file **and the `Imports` row itself** — no
 tombstone (#184, decided 2026-11-15); the only trace is a log line in the

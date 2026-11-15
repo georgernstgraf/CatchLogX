@@ -6,7 +6,7 @@ import Sidebar from "./Sidebar";
 import DarkModeToggle from "./DarkModeToggle";
 
 /**
- * The caller's own imports (#202). An upload imports directly, so there is no
+ * The caller's own imports (#202). An import commits directly, so there is no
  * review status any more: every row listed here is an import that exists.
  * A deleted import leaves no row behind (#184).
  */
@@ -18,8 +18,8 @@ type ImportItem = {
   createdAt: string;
   samplings: number;
   userId: string;
-  uploadedByUsername: string;
-  uploadedByName: string | null;
+  importedByUsername: string;
+  importedByName: string | null;
 };
 
 function formatDateTime(dateString: string): string {
@@ -73,13 +73,13 @@ function normalizeImportEntry(value: unknown): ImportItem | null {
         : new Date().toISOString(),
     samplings: countOrZero(candidate.samplings),
     userId: typeof candidate.userId === "string" ? candidate.userId : "",
-    uploadedByUsername:
-      typeof candidate.uploadedByUsername === "string"
-        ? candidate.uploadedByUsername
+    importedByUsername:
+      typeof candidate.importedByUsername === "string"
+        ? candidate.importedByUsername
         : "",
-    uploadedByName:
-      typeof candidate.uploadedByName === "string"
-        ? candidate.uploadedByName
+    importedByName:
+      typeof candidate.importedByName === "string"
+        ? candidate.importedByName
         : null,
   };
 }

@@ -646,7 +646,7 @@ describe("listImports", () => {
     vi.mocked(prisma.imports.findMany).mockResolvedValue([storedRow] as any);
   });
 
-  it("flattens the uploader and the sampling count", async () => {
+  it("flattens the importer and the sampling count", async () => {
     const [item] = await listImports();
 
     expect(item).toMatchObject({
@@ -654,8 +654,8 @@ describe("listImports", () => {
       fileName: "a.xlsx",
       rowCount: 3,
       samplings: 2,
-      uploadedByUsername: "u1",
-      uploadedByName: "Uwe",
+      importedByUsername: "u1",
+      importedByName: "Uwe",
     });
     expect(item).not.toHaveProperty("user");
     expect(item).not.toHaveProperty("_count");

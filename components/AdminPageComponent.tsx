@@ -17,7 +17,7 @@ import AdminTemplateFilesManager from "./AdminTemplateFilesManager";
 import AdminFishSpeciesManager from "./AdminFishSpeciesManager";
 import { useAuth } from "./AuthProvider";
 
-/** One `Imports` row (#202): an upload imports directly, no review step. */
+/** One `Imports` row (#202): an import commits directly, no review step. */
 type ImportItem = {
   id: string;
   fileName: string;
@@ -26,8 +26,8 @@ type ImportItem = {
   createdAt: string;
   samplings: number;
   userId: string;
-  uploadedByUsername: string;
-  uploadedByName: string | null;
+  importedByUsername: string;
+  importedByName: string | null;
 };
 
 type User = {
@@ -126,8 +126,8 @@ const AdminPageComponent = () => {
       if (search.length === 0) return true;
       return (
         item.fileName.toLowerCase().includes(search) ||
-        item.uploadedByUsername.toLowerCase().includes(search) ||
-        (item.uploadedByName ?? "").toLowerCase().includes(search)
+        item.importedByUsername.toLowerCase().includes(search) ||
+        (item.importedByName ?? "").toLowerCase().includes(search)
       );
     });
   }, [importSearch, imports]);
@@ -365,7 +365,7 @@ const AdminPageComponent = () => {
               }`}
             >
               <FileSpreadsheet className="mr-2" size={20} />
-              Imports
+              All Imports
             </button>
             <button
               onClick={() => setActiveTab("users")}
@@ -407,10 +407,10 @@ const AdminPageComponent = () => {
             {activeTab === "imports" && (
               <div>
                 <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-4">
-                  Imports
+                  All Imports
                 </h2>
                 <p className="text-gray-600 dark:text-gray-400 mb-6">
-                  All imports in the system. Deleting an import removes its
+                  Every import in the system. Deleting an import removes its
                   catches, its samplings and the original file.
                 </p>
 
@@ -445,7 +445,7 @@ const AdminPageComponent = () => {
                             File
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Uploaded by
+                            Imported by
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                             Rows
@@ -475,9 +475,9 @@ const AdminPageComponent = () => {
                                 {item.fileName}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                                {item.uploadedByUsername}
-                                {item.uploadedByName &&
-                                  ` (${item.uploadedByName})`}
+                                {item.importedByUsername}
+                                {item.importedByName &&
+                                  ` (${item.importedByName})`}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                                 {item.rowCount}

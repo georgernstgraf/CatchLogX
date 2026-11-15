@@ -34,7 +34,7 @@ const Sidebar = () => {
       protected: false,
     },
     {
-      title: "Upload",
+      title: "New Import",
       path: "/upload",
       icon: FilePlus2Icon,
       protected: false,
