@@ -1,5 +1,28 @@
 # Persistenz-Log
 
+## 2026-11-15 — Release, Post-Cutover-Backup repariert, Dev-Reseed (#204)
+
+* **Update**: `HANDOFF.md` (neuer Stand-Block; vier überholte Aussagen korrigiert:
+  Dev-Startzustand für Phase 1b, „dev-restore scheitert an jedem Prod-Archiv",
+  doppeltes „Nächster Schritt: Phase 1b", `QUERY_DATABASE_URL` als offen),
+  `STATE.md` (Stand-Block + Relativierung des #212-Bullets), `PITFALLS.md`
+  (gelöschte Tabelle = kein Backup).
+* **Creation**: `deploy/prod/backup/backup.sh` zählt `Imports` statt `Uploads`
+  (#216); README-Zeile nachgezogen.
+* **Reason**: Der erste Backup-Lauf nach dem Cutover starb nach 2 s an der
+  gedroppten Tabelle `Uploads` — Produktion war seit dem Cutover ohne Backup,
+  der 02:30-Timer wäre genauso gescheitert. Nachweis ist der reale Lauf
+  (`Result=success`, 13 s, Offsite-Upload 19 110 104 Bytes).
+* **Verifikation**: Prod-Deploy `9eefb21` grün (Health 200, 0 offene
+  Migrationen); Backup-Satz `20261115T124937Z` gegen `sha256sum -c` auf `claw`
+  geprüft; Dev-Reseed `EXIT=0`, Zählwerte identisch, `clx_readonly` auf vier
+  Tabellen, `clx_prev` weg, App 200; Restore-Probe auf Prod (`catchlogx-backup
+  probe`) grün in 1 s; `okf-check` 8 Concepts, nur die bekannten Host-Tag-Warnungen.
+* **Offen (HANDOFF 19/20)**: `deploy-dev.yml` feuert auch auf `master`-Pushes
+  (Run 43716280746, `head_branch: master` trotz `branches: [dev]`);
+  `P2010`/`42601` aus der SQL-Seite im Prod-Journal (11:45 UTC) ohne bekannte
+  Herkunft.
+
 ## 2026-11-14 — Fischarten-Verwaltung im Admin-Panel (#201) und schnelleres Lint-Gate (#195)
 
 * **Creation**: `services/fishSpeciesService.ts`, `app/api/admin/fish-species/`

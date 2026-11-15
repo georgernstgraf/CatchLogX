@@ -1,0 +1,65 @@
+# Dependabot-Version-Updates (#109).
+#
+# Ohne diese Datei läuft Dependabot nur als Security-Alert-Scanner: es meldet,
+# aber es öffnet keine Aktualisierungs-PRs. Genau das war der Zustand bis
+# 2026-11-15 — 42 Alerts, davon 40 stale, keiner davon in einem PR.
+#
+# Leitlinie: **Patches und Minors automatisch, Majors von Hand.** Major-Sprünge
+# hängen an eigenen Tickets (#174 Stufe 3: nodemailer 10, eslint 10, typescript 7,
+# xlsx-Entscheidung; #175 Stufe 2: prisma, react, zod, CI-Node), weil sie
+# Migrationen, Flat-Config-Umbauten oder API-Brüche mitbringen.
+#
+# Version-Updates laufen gegen `dev` (Trunk, `target-branch`); `master` bekommt
+# sie über den Release-PR. Ausnahme bleibt die **Security-Update**-Funktion:
+# die öffnet ihre PRs immer gegen den Default-Branch (`master`), weil sie nicht
+# über diese Datei gesteuert wird. So ein PR ist ein normaler PR mit Review und
+# muss anschließend nach `dev` nachgezogen werden.
+version: 2
+updates:
+  # App- und Tooling-Abhängigkeiten (next, prisma, react, eslint, vitest …)
+  - package-ecosystem: "npm"
+    directory: "/"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Vienna"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    labels:
+      - "dependencies"
+    groups:
+      # Ein PR pro Woche statt ein Dutzend: Patches/Minos, die zusammen
+      # gebaut, gelintet und getestet werden.
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      # Majors bleiben Handarbeit (siehe oben).
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # exceljs 4.x ist die letzte Linie ohne Downgrade; der "Fix" von npm audit
+      # wäre 3.4.0 — ein Rückschritt, kein Update (#174).
+      - dependency-name: "exceljs"
+      # xlsx hat keinen npm-Fix; die Entscheidung (SheetJS-Channel oder Ersatz)
+      # ist #174, nicht ein PR.
+      - dependency-name: "xlsx"
+
+  # Compose-Dateien (PostgreSQL 16 für Dev, prod-Compose für den Rückfallweg)
+  - package-ecosystem: "docker"
+    directory: "/"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:15"
+      timezone: "Europe/Vienna"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    labels:
+      - "dependencies"
