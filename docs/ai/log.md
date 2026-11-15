@@ -20,7 +20,7 @@
   Neubewertung von #159.
 * **Verifikation**: `gh issue list` zeigt 31 offene Issues (27 Rest + 4 neue);
   keine Schließung mit offenen Sub-Issues (#132 vor #88 geschlossen; #204 und
-  #183 hatten nur geschlossene).
+  #183 hatten nur geschlossene). Issue #222 geschlossen.
 
 ## 2026-11-15 (Nachtrag) — #174 Stufe 3 reisefertig entschieden
 

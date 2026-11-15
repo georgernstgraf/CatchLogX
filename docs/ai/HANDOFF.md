@@ -3,7 +3,7 @@ type: Handoff
 title: Handoff
 description: Offene Aufgaben fuer die naechste Session.
 tags: [catchlogx, handoff]
-generated: { by: opencode/knowledge-persistence, at: 2026-11-15T18:01:00Z }
+generated: { by: opencode/knowledge-persistence, at: 2026-11-15T18:05:00Z }
 status: stable
 ---
 
@@ -11,7 +11,7 @@ status: stable
 
 Offene Aufgaben für die nächste Session.
 
-**Stand 2026-11-15 (Backlog-Triage, #222):** 54 offene Issues wurden gegen Code,
+**Stand 2026-11-15 (Backlog-Triage, #222, Issue geschlossen):** 54 offene Issues wurden gegen Code,
 Git-Historie und `docs/ai/` geprüft; **27 sind geschlossen** (18 `completed`,
 9 `not planned`), 31 bleiben offen. Belege stehen als Kommentar in jedem Issue.
 Nachfolger für die drei abgespaltenen Reste: **#221** (`deploy-dev.yml` deployt
