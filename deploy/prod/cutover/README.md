@@ -178,12 +178,18 @@ TRUNCATE TABLE fish_catches, samplings, river_sites RESTART IDENTITY;
 
 `TRUNCATE` takes **0.1 s**. The `DELETE` chain it replaces
 (`DELETE FROM fish_catches; DELETE FROM samplings; DELETE FROM river_sites;`
-plus three `setval` calls) needs **~6 minutes** for 464 654 catches / 10 497
-samplings: `fish_catches` carries only `fish_catches_pkey` — no index on
-`samplingId` — so the `ON DELETE RESTRICT` foreign key seq-scans the whole
+plus three `setval` calls) needed **~6 minutes** for 464 654 catches / 10 497
+samplings: `fish_catches` carried only `fish_catches_pkey` — no index on
+`samplingId` — so the `ON DELETE RESTRICT` foreign key seq-scanned the whole
 catch table once per deleted sampling (backend at 99.7 % CPU for minutes). All
 three tables are named in one statement, so no `CASCADE` is needed, and
 `RESTART IDENTITY` replaces the three `setval` calls.
+
+The index now exists (#211), and it changes the picture without changing the
+recipe: the same wipe as `DELETE` runs in **2.4 s** on the prod clone (with
+`river_sites` 2.0 s of it), so a `DELETE` wipe is no longer dangerous — but
+`TRUNCATE` stays: one statement, sequence reset included, no per-row WAL, and
+it makes the intent unmistakable.
 
 - **`fish_species` is the 165-entry master from `assets/species.json`**, not
   the old 125-entry seed — the import validates every species against it, and a
@@ -375,6 +381,13 @@ state Phase 1b wants: the file hashes are gone with the imports, so the 13
 files can be uploaded again without hitting the duplicate check. `clx_prev`
 (the 113 102-catch state before the drill) and
 `~/backups/pre-route-c-<timestamp>.dump` are kept as the way back.
+
+The drill's slowest finding was fixed the same day (#211, release `92b9132`):
+`FishCatch.samplingId` now has an index. Measured before/after on the same
+data — the foreign-key check `SELECT 1 … FOR KEY SHARE` drops from 23.8 ms to
+0.13 ms, deleting 100 samplings from 1 440 ms to 3.8 ms, the full `DELETE`
+wipe of the prod clone from ~6 min to **2.4 s**, and `deleteImport` for
+`2026_T` (35 413 catches / 612 samplings) from **8.3 s to 0.52 s**.
 
 ## Phase 2 — production window — TODO (#204)
 

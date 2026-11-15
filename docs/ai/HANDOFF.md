@@ -23,11 +23,16 @@ Phase 1a, bei erhaltenen 9 Usern / 3 Templates / 2 Queries) → **alle 9 Importe
 per GUI-Endpunkt löschen** (14 s gesamt, danach 0 Fänge). Dev steht auf
 0 Fängen / 165 Arten / 9 Usern / 3 Templates, ohne Import-Hashes — also genau
 im Startzustand für Phase 1b, die 13 Dateien lassen sich wieder hochladen.
-Zwei Nebenbefunde mit Ticket: `fish_catches.samplingId` hat **keinen Index**
-(der `DELETE`-Wipe braucht deshalb ~6 min statt 0,1 s; ebenso skaliert
-`deleteImport`) und `~/catchlogx-dev-restore.sh` scheitert seit #202 an jedem
-Prod-Archiv — es bricht jetzt **vor** dem App-Start ab und nennt beide Wege
-(README + `PITFALLS.md`).
+**Der Index ist da (#211, Release `92b9132`):** `FishCatch.samplingId` war der
+Grund für das quadratische Löschen — der `ON DELETE RESTRICT`-FK scannte die
+Fangtabelle einmal pro Sampling. Vorher/nachher auf denselben Daten: RI-Check
+23,8 ms → 0,13 ms, `deleteImport` für `2026_T` 8,3 s → 0,52 s, voller
+`DELETE`-Wipe des Prod-Klons ~6 min → 2,4 s. `TRUNCATE` bleibt trotzdem das
+Wipe-Rezept; `CONCURRENTLY` ist bei 244 ms Index-Build auf 464 654 Zeilen kein
+Thema (und von Prisma ohnehin nicht nutzbar). Guard: `lib/schemaIndexes.test.ts`.
+Die beiden Nebenbefunde von vorher: `~/catchlogx-dev-restore.sh` scheitert seit
+#202 an jedem Prod-Archiv — es bricht jetzt **vor** dem App-Start ab und nennt
+beide Wege (README + `PITFALLS.md`).
 **Nächster Schritt: Phase 1b (#204)** — sobald `CatchLogX-Data#7` landet (Arten-Reparatur **plus** `List`-Blatt für D), alle 13 Dateien auf dem leeren Dev, erwartete 183 855 Zeilen; danach Phase 2 (Prod-Fenster) mit dem Wipe aus „Phase 1c".
 
 **Stand 2026-11-15 (Trockenlauf Phase 1a grün, #204):** 9 der 13 Dateien sind
