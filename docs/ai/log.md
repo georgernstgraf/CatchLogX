@@ -1,5 +1,18 @@
 # Persistenz-Log
 
+## 2026-11-15 — Status-Spalte bei Imports entfernt (#225)
+
+* **Update**: `STATE.md` (Eintrag zu #225).
+* **Creation**: #225 (Admin-GUI: Status-Spalte bei Imports entfernen, Label
+  `diplomarbeit`).
+* **Reason**: Die Spalte zeigte immer denselben hart verdrahteten Badge
+  „Active"; `model Imports` hat kein Status-Feld (mit `UploadStates` fiel der
+  letzte Rest der Review-Statemachine in #202). Kein Code-Pfad konnte je etwas
+  anderes setzen — die Spalte war irreführend.
+* **Verifikation**: Lint 0 Fehler / 12 vorbestehende Warnungen, Typecheck,
+  382 Tests grün; kein Unit-Test möglich (Client-Komponente, kein jsdom).
+  Issue #225 geschlossen.
+
 ## 2026-11-15 — Docker-Reste auf beiden Hosts abgeräumt (#220)
 
 * **Update**: `PITFALLS.md` (Compose-Guard-, `docker0`- und `clx-web`-Einträge

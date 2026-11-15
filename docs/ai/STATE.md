@@ -3,13 +3,15 @@ type: State
 title: Project State
 description: Aktueller Projektstand.
 tags: [catchlogx, state]
-generated: { by: opencode/knowledge-persistence, at: 2026-11-15T18:33:11Z }
+generated: { by: opencode/knowledge-persistence, at: 2026-11-15T18:51:28Z }
 status: stable
 ---
 
 # Project State
 
 Current status as of 2026-11-15.
+
+- **Status-Spalte bei Imports entfernt (#225, 2026-11-15, Issue geschlossen, `40e83e4`)**: Die Spalte „Status" in der Import-Tabelle des Admin-Dashboards zeigte immer denselben hart verdrahteten Badge „Active" — `model Imports` hat kein Status-Feld (mit der Review-Statemachine fiel `UploadStates` in #202), es gab also keinen Code-Pfad, der je etwas anderes hätte setzen können. Reine JSX-Entfernung (Header + Badge-Zelle, 8 Zeilen in `components/AdminPageComponent.tsx`); die Tabelle hat jetzt **File · Imported by · Rows · Samplings · Imported at · Actions**. Die Status-Spalte der **Users**-Tabelle (`isActive` → „Active"/„Inactive") und „Account Status" im Edit-User-Dialog sind echte Information und bleiben. Kein Schema-/API-/Service-Change; `/my-uploads` hat keine Status-Spalte. Gate: Lint 0 Fehler / 12 vorbestehende Warnungen (#173), Typecheck, **382 Tests** grün; kein Unit-Test möglich (Client-Komponente, kein jsdom-Harness — in der Commit-Message benannt).
 
 - **Arten-Admin: Catches-Zahl öffnet die Importe der Art (#224, 2026-11-15, deployt `d4968d9`)**: Die Fangzahl in `components/AdminFishSpeciesManager.tsx` ist jetzt ein Button (Chevron, `aria-expanded`); er klappt eine Zeile `colSpan={5}` auf und lädt **erst dann** `GET /api/admin/fish-species/[id]/imports` (lazy, Cache pro Art, „Refresh" leert ihn). Pro Import steht `Datei (Importeur) — Datum`, jüngster zuoberst (`createdAt desc`, Tiebreak `fileName`); bei 0 Fängen bleibt die Zahl Text. `listSpeciesImports(speciesId)` in `services/fishSpeciesService.ts` ist **eine** Abfrage (`imports.findMany` mit `samplings.some.catches.some.speciesId`) — die Eindeutigkeit ist strukturell, weil jedes Sampling an genau einem Import hängt; unbekannte Art → `null` → 404. Die Importeur-Felder heißen `importedByUsername`/`importedByName` wie in `listImports` (`CONVENTIONS.md`). Dazu `@@index([speciesId])` auf `FishCatch` (Migration `20261115182236_fish_catch_species_id_index`, plain `CREATE INDEX` wie #211) und ein Guard in `lib/schemaIndexes.test.ts` (rot ohne den Index, verifiziert). Gate: **382 Tests** (11 neu), Lint 0 Fehler / 12 vorbestehende Warnungen, Typecheck; die Komponente ist ohne jsdom nicht testbar (in der Commit-Message benannt). Beide Deploys grün (`824ff72` Index, `d4968d9` Feature, Health-Check 200); `GET /api/admin/fish-species/1/imports` antwortet ohne Session 401.
 
