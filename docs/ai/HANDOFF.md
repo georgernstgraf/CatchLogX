@@ -481,15 +481,6 @@ Superuser-Slots.
     Cutover-Verifikation. Reproduzieren mit der gespeicherten Query und die
     Fehlermeldung an der Oberfläche prüfen, bevor #121/#153 als erledigt gelten.
 
-21. [ ] **Dependabot-Alerts triagieren (#109, gemessen 2026-11-15)**: 42 offene
-    Alerts, aber **alle** hängen an `version_requirement: 15.2.2` (Manifest vor dem
-    16.4.3-Upgrade) — die 6 critical sind gegen `next <= 15.5.27` und damit längst
-    gefixt. `npm audit` auf `dev` sagt **13: 0 critical, 4 high, 9 moderate**; die 4
-    high sind `nodemailer <=10.1.3`, `xlsx` und die zwei Pakete, die nur *via*
-    nodemailer zählen (`next-auth`, `@next-auth/prisma-adapter`) — alle bei #174.
-    Nächster Schritt: Dependabot-Re-Evaluation anstoßen + stale Alerts schließen,
-    dann `npm audit fix` für die 7 moderaten `@typescript-eslint`/`minimatch`-Funde.
-    Details im Kommentar von #109.
 
 Kontext: Das Epic #125 bleibt offen, solange `CatchLogX-Data#2` offen ist. Vom
 Produktions-Upgrade-Pfad #137–#153 sind #138–#143 und #150/#152 erledigt; offen

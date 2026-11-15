@@ -1,5 +1,22 @@
 # Persistenz-Log
 
+## 2026-11-15 — Dependabot konfiguriert, 42 stale Alerts geschlossen (#109)
+
+* **Creation**: `.github/dependabot.yml` — npm + docker, wöchentlich (Mo 06:00
+  Wien), `target-branch: dev`, Minor/Patch gebündelt, Majors ignoriert,
+  `exceljs`/`xlsx` ausgenommen.
+* **Update**: `STATE.md` (Dependabot-Posten von „Pending" nach „Completed"),
+  `HANDOFF.md` (Aufgabe 21 entfällt), `DECISIONS.md` (Entscheidung 2026-11-15),
+  `ARCHITECTURE.md` (Abschnitt Dependency-Pflege), `package-lock.json`
+  (`@typescript-eslint` 8.72.1 → 8.72.2, dev-only).
+* **Reason**: Es gab keine Dependabot-Konfiguration — der Scanner meldete 42
+  Alerts, ohne je einen PR zu öffnen. Alle 42 waren stale (26 × `next` gegen
+  `<= 15.5.27` bei installiertem 16.4.3 usw.), einzeln per node-semver gegen das
+  Lockfile geprüft und mit Grund `inaccurate` dismissed.
+* **Verifikation**: GitHubs Schema-Check für `dependabot.yml` grün; Alerts
+  **0 offen / 42 dismissed**; `npm audit` 13 (0 critical, 4 high → #174);
+  Gate: lint 0 Fehler, typecheck, 370 Tests.
+
 ## 2026-11-15 — Release, Post-Cutover-Backup repariert, Dev-Reseed (#204)
 
 * **Update**: `HANDOFF.md` (neuer Stand-Block; vier überholte Aussagen korrigiert:

@@ -3,7 +3,7 @@ type: Decisions
 title: Decisions
 description: Architektur- und Technikentscheidungen mit Begruendung (WAS und WARUM).
 tags: [catchlogx, decisions]
-generated: { by: opencode/knowledge-persistence, at: 2026-11-14T22:34:25Z }
+generated: { by: opencode/knowledge-persistence, at: 2026-11-15T14:40:00Z }
 status: stable
 ---
 
@@ -11,6 +11,13 @@ status: stable
 
 Architectural and technical decisions made in this project.
 Each entry documents WHAT was decided and WHY.
+
+## 2026-11-15: Dependabot patcht automatisch, Majors bleiben Handarbeit
+
+- **Choice**: `.github/dependabot.yml` lässt Dependabot wöchentlich (Mo 06:00 Wien) npm und docker prüfen, `target-branch: dev`, Minor- und Patch-Updates **gebündelt in einem PR** pro Woche. **Majors sind ignoriert** (`version-update:semver-major`), ebenso `exceljs` und `xlsx` (`.github/dependabot.yml`).
+- **Reason**: Bis 2026-11-15 gab es *keine* Konfiguration. Dependabot lief damit nur als Alert-Scanner: 42 Alerts, 40 davon stale, und kein einziger Aktualisierungs-PR — der Stand verrottete unbemerkt (genau das hatte #109 als „Zusätzlich" gefordert). Majors bringen dagegen Prisma-Migrationen, Flat-Config-Umbauten oder API-Brüche und brauchen Urteilsvermögen: sie gehören in #174 (Stufe 3) und #175 (Stufe 2), nicht in einen Bot-PR.
+- **Considered**: (a) alles automatisch inkl. Majors — verworfen, weil ein Major-PR desselben Bots, der nicht baut, nur Rauschen erzeugt; (b) Dependabot ganz abschalten und `npm audit` in CI gaten — verworfen, weil das Repo ohne Dependabot gar keine Sicht auf neue Advisories hätte (die Alerts waren der einzige Kanal und standen wochenlang falsch).
+- **Tradeoff**: Security-Update-PRs (die andere Dependabot-Funktion, nicht über diese Datei gesteuert) zielen per GitHub-Design auf den Default-Branch `master` und müssen nach dem Merge nach `dev` nachgezogen werden — bewusst akzeptiert, weil dieser PR ein normaler PR mit Review ist.
 
 ## 2026-04-27: Custom Session System Over NextAuth Sessions
 - **Choice**: API routes use a hand-rolled cookie-based session system (`session-token` cookie → `Session` table) instead of NextAuth's `getServerSession()`

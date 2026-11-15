@@ -3,7 +3,7 @@ type: History Archive
 title: History
 description: Append-only-Archiv ueberholter Wissenseintraege.
 tags: [catchlogx, history-archive]
-generated: { by: opencode/knowledge-persistence, at: 2026-11-15T12:53:11Z }
+generated: { by: opencode/knowledge-persistence, at: 2026-11-15T14:40:00Z }
 status: stable
 ---
 
@@ -12,6 +12,11 @@ status: stable
 Append-only archive of superseded knowledge entries.
 Each entry keeps its date, title, origin file, reason, and original text.
 
+## 2026-11-15 (SUPERSEDED 2026-11-15, origin: HANDOFF.md/STATE.md, reason: #109 geschlossen): 42 Dependabot-Alerts offen
+- **Original**: HANDOFF-Aufgabe 21 / STATE-Pending: „Dependabot-Alerts triagieren (#109, gemessen 2026-11-15): 42 offene Alerts, aber **alle** hängen an `version_requirement: 15.2.2` … Nächster Schritt: Dependabot-Re-Evaluation anstoßen + stale Alerts schließen, dann `npm audit fix` für die 7 moderaten `@typescript-eslint`/`minimatch`-Funde."
+- **Superseded by**: Dependabot ist seit PR #217 (`master` `11b5ed4`) konfiguriert; alle 42 Alerts wurden einzeln gegen `package-lock.json` geprüft und als `inaccurate` dismissed (0 offen). `npm audit fix` brachte nur `@typescript-eslint` 8.72.1 → 8.72.2 und ändert die Bilanz nicht — die 6 moderaten sind upstream blockiert (8.72.2 ist Spitze *und* Advisory-Oberkante), die 3 übrigen nur per exceljs-Downgrade.
+- **Origin**: `docs/ai/HANDOFF.md`, `docs/ai/STATE.md`
+- **Reason**: Der Posten ist erledigt; die verbleibenden 4 high liegen als Stufe 3 in #174, nicht mehr in #109.
 ## 2026-11-15 (SUPERSEDED 2026-11-15, origin: HANDOFF.md, reason: Post-Cutover-Dev-Reseed #204): Dev als leerer Startzustand für Phase 1b
 - **Original**: „Dev steht auf 0 Fängen / 165 Arten / 9 Usern / 3 Templates, ohne Import-Hashes — also genau im Startzustand für Phase 1b, die 13 Dateien lassen sich wieder hochladen." sowie zweimal „**Nächster Schritt: Phase 1b (#204)** — sobald `CatchLogX-Data#7` landet (Arten-Reparatur **plus** `List`-Blatt für D), alle 13 Dateien auf dem leeren Dev, erwartete 183 855 Zeilen; danach Phase 2 (Prod-Fenster)."
 - **Superseded by**: Der Reseed am 2026-11-15 (`~/catchlogx-dev-restore.sh 20261115T124937Z.tar.zst`) bringt die Produktionsdaten auf Dev (128 594 Fänge); Phase 2 ist gelaufen, Phase 1b ist Nachlauf auf Produktion, und das `List`-Blatt für D ist mit #213 gestrichen.

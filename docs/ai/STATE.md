@@ -3,7 +3,7 @@ type: State
 title: Project State
 description: Aktueller Projektstand.
 tags: [catchlogx, state]
-generated: { by: opencode/knowledge-persistence, at: 2026-11-15T12:53:11Z }
+generated: { by: opencode/knowledge-persistence, at: 2026-11-15T14:40:00Z }
 status: stable
 ---
 
@@ -87,6 +87,7 @@ Kickoff 2026-09-19 (siehe `docs/meetings/2026-09-19-kickoff.md`, Protokoll + Auf
 - **Migration-only-Workflow etabliert** (#129): Die Migrations-History log bisher (`UserRoles`-Enum nie migriert); eine einzige Baseline `20261017190000_init` ist jetzt die Schema-Wahrheit, `db push` ist aus allen Deploy-Pfaden verbannt, CI prüft Drift (`migration-drift`-Job), Shadow-DB `clx_shadow` für `migrate dev`. **Dev-DB aus der Baseline neu aufgebaut** (nur Seed-Daten). Die BOKU-Prod-DB wird **nicht** neu aufgebaut: die Adoption (#139) erhält alle Daten — Sessions, Password-Resets, Upload-Metadaten — und wandelt die 19 MinIO-Objekte (56.337.761 Bytes) in `FileBlob`-Rows um; die Produktion wird migrationsgeführt, sobald der Cutover (#141) im Vor-Ort-Fenster (#122) dispatcht ist (vorher ein verifiziertes `pg_dump`).
 
 ## Completed (this cycle)
+- [x] **Dependabot konfiguriert und Alert-Stand bereinigt (#109, 2026-11-15, Issue geschlossen)**: Es gab **keine** `.github/dependabot.yml` — Dependabot lief nur als Alert-Scanner. Neu (PR #217, `master` `11b5ed4`): npm + docker wöchentlich, `target-branch: dev`, Minor/Patch gebündelt, **Majors ignoriert** (Stufe 2 = #175, Stufe 3 = #174), `exceljs`/`xlsx` ausgenommen. Alle **42 offenen Alerts waren stale** (26 × `next` gegen `<= 15.5.27` bei installiertem 16.4.3; `sharp` 0.35.5, `postcss` 8.5.32, `js-yaml` 4.3.2, `nanoid` 3.3.20, `brace-expansion` 1.1.21/2.1.7, `source-map-js` 1.2.2, `@humanfs/node` 0.16.8) — je einzeln per node-semver gegen `package-lock.json` geprüft und mit Grund `inaccurate` dismissed (**0 offen**, reversibel). `npm audit fix` hob nur `@typescript-eslint` 8.72.1 → 8.72.2 (dev-only) und ändert die Bilanz **nicht**: 13 Funde (0 critical, 4 high, 9 moderate). Die 4 high (`nodemailer <=10.1.3`, `xlsx`, `next-auth`/`@next-auth/prisma-adapter` via nodemailer) sind **#174**; 6 moderate sind upstream blockiert (8.72.2 ist Spitze *und* Advisory-Oberkante; minimatch 10.2.6 unter `typescript-estree`), 3 nur per exceljs-Downgrade.
 - [x] Dev-Re-Seed als manuelles Skript `~/catchlogx-dev-restore.sh` auf `claw`: Wipe + Restore aus dem neuesten Prod-Archiv, Migrationsschritt auf das Release-Schema, `clx_readonly`-Grants, Health-Check (#188, 2026-11-10)
 - [x] Off-site-Backup über SSH+Port-Knocking statt nginx-PUT: Klartext-`tar.zst` in `~catchlogx/backups`, Empfangs-Key per `rrsync -wo` eingeschränkt, Rotation als User-Timer (#192, 2026-11-10)
 - [x] Privates Datenrepo `CatchLogX-Data` angelegt, Daten übernommen, im README verlinkt (#125)
@@ -114,7 +115,6 @@ Kickoff 2026-09-19 (siehe `docs/meetings/2026-09-19-kickoff.md`, Protokoll + Auf
 - [x] Migration-only-Schema-Workflow etabliert (#129): eine Baseline `20261017190000_init` aus `schema.prisma`, `db push` aus allen Deploy-Pfaden verbannt, CI-Drift-Gate + Shadow-DB `clx_shadow`
 - [ ] NextAuth v4 is configured but not integrated with the custom session system
 - [ ] Fish search component was removed (issue #60)
-- [ ] Dependabot/Alerts (#109, neu vermessen 2026-11-15): 42 offene Alerts sind **stale** (alle gegen `next 15.2.2`, die 6 critical liegen hinter dem 16.4.3-Upgrade); `npm audit` = 13 (0 critical, 4 high: `nodemailer`/`xlsx` + 2 via-nodemailer, alle bei #174; 9 moderate teils per `npm audit fix` machbar)
 - [ ] BOKU-IT answer to the maintenance inquiry pending (see #115)
 
 ## Blockers
