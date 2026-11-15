@@ -244,6 +244,9 @@ sonst falsch zugewiesen (`Zdroba-Fisteag` ist **Armin**, nicht Rodion):
 | Alex | [@evictedI](https://github.com/evictedI) | Frontend Developer |
 | Jakob | [@HJakobTL](https://github.com/HJakobTL) | Testing |
 
+Die individuellen Themenstellungen (sinngemäß) und die daraus abgeleitete
+Ticket-Zuordnung stehen in [`docs/Themenstellungen.md`](docs/Themenstellungen.md).
+
 ### Erstes Team
 
 - Arman (Team Lead & Backend Developer)

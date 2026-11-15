@@ -197,6 +197,11 @@ Uploaded files and template files are stored as **PostgreSQL blobs** (`FileBlob`
 
 When committing, consult the `issue-workflow` skill. Every commit must reference a GitHub issue number (e.g. `#42`). Do not create commits without an existing issue.
 
+Ticket assignment follows `docs/Themenstellungen.md`: the label `diplomarbeit` marks
+thesis scope (reserved for the diploma students, agents leave it alone), and the
+assignee records who actually took the ticket. Production/infrastructure work stays
+with the supervisor and carries no `diplomarbeit` label.
+
 ## Skills
 
 Skills live in `.opencode/skills/` and are **committed to the repo** — every clone discovers them without extra setup.
