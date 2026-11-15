@@ -248,7 +248,11 @@ before and after, no `Imports` row, no orphan blob):
 untouched (1 095, shared), `Imports` row kept as tombstone (`deletedAt`,
 `deletedByUserId`, `blobId = null`, `rowCount` preserved). Re-import restored
 the counts; a second upload of the same bytes was refused with the duplicate
-message naming the import.
+message naming the import. Repeated at scale with `2026_T` (35 413 catches,
+612 samplings): the delete took **7.8 s** — over the old 5 s transaction
+default, so the same #209 fix was needed on the delete path — and removed
+exactly its rows (128 594 → 93 181 catches, 1 282 → 670 samplings, sites
+unchanged). Re-imported afterwards; dev is back at 128 594 / 1 282 / 1 095.
 
 ### 4. Rollback drill
 
