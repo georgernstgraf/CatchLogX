@@ -145,3 +145,34 @@ tail -20 /var/log/mail.log     # "status=sent (250 …)"
 The first real send is also the proof that IronPort accepts us: `mail.log`
 shows either `Verified TLS connection established` + `250 2.0.0 Ok: queued` or
 the reason it refused (typically `Sender address rejected` → wrong `MAIL_FROM`).
+
+## One-off mail by hand (2026-11-15)
+
+The host is the only machine with a working outbound mail path, so a message
+that has to reach real recipients is injected there — as `root` over SSH, from
+loopback:
+
+```sh
+# build the RFC 5322 message locally (Subject with umlauts → RFC 2047
+# encoded-word), then hand it to the queue on the host
+ssh root@141.244.222.191 'sendmail -oi -t -f ihyam_catchlogx@boku.ac.at' < message.eml
+sleep 8; ssh root@141.244.222.191 'tail -25 /var/log/mail.log'   # status=sent (250 …)
+```
+
+Recipients come from `To:`/`Cc:` (`-t`), the envelope sender is the account
+(`-f`). Proof of delivery is on the receiving side, not here: the receiver's
+`/var/log/maillog` shows `stat=Sent` plus `dkim=pass` / `DMARC_PASS` (for the
+2026-11-15 cutover announcement: SpamAssassin `-2.1`).
+
+Two limits are worth knowing before promising anybody a mail:
+
+- **`From:` cannot be a personal address.** IronPort rewrites/rejects a sender
+  that is not the authenticated account (it prepends BATV, seen as
+  `from=<prvs=…=ihyam_catchlogx@boku.ac.at>`), so the envelope and the `From:`
+  are the service account; put the human contact in `Reply-To:`.
+- **Sending from `think` is not an option.** `think`'s public address
+  (`84.115.211.12`) is outside the SPF record of `graf.priv.at`
+  (`v=spf1 ip4:78.41.116.33 -all`, DMARC `p=quarantine`), and its postfix has
+  no relayhost and `myorigin=localhost.localdomain` — anything sent there fails
+  DMARC. `murl.graf.priv.at` is the receiving MX, not a submission point.
+

@@ -545,7 +545,13 @@ database, so rollback is a restore, not an undo.
 
 ## Announcement
 
-**Sent text (2026-11-15, after the window).** Production holds **128 594
+**Text for the research group (2026-11-15, after the window).** A proof copy
+went out on 2026-11-15 13:19 to `georg@graf.priv.at` (Cc `lena@graf.priv.at`)
+from the production BOKU account `ihyam_catchlogx@boku.ac.at` — message id
+`<179474518447.1340517.3190257341133599268@catchlogx-server.boku.ac.at>`,
+delivered both, DKIM/DMARC pass, SpamAssassin `-2.1` (see
+`deploy/prod/postfix/README.md`, "One-off mail by hand"). **The group itself
+has not been mailed yet.** Production holds **128 594
 catches instead of 464 654** — the rebuild imports files, not rows, so the
 duplicates that production accumulated from repeated imports of the same
 deliveries (the June uploads of the 13 files, three variants of one June
@@ -570,6 +576,8 @@ With all of it the database returns to **183 855** catches from the deliveries
 - **There is no PIT data in the delivered files** and there was none in
   production (0 real tags, 0 recaptures). Anything built on `pit_dec` has no
   data before or after the cutover.
+- **The species master was rebuilt too** (165 rows instead of 125) — species
+  are joined by `speciesName`, not by the id in `fish_species`.
 - Accounts, passwords, the template files and saved SQL queries are unchanged;
   the read-only account for R/psql keeps its password and its whitelist
   (`fish_catches`, `samplings`, `river_sites`, `fish_species`).
