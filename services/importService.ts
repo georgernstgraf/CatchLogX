@@ -287,7 +287,7 @@ export async function writeImports(
       // the transaction: the validation-phase check is read-only.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${hash}))`;
       const existing = await tx.imports.findFirst({
-        where: { fileHash: hash, deletedAt: null },
+        where: { fileHash: hash },
         select: { id: true, fileName: true, createdAt: true },
       });
       if (existing) {
@@ -394,18 +394,18 @@ export type DeleteImportResult =
       samplings: number;
       notFound?: never;
       forbidden?: never;
-      alreadyDeleted?: never;
     }
-  | { notFound: true; deleted?: never; forbidden?: never; alreadyDeleted?: never }
-  | { forbidden: true; deleted?: never; notFound?: never; alreadyDeleted?: never }
-  | { alreadyDeleted: true; deleted?: never; notFound?: never; forbidden?: never };
+  | { notFound: true; deleted?: never; forbidden?: never }
+  | { forbidden: true; deleted?: never; notFound?: never };
 
 const adminRoles = new Set<UserRoles>(["ADMIN", "SUPER_ADMIN"]);
 
 /**
- * Deletes an import: its catches, its samplings and the original file. The
- * `Imports` row stays as a tombstone (name, hash, row count, who, when) —
- * research data that still holds the full original file is not deleted.
+ * Deletes an import: its catches, its samplings, the original file **and the
+ * `Imports` row itself**. Nothing is left behind — no tombstone (#184,
+ * decided 2026-11-15); the only trace is the log line below, which lands in
+ * the systemd journal. The fingerprint the row used to keep lives in the data
+ * repo (`CatchLogX-Data`) and in the cutover runbook.
  *
  * `river_sites` and `fish_species` are shared and stay; `recapture` flags of
  * other imports are observations at import time and stay too (#184).
@@ -416,27 +416,15 @@ export async function deleteImport(
 ): Promise<DeleteImportResult> {
   const record = await prisma.imports.findUnique({
     where: { id },
-    select: { id: true, userId: true, blobId: true, deletedAt: true },
+    select: { id: true, fileName: true, userId: true, blobId: true },
   });
 
   if (!record) return { notFound: true };
   if (record.userId !== actor.id && !adminRoles.has(actor.role)) {
     return { forbidden: true };
   }
-  if (record.deletedAt) return { alreadyDeleted: true };
 
   return prisma.$transaction(async (tx) => {
-    // Claim the tombstone first: of two concurrent deletes exactly one wins.
-    const claimed = await tx.imports.updateMany({
-      where: { id, deletedAt: null },
-      data: {
-        deletedAt: new Date(),
-        deletedByUserId: actor.id,
-        blobId: null,
-      },
-    });
-    if (claimed.count === 0) return { alreadyDeleted: true };
-
     const samplingIds = await tx.sampling.findMany({
       where: { importId: id },
       select: { id: true },
@@ -449,9 +437,22 @@ export async function deleteImport(
       where: { importId: id },
     });
 
+    // The row goes before the blob: `Imports.blobId` is onDelete: Restrict, so
+    // the blob cannot disappear while a row still points at it. A count of 0
+    // means a concurrent delete won the race — answer "not found", the caller
+    // asked for something that no longer exists.
+    const removedImport = await tx.imports.deleteMany({ where: { id } });
+    if (removedImport.count === 0) return { notFound: true as const };
+
     if (record.blobId) {
       await tx.fileBlob.delete({ where: { id: record.blobId } });
     }
+
+    console.info(
+      `[imports] deleted import ${id} ("${record.fileName}"): ` +
+        `${removedCatches.count} catches, ${removedSamplings.count} samplings ` +
+        `(owner ${record.userId}, deleted by ${actor.id})`,
+    );
 
     return {
       deleted: true as const,
@@ -469,7 +470,6 @@ export type ImportListItem = {
   fileHash: string;
   rowCount: number;
   createdAt: Date;
-  deletedAt: Date | null;
   samplings: number;
   userId: string;
   uploadedByUsername: string;
@@ -492,7 +492,6 @@ export async function listImports(options?: {
       fileHash: true,
       rowCount: true,
       createdAt: true,
-      deletedAt: true,
       userId: true,
       user: { select: { username: true, name: true } },
       _count: { select: { samplings: true } },

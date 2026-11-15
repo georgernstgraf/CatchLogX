@@ -144,9 +144,9 @@ FishCatch: pitDec, pitHex, recapture; @@index([pitDec])
 
 `Uploads` and the `UploadStates` enum are gone (#202): an upload imports
 directly, there is no admin review step. Deleting an import removes its
-catches, its samplings and the stored file, and leaves the `Imports` row as a
-tombstone (`deletedAt`, `deletedByUserId`, `blobId = null`) — the fingerprint
-(name, sha256, row count, who, when) stays, the content goes.
+catches, its samplings, the stored file **and the `Imports` row itself** — no
+tombstone (#184, decided 2026-11-15); the only trace is a log line in the
+journal.
 
 ## Upload Validation (#80, #88)
 
@@ -168,8 +168,9 @@ erroring file rejects the whole bulk.
 - The database PIT check runs in one batched lookup per bulk (not one query per
   tag) and runs even when the file already has other errors (#102).
 - **Duplicate bytes** are rejected globally: the sha256 of the received file is
-  checked against active imports (`deletedAt: null`) and within the bulk, and
-  re-checked under an advisory lock inside the write transaction (#184, #202).
+  checked against every `Imports` row (a deleted import leaves no row, #184) and
+  within the bulk, and re-checked under an advisory lock inside the write
+  transaction (#184, #202).
 
 ## Import Write Path (#202)
 

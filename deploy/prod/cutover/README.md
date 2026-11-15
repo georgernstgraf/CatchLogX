@@ -254,6 +254,11 @@ default, so the same #209 fix was needed on the delete path — and removed
 exactly its rows (128 594 → 93 181 catches, 1 282 → 670 samplings, sites
 unchanged). Re-imported afterwards; dev is back at 128 594 / 1 282 / 1 095.
 
+> **Changed on 2026-11-15 (#184):** the delete is *hard* now — the `Imports`
+> row goes too, there is no tombstone, and a second delete of the same id
+> answers 404. A re-run of this drill will therefore show one `Imports` row
+> fewer and no "Deleted on …" line in either list.
+
 ### 4. Rollback drill
 
 Exercised on 2026-11-15 without destroying the dry-run data: the pre-wipe dump

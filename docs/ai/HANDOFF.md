@@ -96,12 +96,15 @@ Varianten der Juni-23-Lieferung und die früheren `E_F`/`S`-Fassungen. Die
 sha256-Prüfung (`CatchLogX-Data#6`) zeigt, dass 13 der 18 Prod-Uploads
 byte-identisch mit Repo-Dateien sind. P5 (Prod wipen und re-importieren) ist
 durch den Cutover #200 ersetzt.
-**#184 ist umentschieden und noch nicht im Ticket nachgezogen:** die
-Originaldatei wird dauerhaft als `FileBlob` gespeichert (`Imports.blobId`),
-beim Löschen eines Imports werden Fänge, Samplings **und** der Blob gelöscht
-(Tombstone bleibt), der Dialog bietet vorher „Download a copy"; der
-Altbestand (18 Juni-Uploads) bekommt Download, aber keinen Delete, weil seine
-Fänge `importId = NULL` haben. Details im Issue-Verlauf von #184.
+**Stand 2026-11-15 (#184, Löschung):** Ein gelöschter Import verschwindet
+**vollständig** aus der DB — Migration `20261115090551_import_hard_delete`
+droppt `deletedAt`/`deletedByUserId` (und räumt die Tombstones mit weg),
+`deleteImport` löscht Fänge → Samplings → `Imports`-Zeile → Blob, die einzige
+Spur ist eine Journal-Logzeile. Die Originaldatei bleibt dauerhaft als
+`FileBlob` (`Imports.blobId`) gespeichert, der Dialog bietet vorher „Download a
+copy"; der Altbestand (18 Juni-Uploads) bekommt Download, aber keinen Delete,
+weil seine Fänge `importId = NULL` haben. Details: `DECISIONS.md` (2026-11-15,
+„Import-Löschung ist hart") und der Issue-Verlauf von #184.
 
 **Stand 2026-11-10 (Send-Only-Mail Dev, #193):** `catchlogx.graf.priv.at` ist
 als reine Sende-Domain eingerichtet (`noreply@…`), DNS in `mexx` (A statt

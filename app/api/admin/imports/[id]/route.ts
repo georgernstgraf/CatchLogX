@@ -31,13 +31,6 @@ export async function DELETE(
       );
     }
 
-    if (result.alreadyDeleted) {
-      return NextResponse.json(
-        { error: "Import has already been deleted" },
-        { status: 409 },
-      );
-    }
-
     return NextResponse.json(
       {
         message: "Import deleted",

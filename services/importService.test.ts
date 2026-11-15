@@ -11,6 +11,7 @@ vi.mock("@/lib/prisma", () => ({
       findMany: vi.fn(),
       findUnique: vi.fn(),
       updateMany: vi.fn(),
+      deleteMany: vi.fn(),
     },
     sampling: { create: vi.fn(), findMany: vi.fn(), deleteMany: vi.fn() },
     fishCatch: {
@@ -504,14 +505,14 @@ describe("writeImports", () => {
 describe("deleteImport", () => {
   const stored = {
     id: "imp-1",
+    fileName: "a.xlsx",
     userId: "owner",
     blobId: "blob-1",
-    deletedAt: null,
   };
 
   beforeEach(() => {
     vi.mocked(prisma.imports.findUnique).mockResolvedValue(stored as any);
-    vi.mocked(prisma.imports.updateMany).mockResolvedValue({ count: 1 } as any);
+    vi.mocked(prisma.imports.deleteMany).mockResolvedValue({ count: 1 } as any);
     vi.mocked(prisma.sampling.findMany).mockResolvedValue([
       { id: 100 },
       { id: 101 },
@@ -521,29 +522,59 @@ describe("deleteImport", () => {
     vi.mocked(prisma.fileBlob.delete).mockResolvedValue({} as any);
   });
 
-  it("lets the owner delete: catches, samplings, tombstone and blob", async () => {
+  // #184 (decided 2026-11-15): the tombstone is gone. A deleted import leaves
+  // no `Imports` row behind, so nothing shows up as "Deleted on ..." in the
+  // admin or the "My Imports" list.
+  it("removes the Imports row itself: gone, not tombstoned", async () => {
     const result = await deleteImport("imp-1", { id: "owner", role: "VIEWER" });
 
     expect(result).toEqual({ deleted: true, catches: 42, samplings: 2 });
+    expect(prisma.imports.deleteMany).toHaveBeenCalledWith({
+      where: { id: "imp-1" },
+    });
+    expect(prisma.imports.updateMany).not.toHaveBeenCalled();
     expect(prisma.fishCatch.deleteMany).toHaveBeenCalledWith({
       where: { samplingId: { in: [100, 101] } },
     });
     expect(prisma.sampling.deleteMany).toHaveBeenCalledWith({
       where: { importId: "imp-1" },
     });
-    expect(prisma.imports.updateMany).toHaveBeenCalledWith({
-      where: { id: "imp-1", deletedAt: null },
-      data: expect.objectContaining({
-        deletedByUserId: "owner",
-        blobId: null,
-        deletedAt: expect.any(Date),
-      }),
-    });
     expect(prisma.fileBlob.delete).toHaveBeenCalledWith({
       where: { id: "blob-1" },
     });
     // River sites and species are shared and stay untouched.
     expect(prisma.riverSite.upsert).not.toHaveBeenCalled();
+  });
+
+  // `Sampling.importId` and `Imports.blobId` are both onDelete: Restrict — the
+  // order below is the only one the foreign keys accept.
+  it("deletes in foreign-key order: catches, samplings, the row, the file", async () => {
+    await deleteImport("imp-1", { id: "owner", role: "VIEWER" });
+
+    const at = (mock: unknown) =>
+      (mock as { mock: { invocationCallOrder: number[] } }).mock
+        .invocationCallOrder[0];
+
+    expect(at(prisma.fishCatch.deleteMany)).toBeLessThan(
+      at(prisma.sampling.deleteMany),
+    );
+    expect(at(prisma.sampling.deleteMany)).toBeLessThan(
+      at(prisma.imports.deleteMany),
+    );
+    expect(at(prisma.imports.deleteMany)).toBeLessThan(
+      at(prisma.fileBlob.delete),
+    );
+  });
+
+  // The only trace left is a journal line: the row itself is gone.
+  it("leaves a log line naming the file, the actor and the counts", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await deleteImport("imp-1", { id: "owner", role: "VIEWER" });
+
+    expect(info).toHaveBeenCalledWith(expect.stringContaining("a.xlsx"));
+    expect(info).toHaveBeenCalledWith(expect.stringContaining("imp-1"));
+    info.mockRestore();
   });
 
   it("forbids a foreign user", async () => {
@@ -579,25 +610,12 @@ describe("deleteImport", () => {
     });
   });
 
-  it("reports an already deleted import without touching data", async () => {
-    vi.mocked(prisma.imports.findUnique).mockResolvedValue({
-      ...stored,
-      deletedAt: new Date(),
-    } as any);
+  it("reports the loser of two concurrent deletes as not found", async () => {
+    vi.mocked(prisma.imports.deleteMany).mockResolvedValue({ count: 0 } as any);
 
     expect(await deleteImport("imp-1", { id: "owner", role: "VIEWER" })).toEqual({
-      alreadyDeleted: true,
+      notFound: true,
     });
-    expect(prisma.fishCatch.deleteMany).not.toHaveBeenCalled();
-  });
-
-  it("does not delete twice when two requests race", async () => {
-    vi.mocked(prisma.imports.updateMany).mockResolvedValue({ count: 0 } as any);
-
-    expect(await deleteImport("imp-1", { id: "owner", role: "VIEWER" })).toEqual({
-      alreadyDeleted: true,
-    });
-    expect(prisma.fishCatch.deleteMany).not.toHaveBeenCalled();
     expect(prisma.fileBlob.delete).not.toHaveBeenCalled();
   });
 
@@ -619,7 +637,6 @@ describe("listImports", () => {
     fileHash: "hash",
     rowCount: 3,
     createdAt: new Date("2026-11-15T10:00:00Z"),
-    deletedAt: null,
     userId: "u1",
     user: { username: "u1", name: "Uwe" },
     _count: { samplings: 2 },
@@ -642,6 +659,8 @@ describe("listImports", () => {
     });
     expect(item).not.toHaveProperty("user");
     expect(item).not.toHaveProperty("_count");
+    // No tombstone column any more (#184): nothing to show as "deleted".
+    expect(item).not.toHaveProperty("deletedAt");
   });
 
   it("filters by owner when a userId is given", async () => {

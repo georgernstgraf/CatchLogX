@@ -24,7 +24,6 @@ type ImportItem = {
   fileHash: string;
   rowCount: number;
   createdAt: string;
-  deletedAt: string | null;
   samplings: number;
   userId: string;
   uploadedByUsername: string;
@@ -467,16 +466,10 @@ const AdminPageComponent = () => {
                       </thead>
                       <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                         {filteredImports.map((item) => {
-                          const isDeleted = item.deletedAt !== null;
-
                           return (
                             <tr
                               key={item.id}
-                              className={
-                                isDeleted
-                                  ? "opacity-60"
-                                  : "hover:bg-gray-50 dark:hover:bg-gray-700"
-                              }
+                              className="hover:bg-gray-50 dark:hover:bg-gray-700"
                             >
                               <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100 break-all">
                                 {item.fileName}
@@ -496,43 +489,29 @@ const AdminPageComponent = () => {
                                 {formatDateTime(item.createdAt)}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                <span
-                                  className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                                    isDeleted
-                                      ? "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
-                                      : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
-                                  }`}
-                                >
-                                  {isDeleted && item.deletedAt
-                                    ? `Deleted on ${formatDate(item.deletedAt)}`
-                                    : "Active"}
+                                <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">
+                                  Active
                                 </span>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                {isDeleted ? (
-                                  <span className="text-xs text-gray-400 dark:text-gray-500">
-                                    —
-                                  </span>
-                                ) : (
-                                  <div className="flex items-center space-x-3">
-                                    <button
-                                      onClick={() => handleDownload(item.id)}
-                                      className="text-blue-600 hover:text-blue-800 flex items-center"
-                                      title="Download file"
-                                    >
-                                      <Download size={16} className="mr-1" />
-                                      Download
-                                    </button>
-                                    <button
-                                      onClick={() => openDeleteDialog(item)}
-                                      className="text-red-600 hover:text-red-800 flex items-center"
-                                      title="Delete import"
-                                    >
-                                      <Trash2 size={16} className="mr-1" />
-                                      Delete
-                                    </button>
-                                  </div>
-                                )}
+                                <div className="flex items-center space-x-3">
+                                  <button
+                                    onClick={() => handleDownload(item.id)}
+                                    className="text-blue-600 hover:text-blue-800 flex items-center"
+                                    title="Download file"
+                                  >
+                                    <Download size={16} className="mr-1" />
+                                    Download
+                                  </button>
+                                  <button
+                                    onClick={() => openDeleteDialog(item)}
+                                    className="text-red-600 hover:text-red-800 flex items-center"
+                                    title="Delete import"
+                                  >
+                                    <Trash2 size={16} className="mr-1" />
+                                    Delete
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           );
@@ -698,7 +677,10 @@ const AdminPageComponent = () => {
                 {pendingDelete.rowCount} catches from{" "}
                 {pendingDelete.samplings} samplings will be deleted.
               </p>
-              <p>The original file will be deleted from the database.</p>
+              <p>
+                The original file and the import record itself will be deleted
+                from the database — this cannot be undone.
+              </p>
               <p>recapture flags of other imports stay unchanged.</p>
               <p>Analyses that already ran will not be corrected.</p>
             </div>

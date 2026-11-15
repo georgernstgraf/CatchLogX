@@ -901,8 +901,9 @@ export async function buildAnnotatedWorkbook(
  * Rejects bytes that are already imported (#184).
  *
  * The check is global (across users) and also covers the same file twice in
- * one bulk. A soft-deleted import keeps its hash but no longer blocks a
- * deliberate re-import. The write path re-checks inside its transaction.
+ * one bulk. A deleted import leaves no row behind, so its bytes are free to be
+ * imported again — there is no deletion filter to forget. The write path
+ * re-checks inside its transaction.
  */
 async function applyDuplicateHashChecks(
   files: BulkUploadFile[],
@@ -923,7 +924,7 @@ async function applyDuplicateHashChecks(
   let stored: { id: string; fileName: string; fileHash: string; createdAt: Date }[];
   try {
     stored = await prisma.imports.findMany({
-      where: { fileHash: { in: [...new Set(hashes)] }, deletedAt: null },
+      where: { fileHash: { in: [...new Set(hashes)] } },
       select: { id: true, fileName: true, fileHash: true, createdAt: true },
     });
   } catch (dbError) {

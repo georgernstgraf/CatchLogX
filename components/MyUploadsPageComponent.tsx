@@ -7,7 +7,8 @@ import DarkModeToggle from "./DarkModeToggle";
 
 /**
  * The caller's own imports (#202). An upload imports directly, so there is no
- * review status any more: a row is either active or a deleted tombstone.
+ * review status any more: every row listed here is an import that exists.
+ * A deleted import leaves no row behind (#184).
  */
 type ImportItem = {
   id: string;
@@ -15,7 +16,6 @@ type ImportItem = {
   fileHash: string;
   rowCount: number;
   createdAt: string;
-  deletedAt: string | null;
   samplings: number;
   userId: string;
   uploadedByUsername: string;
@@ -71,8 +71,6 @@ function normalizeImportEntry(value: unknown): ImportItem | null {
       typeof candidate.createdAt === "string"
         ? candidate.createdAt
         : new Date().toISOString(),
-    deletedAt:
-      typeof candidate.deletedAt === "string" ? candidate.deletedAt : null,
     samplings: countOrZero(candidate.samplings),
     userId: typeof candidate.userId === "string" ? candidate.userId : "",
     uploadedByUsername:
@@ -280,24 +278,13 @@ const MyUploadsPageComponent = () => {
                   </thead>
                   <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     {imports.map((item) => {
-                      const isDeleted = item.deletedAt !== null;
-
                       return (
                         <tr
                           key={item.id}
-                          className={
-                            isDeleted
-                              ? "opacity-60"
-                              : "hover:bg-gray-50 dark:hover:bg-gray-700"
-                          }
+                          className="hover:bg-gray-50 dark:hover:bg-gray-700"
                         >
                           <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100 break-all">
                             {item.fileName}
-                            {isDeleted && item.deletedAt && (
-                              <p className="text-xs font-normal text-gray-500 dark:text-gray-400 mt-1">
-                                deleted on {formatDate(item.deletedAt)}
-                              </p>
-                            )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                             {item.rowCount}
@@ -309,30 +296,24 @@ const MyUploadsPageComponent = () => {
                             {formatDateTime(item.createdAt)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            {isDeleted ? (
-                              <span className="text-xs text-gray-400 dark:text-gray-500">
-                                —
-                              </span>
-                            ) : (
-                              <div className="flex items-center space-x-3">
-                                <button
-                                  onClick={() => handleDownload(item)}
-                                  className="text-blue-600 hover:text-blue-800 flex items-center"
-                                  title="Download a copy"
-                                >
-                                  <Download size={16} className="mr-1" />
-                                  Download
-                                </button>
-                                <button
-                                  onClick={() => openDeleteDialog(item)}
-                                  className="text-red-600 hover:text-red-800 flex items-center"
-                                  title="Delete import"
-                                >
-                                  <Trash2 size={16} className="mr-1" />
-                                  Delete
-                                </button>
-                              </div>
-                            )}
+                            <div className="flex items-center space-x-3">
+                              <button
+                                onClick={() => handleDownload(item)}
+                                className="text-blue-600 hover:text-blue-800 flex items-center"
+                                title="Download a copy"
+                              >
+                                <Download size={16} className="mr-1" />
+                                Download
+                              </button>
+                              <button
+                                onClick={() => openDeleteDialog(item)}
+                                className="text-red-600 hover:text-red-800 flex items-center"
+                                title="Delete import"
+                              >
+                                <Trash2 size={16} className="mr-1" />
+                                Delete
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -367,7 +348,10 @@ const MyUploadsPageComponent = () => {
                 {pendingDelete.rowCount} catches from{" "}
                 {pendingDelete.samplings} samplings will be deleted.
               </p>
-              <p>The original file will be deleted from the database.</p>
+              <p>
+                The original file and the import record itself will be deleted
+                from the database — this cannot be undone.
+              </p>
               <p>recapture flags of other imports stay unchanged.</p>
               <p>Analyses that already ran will not be corrected.</p>
             </div>

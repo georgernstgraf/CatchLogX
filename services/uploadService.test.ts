@@ -471,7 +471,7 @@ describe("processBulkUpload", () => {
     expect(writeImports).not.toHaveBeenCalled();
   });
 
-  it("rejects a file whose bytes an active import already holds", async () => {
+  it("rejects a file whose bytes an earlier import already holds", async () => {
     const buffer = dataFile([validRow]);
     vi.mocked(prisma.imports.findMany).mockResolvedValue([
       {
@@ -489,6 +489,17 @@ describe("processBulkUpload", () => {
     expect(result.report[0].errors[0]).toMatchObject({ column: "-" });
     expect(result.report[0].errors[0].message).toMatch(/already imported on 2026-11-01/);
     expect(writeImports).not.toHaveBeenCalled();
+  });
+
+  // A deleted import is a deleted row now (#184), so there is no `deletedAt`
+  // filter left in the hash check that could drift out of sync.
+  it("checks the file hash against every import, without a deletion filter", async () => {
+    const buffer = dataFile([validRow]);
+
+    await processBulkUpload([{ fileName: "a.xlsx", buffer }], "u1");
+
+    const call = vi.mocked(prisma.imports.findMany).mock.calls[0][0]!;
+    expect(call.where).toEqual({ fileHash: { in: [fileHash(buffer)] } });
   });
 
   it("rejects the same file twice in one bulk", async () => {

@@ -3,8 +3,8 @@ import { requireAuth } from "@/lib/auth-middleware";
 import { deleteImport } from "@/services/importService";
 
 /**
- * Deletes one of the caller's own imports (#202): catches, samplings and the
- * original file. The `Imports` row stays as a tombstone.
+ * Deletes one of the caller's own imports (#202): catches, samplings, the
+ * original file and the `Imports` row itself — nothing is left behind (#184).
  */
 export async function DELETE(
   request: NextRequest,
@@ -31,13 +31,6 @@ export async function DELETE(
       return NextResponse.json(
         { error: "You can only delete your own imports" },
         { status: 403 },
-      );
-    }
-
-    if (result.alreadyDeleted) {
-      return NextResponse.json(
-        { error: "Import has already been deleted" },
-        { status: 409 },
       );
     }
 

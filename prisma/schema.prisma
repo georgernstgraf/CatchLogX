@@ -33,7 +33,6 @@ model User {
   updatedAt      DateTime      @updatedAt
   sessions       Session[]
   imports        Imports[]     @relation("ImportOwner")
-  deletedImports Imports[]     @relation("ImportDeleter")
   userQueries    UserQueries[]
   queryLogs      QueryLog[]
 }
@@ -104,8 +103,9 @@ model PasswordResets {
 }
 
 // One imported Excel file (#202). The row is the provenance of every sampling
-// it created and survives as a tombstone after the import is deleted: the
-// fingerprint (name, hash, row count, who, when) stays, the content goes.
+// it created. Deleting an import removes the row itself — there is no
+// tombstone (#184, decided 2026-11-15): the fingerprint lives in the data repo
+// and the deletion is logged to the journal.
 model Imports {
   id              String    @id @default(cuid())
   batchId         String
@@ -113,14 +113,11 @@ model Imports {
   fileName        String
   fileHash        String // sha256 of the received bytes, duplicate guard
   rowCount        Int
-  blobId          String? // the original file; null after deletion
+  blobId          String? // the original file
   createdAt       DateTime  @default(now())
-  deletedAt       DateTime?
-  deletedByUserId String?
 
   // relations
   user      User       @relation("ImportOwner", fields: [userId], references: [id])
-  deletedBy User?      @relation("ImportDeleter", fields: [deletedByUserId], references: [id])
   blob      FileBlob?  @relation(fields: [blobId], references: [id], onDelete: Restrict)
   samplings Sampling[]
 
