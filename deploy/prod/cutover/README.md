@@ -1,9 +1,10 @@
 # Production cutover — rebuild the database from the `-data` files (#200)
 
-**Status (2026-11-14).** The phases and numbers below are verified against the
-19 files in `CatchLogX-Data`, but no step has been run end to end yet. Phase 1
-(dev dry run) is specified and ordered; Phase 2 is still **TODO (#204)** and is
-filled in from what Phase 1 proves.
+**Status (2026-11-15).** Phase 0 (blob archive) and **Phase 1a (dev dry run,
+9 of 13 files)** are run and green; the numbers below are measured, not
+computed. Phase 1b (all 13 files) waits on the Excel repair
+(`CatchLogX-Data#7`), Phase 2 is still **TODO (#204)** and is filled in from
+what Phase 1 proves.
 
 ## Decision
 
@@ -140,10 +141,10 @@ the inventory:
 - `2026_S_valid_final.xlsx` was **never** uploaded — its hash does not occur in
   production.
 
-## Phase 1 — dev dry run (#204)
+## Phase 1 — dev dry run (#204) — **run on 2026-11-15, green**
 
 On the dev instance (a production clone since #188). **Order (Georg,
-2026-11-14): wipe → migrate → import.** The wipe runs *before* the migration
+2026-11-14): wipe → migrate → import.** The wipe ran *before* the migration
 because `Sampling.importId NOT NULL` (#202) cannot be applied to a database
 whose samplings still carry `NULL`.
 
@@ -159,7 +160,7 @@ whose samplings still carry `NULL`.
 > 18 uploads / 18 upload blobs** removed, 3 template blobs kept, sequences
 > reset — then `fish_species` emptied and reloaded from the JSON master (165).
 > The #202 push deployed and applied `20261114230855_imports_model` on the
-> empty database (release `8a0f1f0`, app 200). Dev now holds 0 catches, 165
+> empty database (release `8a0f1f0`, app 200). Dev then held 0 catches, 165
 > species, 9 users, 3 templates.
 
 ### 1. Wipe the fish data, keep the masters
@@ -204,35 +205,113 @@ in the deploy job; run it by hand only if the release is already published.
 ### 3. Import
 
 Through the **real upload/import path** — no script, no bypass — file by file
-in name order. Record per file: rows in the source, rows imported, samplings,
-river sites created.
+in name order (`POST /api/upload/new`, one request per file so each gets its
+own transaction and its own numbers). Since #202 the upload **imports
+directly**: it validates and writes in one transaction, there is no admin
+accept step, and a file whose bytes are already imported (sha256, active
+imports only) is refused. Each file lands as one `Imports` row with its
+original file stored; the samplings it creates carry that `importId`, so
+`deleteImport` can remove a file's data again.
 
-Since #202 the upload **imports directly**: `POST /api/upload/new` validates
-and writes in one transaction, there is no admin accept step, and a file whose
-bytes are already imported (sha256, active imports only) is refused with 409.
-Each file lands as one `Imports` row with its original file stored; the
-samplings it creates carry that `importId`, so `deleteImport` can remove a
-file's data again (catches, samplings, blob; the `Imports` row stays as a
-tombstone).
+**Result (2026-11-15) — 9 of 13 files, exactly the expected numbers:**
 
-**Today 9 of the 13 import** (128 594 rows): `2026_A`, `B`, `G`, `K`, `L`,
-`N_O_P`, `R`, `T`, `W_Y_Z`. The other four are rejected outright until the
-Excel repair with Lena lands (`CatchLogX-Data#7`) — `2026_D` (2 ×
-`Proterorhinus marmoratus`), `2026_E_F` (10), `2026_I` (4), `2026_S` (2), plus
-the 16 `Salvelinus fontinalis × Salvelinus umbla` rows waiting on Lena's
-target name. That is the intended behaviour, not a defect: a file with one
-unknown species imports nothing.
+| # | File | Rows | Samplings | HTTP time |
+|---|---|---:|---:|---:|
+| 1 | `2026_A_valid_final.xlsx` | 1 939 | 107 | 4.4 s |
+| 2 | `2026_B_valid_final.xlsx` | 13 454 | 67 | 11.8 s |
+| 5 | `2026_G_valid_final.xlsx` | 7 304 | 25 | 6.2 s |
+| 7 | `2026_K_valid_final.xlsx` | 15 492 | 76 | 12.5 s |
+| 8 | `2026_L_valid_final.xlsx` | 3 162 | 42 | 3.3 s |
+| 9 | `2026_N_O_P_valid_final.xlsx` | 26 980 | 133 | 23.7 s |
+| 10 | `2026_R_valid_final.xlsx` | 1 914 | 22 | 2.5 s |
+| 12 | `2026_T_valid_final.xlsx` | 35 413 | 612 | 36.4 s |
+| 13 | `2026_W_Y_Z_valid_final.xlsx` | 22 936 | 198 | 19.6 s |
+| | **total** | **128 594** | **1 282** | |
+
+Database afterwards: **128 594 catches / 1 282 samplings / 1 095 river sites /
+9 active imports / 12 blobs** (9 import originals + 3 templates). Every
+`Sampling.importId` is set, every catch resolves to a `fish_species` row
+(67 of the 165 species are used).
+
+**The four species-blocked files reject and write nothing** (counts unchanged
+before and after, no `Imports` row, no orphan blob):
+
+| File | Answer | Detail |
+|---|---|---|
+| `2026_D_valid_final_DaniohnePIT.xlsx` | 400 | **missing `List` sheet** — a structural error, *before* the species check |
+| `2026_E_F_valid_final.xlsx` | 400 | `Salvelinus fontinalis × Salvelinus umbla`, 10 rows |
+| `2026_I_valid_final.xlsx` | 400 | same species, 4 rows |
+| `2026_S_valid_final.xlsx` | 400 | same species, 2 rows |
+
+**`deleteImport` drill:** `2026_R` deleted through `DELETE /api/admin/imports/{id}`
+→ `{catches: 1914, samplings: 22}`, blob removed (12 → 11), `river_sites`
+untouched (1 095, shared), `Imports` row kept as tombstone (`deletedAt`,
+`deletedByUserId`, `blobId = null`, `rowCount` preserved). Re-import restored
+the counts; a second upload of the same bytes was refused with the duplicate
+message naming the import.
 
 ### 4. Rollback drill
 
-Exercise the rollback once (restore the pre-wipe dump) and confirm the app
-serves again.
+Exercised on 2026-11-15 without destroying the dry-run data: the pre-wipe dump
+was restored into a **second database** (`clx_rollback`, 6.3 s), `DATABASE_URL`
+was pointed at it, `~/current` was repointed to the matching **pre-#202
+release** (`4412e64`) and the unit restarted. Result: app active, sign-in 200,
+`/api/admin/fetch-all` served the 18 legacy uploads, and the restored database
+holds exactly **464 654 catches / 10 497 samplings / 6 260 sites / 125 species
+/ 18 uploads**. Then flipped back (`.env` restored from a byte copy, `~/current`
+→ `e26bcaf`, restart, health check, dry-run counts verified again).
 
-**Gate:** every file that passes validation imports with row counts matching
-its source exactly; the four blocked files are rejected with the full species
-list and write nothing; `deleteImport` removes one import cleanly (see #202);
-the rollback drill is green. Phase 1b — all 13 files — runs after the Excel
-repair and is the real rehearsal for the production window.
+Two things the drill taught that the plan did not have:
+
+- **A rollback is a pair: release *and* database.** The pre-#202 dump has no
+  `Imports` table, so the current release cannot serve it. Pointing
+  `DATABASE_URL` at the old database without repointing `~/current` gives a
+  broken app, not a rollback.
+- **`QUERY_DATABASE_URL` is a second, independent pointer.** The SQL page kept
+  reading the *new* database during the drill because only `DATABASE_URL` was
+  flipped. A production rollback must flip both (or the SQL page answers from a
+  database the app no longer uses).
+
+**Gate — all green:** every file that passes validation imports with row counts
+matching its source exactly (128 594 = 128 594); the four blocked files are
+rejected with the full species list and write nothing; `deleteImport` removes
+one import cleanly; the rollback drill works in both directions. Phase 1b — all
+13 files — runs after the Excel repair and is the real rehearsal for the
+production window.
+
+### Findings from the dry run (2026-11-15)
+
+1. **Prisma's 5 s transaction default killed the large files.** `2026_B`
+   (13 454 rows) answered 500 with `Transaction already closed`; the write path
+   had no explicit `timeout`. Fixed in **#209** (`{ timeout: 120_000,
+   maxWait: 10_000 }` on `writeImports` and `deleteImport`) and verified: the
+   same file then imported in 11.8 s, `2026_T` (35 413 rows) in 36.4 s. The
+   rollback on failure was clean — no partial rows, no orphan blob, no
+   `Imports` row — so only the limit was wrong.
+2. **`2026_D` is blocked structurally, not by its species.** The file has only
+   a `DATA` sheet — no `List`, no `Instructions`. Repairing the two
+   `Proterorhinus marmoratus` cells (`CatchLogX-Data#7`) is **not enough**; the
+   file needs its `List` sheet back. It would be rejected after the repair too.
+3. **There is no PIT data — anywhere.** `pit_dec`, `pit_hex`, `reader_id`,
+   `memory_id` and `recapture` are empty in every delivered file (checked
+   column by column on `2026_T`, 35 413 rows: all five at 0 %), and the
+   pre-wipe production database has **0** real tags (17 rows carry an empty
+   string, 0 recaptures). The verification step "a known `pit_dec` resolves to
+   the same individual across two samplings" is therefore **not executable**
+   and must be replaced — a site/species/date spot check does the same job.
+   The data repo's "no duplicate `pit_dec` in any file" is true but vacuous.
+4. **Site coverage closes exactly.** The old database has 6 260 site codes; the
+   9 imported files produce 1 095 of them, so 5 165 codes do not recur — mostly
+   coordinate drift (same `river_name`+`site_name`, different lat/long). At the
+   **(river, site) name** level the picture is complete: 1 320 pairs in the old
+   database = 256 from the 9 files + 112 from the four blocked files + 123 from
+   `2026_M` + 829 from the June-23 delivery, **0 unexplained**. That confirms
+   the June-23 delivery as real, distinct content (63 % of the old coverage)
+   and makes `CatchLogX-Data#207` a data-completeness requirement, not a
+   nice-to-have.
+5. **`2026_R`'s duplicate refusal is a 400 with a validation report**, not the
+   409 documented in #202: 409 is reserved for the race inside the write
+   transaction. Both are correct; the runbook wording was wrong.
 
 ## Phase 2 — production window — TODO (#204)
 
@@ -249,9 +328,14 @@ repair and is the real rehearsal for the production window.
 
 - Row counts per file and in total (183 855 expected before the June files).
 - Species coverage: every imported `speciesName` exists in `fish_species`.
-- PIT spot check: a known `pit_dec` resolves to the same individual across two
-  samplings.
-- One real query from the research group's R session over `clx_readonly`.
+- **PIT spot check — not executable, and not needed.** The delivered files
+  carry no PIT data at all (`pit_dec`, `pit_hex`, `reader_id`, `memory_id`,
+  `recapture` are empty in every file) and the old database had 0 real tags.
+  Replace it with a **site/species/date spot check**: pick a `siteCode`, a date
+  and a species from a source file and confirm the same counts in the database.
+- One real query from the research group's R session over `clx_readonly` —
+  done on dev on 2026-11-15 through the app's SQL page
+  (`Salmo trutta` 31 359 / `Cyprinidae` 15 604 / `Squalius cephalus` 13 509).
 
 ## Rollback
 
@@ -269,9 +353,18 @@ coming back yet:
   imports of the same deliveries (the June uploads of the 13 files, the three
   variants of one June delivery, and the earlier `E_F`/`S` versions) does not
   come back as a duplicate. `2026_M` (63 385) follows as a regular upload once
-  its `site_name` cells are filled (#206).
-- ids have changed; joins must use content (`siteCode`, `pit_dec`, date), not
-  `samplings.id` / `fish_catches.id`.
+  its `site_name` cells are filled (#206), the June-23 delivery (45 380) as
+  soon as its return is decided (#207) — together they carry 952 of the 1 320
+  site pairs the old database had.
+- ids have changed; joins must use content (`siteCode`, `river_name` +
+  `site_name`, date), not `samplings.id` / `fish_catches.id`.
+- **`siteCode` values change too**: the same physical site can appear under a
+  new code because the delivered coordinates differ from what the June imports
+  stored (same `river_name` + `site_name`, different lat/long). 5 165 of the
+  6 260 old codes do not recur.
+- **There is no PIT data in the delivered files** and there was none in
+  production (0 real tags, 0 recaptures). Anything built on `pit_dec` has no
+  data before or after the cutover.
 
 ## Open decisions
 
@@ -282,11 +375,16 @@ coming back yet:
   `2026_M`; the raw `Bulk import/2026_D.xlsx` (1 022 183 rows, deleted in
   `e9a6f4b`) does contain `Donaukanal` and `Drau`. So the data is a slice of the
   raw D delivery that the curated `2026_D_valid_final_DaniohnePIT.xlsx` does not
-  contain. **Open:** does it come back as a post-cutover upload, or did Lena
-  drop it deliberately? Until that is answered, the 13-file set is not provably
-  content-complete. (Method: site key `river_name|lat_up|long_up` and a row
-  fingerprint over 15 columns, compared against all 13 `should_work` files and
-  `2026_M`; the raw D file was checked via its `sharedStrings`.)
+  contain. **Confirmed as real content by the dry run (2026-11-15):** at the
+  (river, site) name level the old database's 1 320 pairs split exactly into
+  256 (9 files) + 112 (blocked 4) + 123 (`2026_M`) + **829 (June-23)** with zero
+  unexplained — so the June-23 delivery carries 63 % of the site coverage the
+  cutover would otherwise lose. **Open:** does it come back as a post-cutover
+  upload, or did Lena drop it deliberately? `CatchLogX-Data#207` tracks the
+  import; until it lands, the 13-file set is not content-complete. (Method: site
+  key `river_name|lat_up|long_up` and a row fingerprint over 15 columns,
+  compared against all 13 `should_work` files and `2026_M`; the raw D file was
+  checked via its `sharedStrings`.)
 - `Salvelinus fontinalis × Salvelinus umbla` (16 rows in 3 files) has no
   counterpart in the master. Either a mis-entry for id 106
   (`Salvelinus alpinus x Salvelinus fontinalis`) or a genuinely missing hybrid —

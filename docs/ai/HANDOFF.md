@@ -11,6 +11,27 @@ status: stable
 
 Offene Aufgaben für die nächste Session.
 
+**Stand 2026-11-15 (Trockenlauf Phase 1a grün, #204):** 9 der 13 Dateien sind
+auf Dev durch den echten Import-Pfad gelaufen — **128 594 Fänge / 1 282
+Samplings / 1 095 Sites**, exakt die erwarteten Zahlen; die vier blockierten
+Dateien lehnen ab und schreiben nichts; `deleteImport` und die Rollback-Übung
+sind geübt (Dump in eine zweite DB, `~/current` auf das Vor-#202-Release, App
+diente die 18 Alt-Uploads, zurückgeflippt). Details und Zahlen:
+`deploy/prod/cutover/README.md`, „Phase 1". **Drei Befunde ändern den Plan:**
+(a) **Prisma-Timeout** — der 5-s-Default der interaktiven Transaktion killte
+`2026_B`; Fix in **#209** (Release `f112736`, deployt), danach lief auch
+`2026_T` (35 413 Zeilen, 36,4 s). (b) **`2026_D` ist strukturell blockiert**,
+nicht durch die Art: die Datei hat kein `List`-Blatt und wird schon davor
+abgelehnt — `CatchLogX-Data#7` muss für D mehr liefern als die zwei
+`Proterorhinus marmoratus`-Zellen. (c) **Es gibt keine PIT-Daten**, weder in
+den Dateien noch in der alten DB (0 echte Tags, 0 Wiederfänge); der
+PIT-Stichproben-Schritt ist gestrichen, und die Site-Abdeckung schließt auf
+`river_name`+`site_name` exakt (1 320 = 256 + 112 + 123 + 829), was die
+Juni-23-Lieferung als echten Inhalt bestätigt (`CatchLogX-Data#207`).
+**Nächster Schritt: Phase 1b (#204)** — sobald `CatchLogX-Data#7` landet
+(Arten-Reparatur **plus** `List`-Blatt für D), alle 13 Dateien, erwartete
+183 855 Zeilen; danach Phase 2 (Prod-Fenster) im Runbook ausschreiben.
+
 **Stand 2026-11-15 (Arten-Validierung #80 und Imports-Modell #202 erledigt):** Die
 Validierung prüft `species` gegen `fish_species` (nicht mehr gegen das
 `List`-Blatt der Datei), ein fehlendes `List`-Blatt ist ein struktureller
@@ -22,15 +43,6 @@ Samplings und die Originaldatei mit. **Dev ist gewiped und neu aufgesetzt:**
 0 Fänge / 0 Samplings / 0 Sites, 165 Arten aus `assets/species.json`, 9 User,
 3 Templates; der Pre-Wipe-Dump liegt als
 `~/backups/pre-imports-model-20261114T231621Z.dump` (56 MB) auf `claw`.
-**Nächster Schritt: Phase 1 des Trockenlaufs (#204)** — 9 der 13 Dateien
-importieren, die vier artenblockierten (`2026_D`, `2026_E_F`, `2026_I`,
-`2026_S`) müssen hart abgelehnt werden, dann `deleteImport` und die
-Rollback-Übung mit dem Dump. **Befund für den Trockenlauf:** gegen die 165
-Arten aus dem JSON sind es **vier** blockierte Dateien wie geplant; gegen den
-alten 125er-Seed wäre `Salvelinus fontinalis × Salvelinus umbla` durchgegangen
-(der Seed trägt den Namen, der Master hat ihn auf `Salvelinus alpinus x
-Salvelinus fontinalis` umbenannt) — die Dev-DB ist deshalb auf den
-JSON-Master gebracht, damit sie wie die frische Prod-DB aussieht.
 
 **Stand 2026-11-14 (Cutover-Entscheidung, #200):** Die Prod-DB wird **neu
 aufgebaut** statt migriert — `prisma migrate deploy` auf eine leere DB, dann
