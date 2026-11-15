@@ -63,8 +63,9 @@ describe(`template (assets/${TEMPLATE_FILE})`, () => {
   });
 
   it("has a List sheet with every list the validator checks against", () => {
-    // A missing List sheet is a structural error since #80; a list that is
-    // missing *within* the sheet leaves that column unchecked.
+    // The template ships the lists so Excel offers dropdowns; a missing sheet
+    // is no longer an error (#213), but the template must stay complete so the
+    // value checks stay active for what users actually type.
     const lists = templateLists();
 
     for (const name of ["country", "method", "sampling time", "assessment"]) {

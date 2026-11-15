@@ -158,9 +158,13 @@ erroring file rejects the whole bulk.
   case, whitespace). The file's own `List` sheet is **not** authoritative for
   the species column. An unknown species rejects the whole file and names every
   unknown name with its Excel row numbers.
-- A **missing `List` sheet is a structural error** — without it the list
-  validation would silently accept anything (that is how three June files
-  passed the upload and lost rows at the import).
+- A **missing `List` sheet is not an error** (since #213, was a structural
+  error in #80/#204). The sheet carries the Excel dropdowns, not the import
+  contract: without it `country`/`method`/`sampling_time`/`assessment` accept
+  free text, and the species is checked against the master in every case. That
+  is why `2026_D_valid_final_DaniohnePIT.xlsx` (only a `DATA` sheet) reaches the
+  species check instead of being rejected up front. A list that is missing
+  *within* a present sheet still leaves its own column unchecked.
 - **PIT DEC**: the same tag twice in one file **on the same catch date** is a
   hard error (both rows are marked). On a different date it is a legitimate
   recapture — one file is a delivery for a river over many dates. Across files

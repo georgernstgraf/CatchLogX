@@ -483,20 +483,10 @@ export function validateWorkbook(
     };
   }
 
-  // A missing List sheet used to switch the list validation off silently
-  // (`inList` accepts anything without a set), so three June files passed the
-  // upload without any species check and failed at the import (#80).
-  if (!workbook.Sheets["List"]) {
-    return {
-      ...base,
-      structuralError: {
-        error: "List sheet missing",
-        details:
-          "Required 'List' sheet is missing in the Excel file — the validation lists (country, method, …) cannot be checked without it",
-      },
-    };
-  }
-
+  // The `List` sheet is not required: it carries the Excel dropdowns, not the
+  // import contract. Without it `inList` accepts free text for country/method/…
+  // The species is checked against the master either way, so the reason for the
+  // old structural error (#80) is gone (#213).
   const errors: ValidationError[] = [];
   // `pitDec` is the per-file index used by the cross-file and database checks
   // (first occurrence wins). `pitByDate` adds the catch date: one file is a

@@ -79,8 +79,8 @@ function buildWorkbook(sheets: Record<string, unknown[][]>): Buffer {
 function dataFile(rows: Row[], extraSheets: Record<string, unknown[][]> = {}) {
   return buildWorkbook({
     DATA: [headers, ...rows.map(toCells)],
-    // Every real file carries a List sheet; a missing one is a structural
-    // error since #80, so the helper always writes one.
+    // Most real files carry a List sheet; where it is missing the list checks
+    // are skipped (#213), so the helper writes one by default.
     List: [["country"], ["Austria"]],
     ...extraSheets,
   });
@@ -349,13 +349,21 @@ describe("validateWorkbook", () => {
     expect(file.errors[0].message).toMatch(/not in the species master/);
   });
 
-  it("reports a missing List sheet as a structural error", () => {
+  it("accepts a file without a List sheet and skips the list checks", () => {
+    // The List sheet only carries the Excel dropdowns; it is not a precondition
+    // for the import (#213). Without one, country/method/… are free text — the
+    // species is still checked against the master.
     const file = validateWorkbook(
       "x.xlsx",
-      buildWorkbook({ DATA: [headers, toCells(validRow)] }),
+      buildWorkbook({
+        DATA: [headers, toCells({ ...validRow, country: "Nowhere" })],
+      }),
+      speciesIndex,
     );
 
-    expect(file.structuralError?.details).toMatch(/List/);
+    expect(file.structuralError).toBeUndefined();
+    expect(file.dataRowCount).toBe(1);
+    expect(file.errors).toEqual([]);
   });
 });
 
