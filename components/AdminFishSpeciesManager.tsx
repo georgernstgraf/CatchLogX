@@ -433,7 +433,7 @@ const AdminFishSpeciesManager = () => {
                           <button
                             onClick={() => toggleImports(entry)}
                             aria-expanded={isExpanded}
-                            title="Show the imports this species comes from"
+                            title="Show imports having this species"
                             className="inline-flex items-center gap-1 rounded text-[#357174] dark:text-[#8fc3c5] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#357174]"
                           >
                             {isExpanded ? (
@@ -532,7 +532,7 @@ const AdminFishSpeciesManager = () => {
                         <td colSpan={5} className="px-4 py-4">
                           <div className="pl-6">
                             <p className="mb-2 text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                              Imports this species comes from
+                              Imports having this species
                             </p>
                             {loadingImportsFor === entry.id ? (
                               <p className="text-sm text-gray-500 dark:text-gray-400">
