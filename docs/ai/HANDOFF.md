@@ -380,11 +380,12 @@ selbst, 86 MB). Kein TLS für Postgres (Entscheidung, nicht vergessen). Aufgesch
 `prisma migrate deploy` und Ersatz für die heute mitgenutzten reservierten
 Superuser-Slots.
 
-1. [ ] **DHCP-Pool-Ausschluss für `141.244.222.191`** (Martin / BOKU-IT). Der Host
-   konfiguriert sich zwar selbst statisch, aber solange die Adresse im Pool liegt,
-   kann ein anderes Gerät sie bekommen → Adresskonflikt. Gleichzeitig melden, dass
-   `.9` am 2026-10-27 **versehentlich** belegt war und wieder freigegeben ist.
-   Bis dahin: bei Verbindungsproblemen zuerst `ip -br a` auf der Maschine prüfen.
+1. [ ] **DHCP-Pool-Ausschluss für `141.244.222.191`** (Martin / BOKU-IT) — jetzt
+   getrackt in **#229**. Der Host konfiguriert sich zwar selbst statisch, aber solange
+   die Adresse im Pool liegt, kann ein anderes Gerät sie bekommen → Adresskonflikt.
+   Gleichzeitig melden, dass `.9` am 2026-10-27 **versehentlich** belegt war und wieder
+   freigegeben ist. Bis dahin: bei Verbindungsproblemen zuerst `ip -br a` auf der
+   Maschine prüfen.
 2. [ ] **#144 Gated Deploy-Pipeline** (nächster Code-Schritt): Prod-Deploy-Workflow
    `deploy-prod.yml` nach dem Muster von `deploy-dev.yml` (#178), gated auf `test` +
    `migration-drift`, `master`-Trigger, eigene Concurrency-Group
@@ -433,20 +434,22 @@ Superuser-Slots.
     (verifiziert), `root` behält den Passwort-Login **auf der Konsole** als
     Break-Glass — nicht weg-härten. **Issue geschlossen (#222):** der Zugang ist
     der in `DECISIONS.md` (2026-10-16) sanktionierte Weg, kein Tunnel; offen bleibt
-    nur die formale Antwort von BOKU-IT auf die allgemeine Wartungsanfrage.
+    nur die formale Antwort von BOKU-IT auf die allgemeine Wartungsanfrage — getrackt
+    in **#229**.
 11. [x] **Docker-Reste auf Prod abräumen (#220)** — **erledigt 2026-11-15** (oberster Block):
     Pakete gepurged, Container/Volumes/Images/`/var/lib/{docker,containerd}` weg, `docker0` +
     iptables geflusht, Blacklist-Eintrag gestrichen, `docker-compose.prod.yml` gelöscht, Dev
     analog (nur der Rootless-Store). Der Rückfallweg `clx_pgdata` ist **bewusst verworfen**,
     Belege: Nachtarchiv `20261115T023818Z` (Host + offsite) und der neu offsite gesicherte
     Satz `cutover-20261018T085752Z` für die MinIO-Objekte.
-12. [ ] **#122 Restposten**: Backup-Routine läuft seit 2026-10-27 (#86, siehe oben) —
-    offen bleibt das **Institut-Fileserver-Ziel** aus dem Issue (Pfad + Protokoll von
-    Martin/Lena); bis dahin spiegelt die VPS. Entscheidung zum Vorgänger-Runner
-    `catchlogx-server` umsetzen (er ist weiter der einzige Prod-Pfad). Nebenbefund
-    2026-10-27: auf dem Host lauscht ein **snap-Prometheus auf `*:9090`** (scrapt nur
-    sich selbst, 86 MB TSDB, ohne Auth erreichbar) und `ufw` ist installiert, aber
-    **inaktiv** — beides bei der Härtung entsorgen bzw. auf `127.0.0.1` binden.
+12. [x] **#122 Restposten** — **#122 am 2026-11-16 geschlossen** (Checkliste abgearbeitet,
+    Mapping-Kommentar im Issue). Die Reste liegen jetzt bei eigenen Tickets: das
+    **Institut-Fileserver-Ziel** bei **#86** (SMB-Home
+    `//serverhome.boku.ac.at/datahome/home/ihyam_catchlogx`), der Vorgänger-Runner
+    `catchlogx-server` als einziger Prod-Pfad bei **#144**, und die zwei externen
+    Posten (DHCP-Reservierung, formale Wartungszusage) bei **#229**. Der Nebenbefund
+    vom 2026-10-27 ist erledigt: der snap-Prometheus ist entfernt (`*:9090` zu), `ufw`
+    bleibt bewusst inaktiv (`DECISIONS.md`: die BOKU-Grenze filtert bereits).
 13. [ ] **#165 TLS vor Port 80** — seit #164 läuft der öffentliche Verkehr über
     HTTP; Login-Passwörter sind im BOKUnet im Klartext. Zertifikatsweg mit der OE
     klären, `:80`→`https` umleiten, `NEXT_PUBLIC_APP_URL` umstellen (Rebuild) und
