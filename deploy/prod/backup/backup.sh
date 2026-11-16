@@ -80,8 +80,6 @@ SMB_MOUNT_HELPER="${SMB_MOUNT_HELPER:-/usr/local/bin/catchlogx-boku-mount}"
 SMB_UMOUNT_HELPER="${SMB_UMOUNT_HELPER:-/usr/local/bin/catchlogx-boku-umount}"
 SMB_KEEP_DAILY="${SMB_KEEP_DAILY:-12}"
 SMB_KEEP_MONTHLY="${SMB_KEEP_MONTHLY:-12}"
-# Set by mount_boku, cleared by umount_boku - the EXIT trap uses it as a guard.
-SMB_MOUNTED=0
 
 MAIL_TO="${MAIL_TO:-}"
 MAIL_COPY_TO="${MAIL_COPY_TO:-}"
@@ -326,7 +324,6 @@ mount_boku() {
   fi
   mountpoint -q "$SMB_MOUNT" \
     || die "SMB-Mount meldet Erfolg, aber $SMB_MOUNT ist kein Mountpoint"
-  SMB_MOUNTED=1
 
   # A mount that is "there" but unreadable is not a mount we can trust.
   ls -1 "$SMB_MOUNT" >/dev/null 2>&1 || die "SMB-Mount unter $SMB_MOUNT ist nicht lesbar"
@@ -334,14 +331,19 @@ mount_boku() {
 }
 
 umount_boku() {
-  # Idempotent and safe to call from a trap: no-op when nothing is mounted.
-  [ "$SMB_MOUNTED" = 1 ] || return 0
-  SMB_MOUNTED=0
-  if sudo -n "$SMB_UMOUNT_HELPER" >/dev/null 2>&1; then
-    log "smb: $SMB_MOUNT abgebaut"
+  # Idempotent: the helper exits 0 and prints nothing when nothing is mounted.
+  # It deliberately does **not** depend on a shell variable - the mount happens
+  # inside a command substitution (`boku_note=$(sync_boku …)`), so any state
+  # flag would only ever be set in the subshell and the EXIT trap would leave
+  # the share mounted (found on the host on 2026-11-16).
+  [ -n "${SMB_HOST:-}" ] || return 0
+  local out
+  if out=$(sudo -n "$SMB_UMOUNT_HELPER" 2>&1); then
+    [ -n "$out" ] && log "smb: ${out#catchlogx-boku-umount: }"
   else
-    log "warnung: SMB-Unmount fehlgeschlagen - $SMB_MOUNT bleibt gemountet (status prüfen)"
+    log "warnung: SMB-Unmount fehlgeschlagen - $SMB_MOUNT bleibt gemountet (status prüfen): $out"
   fi
+  return 0
 }
 
 boku_listing() {
