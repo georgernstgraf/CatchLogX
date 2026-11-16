@@ -349,6 +349,11 @@ contains production data.
 
 ## Acceptance
 
+Manual runs need **root**: `/etc/catchlogx-backup.env` is `600 root:root`, so a
+run as `clxadmin` sees only the defaults (and would report "off-site not
+configured"). The timer path is unaffected — systemd reads the file as root and
+drops to `clxadmin` for the script.
+
 ```sh
 /usr/local/bin/catchlogx-backup status              # sets, ages, config, timers
 /usr/local/bin/catchlogx-backup smb-ls              # what is on the institute drive
