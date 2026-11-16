@@ -1,0 +1,16 @@
+# /etc/sudoers.d/catchlogx-backup-smb  -  install as 0440 root:root
+#
+# The backup runs as `clxadmin`, and since the hardening of 2026-10-29 that
+# account has no sudo rights at all (`sudo -l -U clxadmin` must answer
+# "not allowed"). Reaching the institute file server is the single exception,
+# and it is deliberately narrow: two wrapper scripts with fixed arguments.
+#
+# Both wrappers refuse to run as anything but root and only touch
+# /run/catchlogx-boku. There is no wildcard, no `mount` binary and no
+# user-supplied option in this rule - so nothing else can be mounted, and no
+# file system can be smuggled in through an argument.
+#
+# Verify after installing:
+#   visudo -cf /etc/sudoers.d/catchlogx-backup-smb
+#   sudo -l -U clxadmin          # lists exactly these two commands
+clxadmin ALL=(root) NOPASSWD: /usr/local/bin/catchlogx-boku-mount, /usr/local/bin/catchlogx-boku-umount

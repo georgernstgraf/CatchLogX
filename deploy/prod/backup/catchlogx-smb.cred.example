@@ -1,0 +1,15 @@
+# /etc/catchlogx-smb.cred - example. The real file lives on the host only.
+#
+# Install as /etc/catchlogx-smb.cred, mode 600 root:root. It is read by the
+# root-side mount helper (catchlogx-boku-mount) and never by `clxadmin`, so the
+# backup user cannot read the password even though it writes the files.
+#
+# The account is the BOKU service account `ihyam_catchlogx` - the same one the
+# mail relay uses (deploy/prod/postfix/). Its home on the institute file server
+# is //serverhome.boku.ac.at/DATAHOME/home/ihyam_catchlogx (20 GB, extendable
+# on request - see #86).
+#
+# Verify with:
+#   smbclient -L //serverhome.boku.ac.at -U 'ihyam_catchlogx%<password>' -m SMB3
+username=ihyam_catchlogx
+password=

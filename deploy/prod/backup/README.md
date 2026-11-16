@@ -19,6 +19,11 @@ Not backed up on purpose: `~/releases` (reproducible from git), the
 `catchlogx_clx_pgdata` volume (a logical dump is the better artifact), the
 MinIO volume (obsolete, see #131), `/etc` (in `deploy/prod/` or package state).
 
+Two artefacts leave the host per run, both from the same set: `<stamp>-boku.tar.zst`
+to the institute file server (complete, env in clear text, rotated there) and
+`<stamp>.tar.zst` to the VPS (complete, env only as `env.age`). See
+"Institute file server" and "Off-site transport".
+
 **The dump never travels in a mail.** The BOKU relay (`mailauth.boku.ac.at`)
 accepts messages up to 50 MB; the dump is ~56 MB and growing.
 
@@ -31,9 +36,14 @@ accepts messages up to 50 MB; the dump is ~56 MB and growing.
 | `catchlogx-backup-probe.service` + `.timer` | `/etc/systemd/system/` | `644 root:root` |
 | `catchlogx-alert@.service` | `/etc/systemd/system/` | `644 root:root` |
 | `catchlogx-backup.env.example` | `/etc/catchlogx-backup.env` (filled in, **no** `.example`) | `600 root:root` |
+| `catchlogx-boku-mount` + `catchlogx-boku-umount` | `/usr/local/bin/` | `755 root:root` |
+| `catchlogx-backup-smb.sudoers` | `/etc/sudoers.d/catchlogx-backup-smb` | `440 root:root` |
+| `tmpfiles-catchlogx-boku.conf` | `/etc/tmpfiles.d/catchlogx-boku.conf` | `644 root:root` |
+| `catchlogx-smb.cred.example` | `/etc/catchlogx-smb.cred` (filled in) | `600 root:root` |
 
-Packages: `age` (`apt install age`), `zstd`, `rsync`, `postgresql-client-16` (from
-PGDG, matching the cluster), `postfix` (see `../postfix/`), and the knock
+Packages: `age` (`apt install age`), `zstd`, `rsync`, `cifs-utils` (`apt install cifs-utils`,
+for the institute file server, #86), `postgresql-client-16` (from PGDG, matching the
+cluster), `postfix` (see `../postfix/`), and the knock
 **client** — `apt install knockd` ships `/usr/bin/knock`, the daemon is not
 needed here (mask it, see "Off-site transport" below). Runner: the units run as
 `clxadmin` because the native cluster maps that OS user to the DB role
@@ -46,13 +56,21 @@ backup user.
 
 ```sh
 install -m 755 deploy/prod/backup/backup.sh /usr/local/bin/catchlogx-backup
+install -m 755 deploy/prod/backup/catchlogx-boku-mount \
+                deploy/prod/backup/catchlogx-boku-umount /usr/local/bin/
 install -m 644 deploy/prod/backup/catchlogx-backup.service \
              deploy/prod/backup/catchlogx-backup.timer \
              deploy/prod/backup/catchlogx-backup-probe.service \
              deploy/prod/backup/catchlogx-backup-probe.timer \
              deploy/prod/backup/catchlogx-alert@.service /etc/systemd/system/
+install -m 644 deploy/prod/backup/tmpfiles-catchlogx-boku.conf /etc/tmpfiles.d/catchlogx-boku.conf
+install -m 440 deploy/prod/backup/catchlogx-backup-smb.sudoers /etc/sudoers.d/catchlogx-backup-smb
 install -m 600 deploy/prod/backup/catchlogx-backup.env.example /etc/catchlogx-backup.env
-$EDITOR /etc/catchlogx-backup.env       # MAIL_TO, age recipient, off-site (see below)
+install -m 600 deploy/prod/backup/catchlogx-smb.cred.example /etc/catchlogx-smb.cred
+$EDITOR /etc/catchlogx-backup.env       # MAIL_TO, age recipient, off-site, SMB (see below)
+$EDITOR /etc/catchlogx-smb.cred         # the service account's SMB password
+visudo -cf /etc/sudoers.d/catchlogx-backup-smb
+systemd-tmpfiles --create /etc/tmpfiles.d/catchlogx-boku.conf
 systemctl daemon-reload
 systemctl enable --now catchlogx-backup.timer catchlogx-backup-probe.timer
 ```
@@ -66,19 +84,120 @@ systemctl enable --now catchlogx-backup.timer catchlogx-backup-probe.timer
    `sum(length("FileBlob".data))` are frozen into `rowcounts.txt`. The restore
    probe compares against **these** numbers, never against live production.
 3. `.env` → `env.age` (public key only; nothing to decrypt on this host).
-4. Off-site: the set becomes one `tar.zst` (plain, #192), the sender knocks the
-   VPS SSH port open and pushes archive + `.sha256` with `rsync -c`. rsync
-   verifies the transferred file with its own checksums; the receiving side
-   re-hashes it nightly and the dev restore verifies it before use. Three
-   attempts, each with a fresh knock. Skipped with a warning when
+4. **Institute file server (#86)**: the set is rebuilt as `<stamp>-boku.tar.zst`
+   — `db.dump`, `db.dump.list`, `rowcounts.txt`, `SHA256SUMS` and the runtime env
+   **in clear text** as `env.plaintext` (see "Institute file server" below). The
+   share is mounted for exactly this step, the archive is pushed with `rsync -c`,
+   read back from the share and verified with `sha256sum -c`, the drive's own
+   rotation runs, the inventory is written to the log, and the share is unmounted
+   again — also on failure, via a trap. Skipped when `SMB_HOST` is empty.
+5. Off-site: the set becomes one `tar.zst` (plain, #192) **including `env.age`**,
+   the sender knocks the VPS SSH port open and pushes archive + `.sha256` with
+   `rsync -c`. rsync verifies the transferred file with its own checksums; the
+   receiving side re-hashes it nightly and the dev restore verifies it before
+   use. Three attempts, each with a fresh knock. Skipped with a warning when
    `OFFSITE_HOST` is empty.
-5. Prune: newest `KEEP_DAILY` sets, plus the 1st-of-month sets (up to
+6. Prune (local): newest `KEEP_DAILY` sets, plus the 1st-of-month sets (up to
    `KEEP_MONTHLY`). Hand-made sets (`cutover-…`, `pre-apt-…`) are never removed.
-6. One report per run. By default it is delivered **locally** into
+7. One report per run. By default it is delivered **locally** into
    `/var/mail/root` (read with `mail -u root`) — the host's own mailbox, no
    external account, no SMTP round trip. See "Reports" below. Failures go
    through `catchlogx-alert@…` (systemd `OnFailure`), which mails the journal
    tail of the failing unit to the same place.
+
+## Institute file server (SMB, #86)
+
+The primary archive is a home directory on the institute's NSS volume:
+
+```
+//serverhome.boku.ac.at/DATAHOME/home/ihyam_catchlogx      (20 GB, extendable)
+```
+
+The account is the BOKU service account `ihyam_catchlogx` — the same one the
+mail relay uses (`../postfix/`), same password. Credentials live in
+`/etc/catchlogx-smb.cred` (`600 root:root`, `username=`/`password=`), read only
+by the root-side mount helper: the backup runs as `clxadmin` and never sees the
+password. Verify the account from any machine in the BOKU net with
+
+```sh
+smbclient -L //serverhome.boku.ac.at -U 'ihyam_catchlogx%<password>' -m SMB3
+```
+
+SMB1 is disabled on the server, so the mount uses `vers=3.1.1` with `3.0` as the
+fallback.
+
+### The mount exists only during the sync
+
+`clxadmin` has no sudo rights at all (hardening 2026-10-29) — the single
+exception is this mount, and it is deliberately narrow:
+
+- `/usr/local/bin/catchlogx-boku-mount` and `-umount` are fixed-argument shell
+  scripts (source, mountpoint, credentials and options are hardcoded in the
+  repo copy); the sudoers rule allows **exactly these two** paths.
+- The mountpoint is `/run/catchlogx-boku`, created by
+  `/etc/tmpfiles.d/catchlogx-boku.conf` — `/run` means a reboot always starts
+  unmounted.
+- `backup.sh` mounts right before the upload and unmounts from a `trap` on
+  `EXIT`, `INT` and `TERM`, so a failed run, a `die` or a systemd timeout cannot
+  leave the share mounted. `catchlogx-backup status` shows `GERADE GEMOUNTET`
+  if something ever does.
+
+Mount options: `credentials=…,vers=3.1.1,uid=clxadmin,gid=clxadmin,
+file_mode=0640,dir_mode=0750,nosuid,nodev,noexec,iocharset=utf8`.
+
+### What lands there
+
+`<stamp>-boku.tar.zst` + `.sha256`, containing `db.dump`, `db.dump.list`,
+`rowcounts.txt`, `SHA256SUMS` and **`env.plaintext`** — the runtime env in clear
+text, mode 600 inside the archive.
+
+This is a deliberate decision (2026-11-16, `docs/ai/DECISIONS.md`): **nothing
+encrypted is written to the institute server**, and the drive copy is the only
+one that can be restored without the age key. The price is that
+`NEXTAUTH_SECRET`, `DATABASE_URL`/`READONLY_DB_PASSWORD` sit in clear text on a
+server administered by the OE — and, because the drive keeps a year of history,
+a rotated password stays readable there until its set ages out.
+
+The name carries `-boku` on purpose: the VPS copy (`<stamp>.tar.zst`) contains
+`env.age` instead of `env.plaintext`, and the two must never be confused.
+
+### Rotation on the drive
+
+`SMB_KEEP_DAILY` (12) newest sets plus the 1st-of-month sets up to
+`SMB_KEEP_MONTHLY` (12) stay; everything else is deleted **as a pair**
+(`.tar.zst` + `.sha256`), never a file without its checksum. Hand-made sets
+(`cutover-…`, `pre-apt-…`) do not match the pattern and are never touched.
+Before the upload the script checks free space and rotates first if the new
+archive would not fit.
+
+Every run writes the resulting inventory to the journal — the mount exists only
+during the run, so this is the only moment it can be observed:
+
+```
+smb: vorhanden 20261116T023012Z-boku.tar.zst (19MB, 2026-11-16T02:33Z)
+smb: 12 Sätze auf dem Drive, 228MB gesamt
+```
+
+On demand, without a backup run: `catchlogx-backup smb-ls` (mounts, lists,
+unmounts).
+
+### Restore from the institute file server
+
+The drive copy needs no key — that is its point:
+
+```sh
+# on any machine with access to the share (BOKU net or VPN)
+smbclient //serverhome.boku.ac.at/DATAHOME -U 'ihyam_catchlogx%<password>' -m SMB3 \
+  -c 'cd home\ihyam_catchlogx; get 20261116T023012Z-boku.tar.zst'
+sha256sum -c 20261116T023012Z-boku.tar.zst.sha256
+tar -xf 20261116T023012Z-boku.tar.zst && cd 20261116T023012Z
+pg_restore --list db.dump | wc -l            # restorability proof
+cat env.plaintext                            # DATABASE_URL, NEXTAUTH_SECRET, …
+```
+
+Then follow "Manual restore (disaster)" below; the env does not have to be
+reissued. Shred the extracted plaintext files afterwards — the dump contains
+production data and `env.plaintext` the production secrets.
 
 ## Off-site transport: knock + rsync (#192)
 
@@ -232,10 +351,12 @@ contains production data.
 
 ```sh
 /usr/local/bin/catchlogx-backup status              # sets, ages, config, timers
+/usr/local/bin/catchlogx-backup smb-ls              # what is on the institute drive
 systemctl start catchlogx-backup.service            # one real run; then read the mail
 systemctl start catchlogx-backup-probe.service      # one real rehearsal
 journalctl -u catchlogx-backup -n 50 --no-pager
 sudo -u clxadmin psql -U clxadmin -d postgres -c '\l'   # no clx_restore_probe left
+mountpoint -q /run/catchlogx-boku && echo "LEAK: Share noch gemountet"
 ```
 
 ## Known limits
@@ -243,15 +364,16 @@ sudo -u clxadmin psql -U clxadmin -d postgres -c '\l'   # no clx_restore_probe l
 - **RPO 24 h.** One dump per day; there is no WAL archiving, so a crash at 02:29
   loses the previous day. Point-in-time recovery would need `pg_basebackup` +
   archive_command (own ticket).
-- **Off-site is a stopgap.** #86 wants a directory on the institute's file
-  server. The transport is one function (`upload_offsite`); switching targets
-  changes configuration, not code.
-- **The off-site archive is not encrypted (#192).** The dump on the VPS is
-  readable for `catchlogx` (and root) — accepted, because the dev instance
-  restores it and then holds the same data anyway. What is *not* accepted: the
-  production secrets stay in `env.age` inside that archive and never land
-  there in clear text. If the transport target ever changes to a host outside
-  our control, re-encrypt before the switch.
+- **The VPS copy is not encrypted (#192), the drive copy is not either — by
+  decision.** The dump on the VPS is readable for `catchlogx` (and root) —
+  accepted, because the dev instance restores it and then holds the same data
+  anyway; the production secrets stay in `env.age` inside that archive. The
+  institute drive holds `env.plaintext` on purpose (2026-11-16, see above) —
+  the trade-off is the year of history that keeps rotated secrets readable.
+- **The drive copy is the complete one, the VPS copy the encrypted one.** A
+  restore from the VPS needs `pass show boku/age`; a restore from the drive
+  needs nothing but the share. Neither replaces the other: the drive sits in the
+  same institute as production, the VPS is geographically separate.
 - **`env.age` is only as good as the key copy.** Lose the identity and the env
   backup is worthless; the database dump stays readable, and the secrets can be
   reissued (`ALTER ROLE`, `deploy/prod/postgres/readonly-role.sh`, a new

@@ -1,0 +1,27 @@
+#!/bin/sh
+# Remove the institute file server mount again (#86).
+#
+# Counterpart of catchlogx-boku-mount; called by backup.sh from a trap, so it
+# runs after a successful sync as well as after a failure or a timeout. A mount
+# that survives the run is a leak: it keeps the share reachable for a user that
+# is not supposed to have it.
+set -eu
+
+MOUNT=/run/catchlogx-boku
+
+[ "$(id -u)" -eq 0 ] || { echo "catchlogx-boku-umount: must run as root" >&2; exit 1; }
+
+# Nothing to do - the run may have failed before the mount happened.
+mountpoint -q "$MOUNT" || exit 0
+
+# A lazy umount as the fallback: a process still holding a file on the share
+# must not block the teardown (the mount then disappears once that process is
+# gone, and `backup.sh status` keeps reporting it until then).
+umount "$MOUNT" 2>/dev/null || umount -l "$MOUNT"
+
+if mountpoint -q "$MOUNT"; then
+  echo "catchlogx-boku-umount: $MOUNT hängt noch (lazy umount vorgemerkt)" >&2
+  exit 1
+fi
+
+echo "catchlogx-boku-umount: $MOUNT abgebaut"

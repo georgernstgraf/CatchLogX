@@ -1,0 +1,42 @@
+#!/bin/sh
+# Mount the institute file server for one backup run (#86).
+#
+# The backup itself runs as the unprivileged user `clxadmin`, which has no sudo
+# rights at all since the hardening of 2026-10-29. It needs exactly one root
+# operation to reach the BOKU drive: this mount. The sudoers rule
+# (/etc/sudoers.d/catchlogx-backup-smb) allows this script and its umount
+# counterpart - and nothing else - so no caller can mount anything else through
+# it.
+#
+# The mount exists only for the duration of the off-site sync: backup.sh calls
+# this before the upload and `catchlogx-boku-umount` from a trap afterwards, so
+# neither a failed run nor a timeout leaves the share mounted.
+#
+# Everything is fixed here on purpose - source, mountpoint, credentials and
+# options. Change them in this file (it lives in the repo under
+# deploy/prod/backup/), never on the command line.
+set -eu
+
+MOUNT=/run/catchlogx-boku
+SOURCE=//serverhome.boku.ac.at/DATAHOME
+CREDENTIALS=/etc/catchlogx-smb.cred
+# SMB1 is disabled on the server; 3.1.1 is preferred, 3.0 the fallback.
+OPTIONS="credentials=$CREDENTIALS,uid=clxadmin,gid=clxadmin,file_mode=0640,dir_mode=0750,nosuid,nodev,noexec,iocharset=utf8"
+
+[ "$(id -u)" -eq 0 ] || { echo "catchlogx-boku-mount: must run as root" >&2; exit 1; }
+[ -r "$CREDENTIALS" ] || { echo "catchlogx-boku-mount: $CREDENTIALS fehlt oder ist nicht lesbar" >&2; exit 1; }
+[ -d "$MOUNT" ] || { echo "catchlogx-boku-mount: $MOUNT fehlt (tmpfiles.d/catchlogx-boku.conf)" >&2; exit 1; }
+
+if mountpoint -q "$MOUNT"; then
+  echo "catchlogx-boku-mount: $MOUNT ist bereits gemountet"
+  exit 0
+fi
+
+if ! mount -t cifs "$SOURCE" "$MOUNT" -o "vers=3.1.1,$OPTIONS" 2>/dev/null; then
+  mount -t cifs "$SOURCE" "$MOUNT" -o "vers=3.0,$OPTIONS"
+fi
+
+mountpoint -q "$MOUNT" \
+  || { echo "catchlogx-boku-mount: mount meldet Erfolg, $MOUNT ist aber kein Mountpoint" >&2; exit 1; }
+
+echo "catchlogx-boku-mount: $SOURCE -> $MOUNT"

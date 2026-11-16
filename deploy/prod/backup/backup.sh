@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # CatchLogX production backup (#86).
 #
-# One script, four modes:
+# One script, five modes:
 #   run            daily backup: dump, verify, encrypt the env, prune, push off-site
-#                  (off-site = knock + rsync over SSH, plain tar.zst - see #192)
+#                  (two targets: the institute file server over SMB with the env in
+#                  clear text and its own rotation, #86; the VPS over knock + rsync
+#                  with env.age, #192)
 #   probe          monthly restore rehearsal: restore the newest set into a scratch
 #                  database and compare it against the row counts recorded at dump time
 #   status         human-readable state: sets, ages, last results, config warnings
+#   smb-ls         what is on the institute file server right now (mount, list, umount)
 #   notify-failure called by catchlogx-alert@<unit>.service (systemd OnFailure)
 #
 # Configuration comes from /etc/catchlogx-backup.env (mode 600, root) via the
@@ -59,6 +62,26 @@ OFFSITE_USER="${OFFSITE_USER:-catchlogx}"
 OFFSITE_DIR="${OFFSITE_DIR:-/home/catchlogx/backups}"
 OFFSITE_SSH_KEY="${OFFSITE_SSH_KEY:-$HOME/.ssh/catchlogx-offsite}"
 OFFSITE_KNOCK_PORTS="${OFFSITE_KNOCK_PORTS:-}"
+
+# Institute file server (#86): the BOKU drive is the primary archive - a home
+# directory on an NSS volume, reachable over SMB. The mount exists only for the
+# duration of the sync (mount_boku/umount_boku); `clxadmin` has no sudo rights
+# except the two wrapper scripts named below.
+#
+# The drive copy is the *complete* restore set: database plus the runtime env in
+# clear text (decision 2026-11-16). Nothing encrypted is written there - env.age
+# stays on the VPS copy. Rotation happens on the drive itself, deeper than
+# locally, because it is the long-lived archive.
+SMB_HOST="${SMB_HOST:-}"
+SMB_SHARE="${SMB_SHARE:-DATAHOME}"
+SMB_SUBDIR="${SMB_SUBDIR:-home/ihyam_catchlogx}"
+SMB_MOUNT="${SMB_MOUNT:-/run/catchlogx-boku}"
+SMB_MOUNT_HELPER="${SMB_MOUNT_HELPER:-/usr/local/bin/catchlogx-boku-mount}"
+SMB_UMOUNT_HELPER="${SMB_UMOUNT_HELPER:-/usr/local/bin/catchlogx-boku-umount}"
+SMB_KEEP_DAILY="${SMB_KEEP_DAILY:-12}"
+SMB_KEEP_MONTHLY="${SMB_KEEP_MONTHLY:-12}"
+# Set by mount_boku, cleared by umount_boku - the EXIT trap uses it as a guard.
+SMB_MOUNTED=0
 
 MAIL_TO="${MAIL_TO:-}"
 MAIL_COPY_TO="${MAIL_COPY_TO:-}"
@@ -186,10 +209,16 @@ write_json_result() {
 # ----------------------------------------------------------------- run -------
 
 cmd_run() {
-  local started stamp dest counts blobs offsite_note="nicht konfiguriert"
+  local started stamp dest counts blobs offsite_note="nicht konfiguriert" boku_note="nicht konfiguriert"
   started=$(date +%s)
   stamp=$(now_stamp)
   dest="$BACKUP_ROOT/$stamp"
+
+  # The SMB mount must never outlive the run - it exists only for the sync.
+  # `die` exits, so the EXIT trap covers every failure path as well.
+  trap umount_boku EXIT
+  trap 'umount_boku; exit 130' INT
+  trap 'umount_boku; exit 143' TERM
 
   log "run: start, Ziel $dest"
   mkdir -p "$dest"
@@ -246,6 +275,12 @@ cmd_run() {
   log "run: Dump verifiziert ($(du -h "$dest/db.dump" | cut -f1), $(wc -l < "$dest/db.dump.list") Einträge)"
 
   # 6. Off-site before pruning, so a failed upload never costs the local copy.
+  #    Two targets, two artefacts (decision 2026-11-16): the institute file
+  #    server gets the complete set with the env in clear text and rotates it
+  #    itself; the VPS keeps the geographically separate copy with env.age.
+  if [ -n "$SMB_HOST" ]; then
+    boku_note=$(sync_boku "$stamp") || die "BOKU-Drive-Sync fehlgeschlagen"
+  fi
   if [ -n "$OFFSITE_HOST" ]; then
     offsite_note=$(upload_offsite "$stamp") || die "Off-site-Upload fehlgeschlagen"
   fi
@@ -255,7 +290,7 @@ cmd_run() {
   local dur=$(( $(date +%s) - started ))
   write_json_result "last-run.json" "ok" \
     "stamp=$stamp" "durationSeconds=$dur" "dumpSize=$(du -h "$dest/db.dump" | cut -f1)" \
-    "fileBlobBytes=$blobs" "offsite=$offsite_note"
+    "fileBlobBytes=$blobs" "offsite=$offsite_note" "boku=$boku_note"
   log "run: fertig in ${dur}s"
 
   send_mail "CatchLogX Backup ok ($stamp)" \
@@ -265,11 +300,176 @@ Dump:        $(du -h "$dest/db.dump" | cut -f1)  ($(wc -l < "$dest/db.dump.list"
 Fänge:       $(awk -F= '/^fish_catches=/{print $2}' "$counts")
 Dateien:     $(awk -F= '/^FileBlob=/{print $2}' "$counts") Blobs, $(awk -F= '/^FileBlob.bytes=/{print $2}' "$counts") Bytes
 env.age:     $([ -s "$dest/env.age" ] && echo "vorhanden" || echo "FEHLT")
+BOKU-Drive:  $boku_note
 Off-site:    $offsite_note
 Dauer:       ${dur}s
 Aufbewahrt:  $(ls -1d "$BACKUP_ROOT"/20* 2>/dev/null | wc -l) Sätze unter $BACKUP_ROOT
 
 Die monatliche Restore-Probe läuft am 1. um 04:30 UTC."
+}
+
+# ------------------------------------------------------------ boku drive -----
+
+boku_target() { printf '%s/%s' "$SMB_MOUNT" "$SMB_SUBDIR"; }
+
+mount_boku() {
+  # Root work, reached through a sudoers rule that allows exactly this wrapper
+  # (`clxadmin` has no sudo otherwise). The mount lives only for the sync.
+  [ -n "$SMB_HOST" ] || die "SMB ist nicht konfiguriert (SMB_HOST fehlt)"
+  [ -x "$SMB_MOUNT_HELPER" ] || die "$SMB_MOUNT_HELPER fehlt"
+  [ -d "$SMB_MOUNT" ] || die "Mountpoint $SMB_MOUNT fehlt (tmpfiles.d/catchlogx-boku.conf)"
+
+  if mountpoint -q "$SMB_MOUNT"; then
+    log "smb: $SMB_MOUNT war bereits gemountet - wird am Ende des Laufs abgebaut"
+  else
+    sudo -n "$SMB_MOUNT_HELPER" >/dev/null || die "SMB-Mount fehlgeschlagen ($SMB_HOST)"
+  fi
+  mountpoint -q "$SMB_MOUNT" \
+    || die "SMB-Mount meldet Erfolg, aber $SMB_MOUNT ist kein Mountpoint"
+  SMB_MOUNTED=1
+
+  # A mount that is "there" but unreadable is not a mount we can trust.
+  ls -1 "$SMB_MOUNT" >/dev/null 2>&1 || die "SMB-Mount unter $SMB_MOUNT ist nicht lesbar"
+  log "smb: $SMB_HOST/$SMB_SHARE gemountet auf $SMB_MOUNT"
+}
+
+umount_boku() {
+  # Idempotent and safe to call from a trap: no-op when nothing is mounted.
+  [ "$SMB_MOUNTED" = 1 ] || return 0
+  SMB_MOUNTED=0
+  if sudo -n "$SMB_UMOUNT_HELPER" >/dev/null 2>&1; then
+    log "smb: $SMB_MOUNT abgebaut"
+  else
+    log "warnung: SMB-Unmount fehlgeschlagen - $SMB_MOUNT bleibt gemountet (status prüfen)"
+  fi
+}
+
+boku_listing() {
+  # One line per set on the drive, newest first: name, bytes, UTC mtime.
+  # The mount only exists during the run, so this is the only chance to see
+  # what is actually there.
+  local f sz t
+  find "$(boku_target)" -mindepth 1 -maxdepth 1 -type f -name '*-boku.tar.zst' \
+       -printf '%f\t%s\t%T@\n' 2>/dev/null \
+  | while IFS=$'\t' read -r f sz t; do
+      printf '%s\t%s\t%s\n' "$f" "$sz" "$(date -u -d "@${t%%.*}" +%Y-%m-%dT%H:%MZ)"
+    done | sort -r
+}
+
+prune_smb() {
+  # Same rule as the local prune, but on flat files: newest SMB_KEEP_DAILY sets
+  # plus the first-of-month sets up to SMB_KEEP_MONTHLY. A set is only ever
+  # removed as a pair (archive + checksum) - never a file without its .sha256.
+  # Hand-made sets (cutover-*, pre-apt-*) do not match the pattern and are safe.
+  local keep_daily="$SMB_KEEP_DAILY" keep_monthly="$SMB_KEEP_MONTHLY"
+  local -A keep=()
+  local d=0 m=0 removed=0 f s target
+  target=$(boku_target)
+
+  for f in $(find "$target" -mindepth 1 -maxdepth 1 -type f -name '*-boku.tar.zst' -printf '%f\n' | sort -r); do
+    s="${f%-boku.tar.zst}"
+    case "$s" in
+      [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
+      *) continue ;;
+    esac
+    if [ "$d" -lt "$keep_daily" ]; then
+      keep[$s]=1; d=$((d + 1)); continue
+    fi
+    if [ "${s:6:2}" = "01" ] && [ "$m" -lt "$keep_monthly" ]; then
+      keep[$s]=1; m=$((m + 1)); continue
+    fi
+    rm -f -- "$target/${s}-boku.tar.zst" "$target/${s}-boku.tar.zst.sha256" \
+      && removed=$((removed + 1))
+  done
+
+  log "prune-smb: $removed Satz/Sätze entfernt, ${#keep[@]} behalten (${d}x täglich, ${m}x monatlich)"
+}
+
+sync_boku() {
+  local stamp="$1" tmp name bytes avail need n total f sz mt target
+  [ -n "$SMB_HOST" ] || die "SMB ist konfiguriert, aber SMB_HOST fehlt"
+  command -v rsync >/dev/null || die "rsync fehlt"
+  command -v zstd >/dev/null || die "zstd fehlt"
+
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' RETURN
+
+  # The drive copy is the *complete* restore set: the database plus the runtime
+  # env in clear text (decision 2026-11-16). Nothing encrypted goes there -
+  # env.age stays on the VPS copy. The name carries `-boku` so the two artefacts
+  # can never be confused during a restore.
+  name="$stamp-boku.tar.zst"
+  mkdir -p "$tmp/$stamp"
+  cp -a "$BACKUP_ROOT/$stamp/db.dump" "$BACKUP_ROOT/$stamp/db.dump.list" \
+        "$BACKUP_ROOT/$stamp/rowcounts.txt" "$BACKUP_ROOT/$stamp/SHA256SUMS" "$tmp/$stamp/" \
+    || die "Kopieren des Satzes für das BOKU-Drive fehlgeschlagen"
+  [ -r "$APP_ENV_FILE" ] \
+    || die "env.plaintext: $APP_ENV_FILE ist nicht lesbar (das Drive-Archiv wäre unvollständig)"
+  install -m 600 "$APP_ENV_FILE" "$tmp/$stamp/env.plaintext" \
+    || die "env.plaintext konnte nicht erzeugt werden"
+
+  tar -C "$tmp" -cf - "$stamp" | zstd -q -19 -T0 > "$tmp/$name" \
+    || die "Archivierung für das BOKU-Drive fehlgeschlagen"
+  bytes=$(stat -c%s "$tmp/$name")
+  ( cd "$tmp" && sha256sum "$name" > "$name.sha256" )
+
+  mount_boku
+  target=$(boku_target)
+  [ -d "$target" ] || die "Zielordner $target fehlt auf dem Share"
+
+  # Free space *before* the upload: the rotation is what makes room, so it has
+  # to happen first when the drive is tight (24 sets at the 500 MiB upload
+  # ceiling would be ~12 GB of the 20 GB).
+  avail=$(df -B1 --output=avail "$target" | tail -1)
+  need=$(( bytes + 1048576 ))
+  if [ "$avail" -lt "$need" ]; then
+    log "smb: nur $((avail / 1048576)) MiB frei, $((need / 1048576)) MiB nötig - rotiere vorab"
+    prune_smb
+    avail=$(df -B1 --output=avail "$target" | tail -1)
+    [ "$avail" -ge "$need" ] \
+      || die "BOKU-Drive voll: $((avail / 1048576)) MiB frei, $((need / 1048576)) MiB nötig"
+  fi
+
+  rsync -c --partial --timeout=600 "$tmp/$name" "$tmp/$name.sha256" "$target/" \
+    || die "rsync auf das BOKU-Drive fehlgeschlagen"
+  # Read the file back from the share and verify it there - rsync's own
+  # checksums prove the transfer, this proves what is actually stored.
+  ( cd "$target" && sha256sum -c "$name.sha256" ) >/dev/null \
+    || die "Prüfsumme auf dem BOKU-Drive stimmt nicht (Rückleseprüfung)"
+  log "smb: $name ($bytes Bytes) aufgelegt und auf dem Share rückgelesen"
+
+  prune_smb
+
+  # The inventory goes into the log: the mount exists only now, so this is the
+  # only moment the state of the drive can be observed.
+  n=0; total=0
+  while IFS=$'\t' read -r f sz mt; do
+    [ -n "${f:-}" ] || continue
+    log "smb: vorhanden $f ($(numfmt --to=iec --suffix=B "$sz"), $mt)"
+    n=$((n + 1)); total=$((total + sz))
+  done <<< "$(boku_listing)"
+  log "smb: $n Sätze auf dem Drive, $(numfmt --to=iec --suffix=B "$total") gesamt"
+
+  umount_boku
+
+  printf '%s (%s; %s Sätze, %s gesamt)' "$name" "$(numfmt --to=iec --suffix=B "$bytes")" \
+    "$n" "$(numfmt --to=iec --suffix=B "$total")"
+}
+
+cmd_smbls() {
+  # Diagnostic: what is on the drive right now, without a backup run.
+  [ -n "$SMB_HOST" ] || die "SMB ist nicht konfiguriert (SMB_HOST in $BACKUP_ENV_FILE)"
+  trap umount_boku EXIT
+  mount_boku
+  local n=0 total=0 f sz mt
+  printf 'BOKU-Drive //%s/%s/%s\n\n' "$SMB_HOST" "$SMB_SHARE" "$SMB_SUBDIR"
+  while IFS=$'\t' read -r f sz mt; do
+    [ -n "${f:-}" ] || continue
+    printf '  %-30s %10s  %s\n' "$f" "$(numfmt --to=iec --suffix=B "$sz")" "$mt"
+    n=$((n + 1)); total=$((total + sz))
+  done <<< "$(boku_listing)"
+  printf '\n  %s Sätze, %s gesamt\n' "$n" "$(numfmt --to=iec --suffix=B "$total")"
+  umount_boku
 }
 
 # --------------------------------------------------------------- offsite -----
@@ -486,6 +686,18 @@ cmd_status() {
 
   printf '\nKonfiguration\n'
   printf '  Aufbewahrung   %s täglich / %s monatlich\n' "$KEEP_DAILY" "$KEEP_MONTHLY"
+  if [ -n "$SMB_HOST" ]; then
+    printf '  BOKU-Drive     //%s/%s/%s (SMB, vollständiger Satz, Klartext-env)\n' \
+      "$SMB_HOST" "$SMB_SHARE" "$SMB_SUBDIR"
+    printf '  Mountpoint     %s (%s)\n' "$SMB_MOUNT" \
+      "$(mountpoint -q "$SMB_MOUNT" 2>/dev/null && echo 'GERADE GEMOUNTET - Lauf hängt?' || echo 'nicht gemountet')"
+    printf '  Aufbewahrung   %s täglich / %s monatlich (Drive)\n' "$SMB_KEEP_DAILY" "$SMB_KEEP_MONTHLY"
+    printf '  SMB-Helfer     mount %s, umount %s\n' \
+      "$([ -x "$SMB_MOUNT_HELPER" ] && echo ok || echo FEHLT)" \
+      "$([ -x "$SMB_UMOUNT_HELPER" ] && echo ok || echo FEHLT)"
+  else
+    printf '  BOKU-Drive     NICHT KONFIGURIERT (kein Institutsziel)\n'
+  fi
   if [ -n "$OFFSITE_HOST" ]; then
     printf '  Off-site       %s@%s:%s (SSH, Klartext-Archiv)\n' "$OFFSITE_USER" "$OFFSITE_HOST" "$OFFSITE_DIR"
     printf '  SSH-Key        %s\n' "${OFFSITE_SSH_KEY:-FEHLT}"
@@ -525,10 +737,11 @@ case "${1:-}" in
   run)             cmd_run ;;
   probe)           cmd_probe ;;
   status)          cmd_status ;;
+  smb-ls)          cmd_smbls ;;
   keycheck)        shift; cmd_keycheck "$@" ;;
   notify-failure)  shift; cmd_notify_failure "$@" ;;
   *)
-    printf 'usage: %s {run|probe|status|keycheck <identity>|notify-failure <unit>}\n' "${0##*/}" >&2
+    printf 'usage: %s {run|probe|status|smb-ls|keycheck <identity>|notify-failure <unit>}\n' "${0##*/}" >&2
     exit 2
     ;;
 esac
