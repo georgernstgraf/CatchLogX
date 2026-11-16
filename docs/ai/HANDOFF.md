@@ -11,6 +11,28 @@ status: stable
 
 Offene Aufgaben für die nächste Session.
 
+**Stand 2026-11-16 (Institut-Fileserver als primäres Backup-Ziel angebunden, #86):** Der
+Lauf hat jetzt **zwei** Off-site-Ziele. Auf `//serverhome.boku.ac.at/DATAHOME/home/ihyam_catchlogx`
+(SMB, Konto `ihyam_catchlogx`, 20 GB) liegt `<stamp>-boku.tar.zst` — `db.dump`,
+`db.dump.list`, `rowcounts.txt`, `SHA256SUMS` **plus `env.plaintext` im Klartext**, also ein
+ohne `age`-Key vollständig restorierbarer Satz. Auf die VPS geht unverändert
+`<stamp>.tar.zst` mit `env.age`. Der Share wird **nur für das Sync-Fenster** gemountet
+(`/run/catchlogx-boku`, `tmpfiles.d`, zwei feste Wrapper als einzige sudo-Ausnahme für
+`clxadmin`), per `trap` auf `EXIT`/`INT`/`TERM` abgebaut und auf dem Drive selbst rotiert
+(12 tägliche + 12 Monatserste, paarweises Löschen, Freiplatz-Prüfung vorab). **Verifiziert
+am 2026-11-16:** zwei echte Läufe grün (`20261116T164857Z`, `20261116T165014Z`; je 19 MB,
+`sha256sum -c` auf dem Share OK, `pg_restore --list` = 105 Einträge, `env.plaintext` mit
+allen 8 Schlüsseln, Mount danach weg, `status` zeigt den neuen Block); Fehlerpfad eigens
+getestet (falscher `SMB_SUBDIR` → Lauf rot, **Mount abgebaut**) — dabei einen echten Bug
+gefunden und behoben: `umount_boku` hing an einer Shell-Variable, die in der
+Kommando-Substitution nie im Elternprozess ankam (`3b9e005`), der Wrapper ist jetzt
+idempotent. **Entscheidung in `DECISIONS.md` (2026-11-16) bewusst akzeptiert:** die
+Produktions-Secrets liegen im Klartext im Lesekreis der OE, und ein abgelöstes Passwort
+bleibt bis zu einem Jahr lesbar (12 Monatserste). Offen ist nur noch die Beobachtung:
+die Drive-Rotation greift erst mit dem zweiten Tag, und die Monatsprobe
+(`catchlogx-backup-probe.timer`, 1. des Monats) läuft weiter gegen den **lokalen** Satz —
+ein Restore-Test direkt aus dem Drive-Archiv ist noch nicht automatisiert.
+
 **Stand 2026-11-15 (Docker-Reste abgeräumt, #220, Issue geschlossen):** Beide Hosts sind
 container-frei, soweit CatchLogX betroffen ist. **Prod** (`141.244.222.191`): die sechs
 Docker-Pakete sind gepurged, `clx-postgres` + 9 Volumes (5,13 GB) + 5 Images (951,7 MB)
@@ -444,8 +466,8 @@ Superuser-Slots.
     Satz `cutover-20261018T085752Z` für die MinIO-Objekte.
 12. [x] **#122 Restposten** — **#122 am 2026-11-16 geschlossen** (Checkliste abgearbeitet,
     Mapping-Kommentar im Issue). Die Reste liegen jetzt bei eigenen Tickets: das
-    **Institut-Fileserver-Ziel** bei **#86** (SMB-Home
-    `//serverhome.boku.ac.at/datahome/home/ihyam_catchlogx`), der Vorgänger-Runner
+    **Institut-Fileserver-Ziel** ist am 2026-11-16 **angebunden** (oberster Block,
+    #86 geschlossen), der Vorgänger-Runner
     `catchlogx-server` als einziger Prod-Pfad bei **#144**, und die zwei externen
     Posten (DHCP-Reservierung, formale Wartungszusage) bei **#229**. Der Nebenbefund
     vom 2026-10-27 ist erledigt: der snap-Prometheus ist entfernt (`*:9090` zu), `ufw`
