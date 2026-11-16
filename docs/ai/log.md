@@ -1,5 +1,12 @@
 # Persistenz-Log
 
+## 2026-11-16 — #194 und #182 gepusht und geschlossen (#194)
+
+* **Update**: `HANDOFF.md` (#194-Absatz: Freigabe durch Georg am 2026-11-13,
+  gepusht als `5d648ca`, Issue zu; offen bleibt nur der Mail-Beleg auf Dev).
+* **Reason**: Der Absatz nannte die Freigabe noch als Voraussetzung für den Push.
+* **Verifikation**: Push `f98b9f2..5d648ca`, Pre-Push-Gate grün (391 Tests).
+
 ## 2026-11-15 — Status-Spalte bei Imports entfernt (#225)
 
 * **Update**: `STATE.md` (Eintrag zu #225).
