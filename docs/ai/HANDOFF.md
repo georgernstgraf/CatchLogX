@@ -11,6 +11,23 @@ status: stable
 
 Offene Aufgaben für die nächste Session.
 
+**Stand 2026-11-19 (Import-Vertrag als Epic #236 aufgesetzt):** Der Zielzustand ist als ADR
+festgehalten (`DECISIONS.md`, 2026-11-19): **Code spezifiziert, DB konfiguriert, Vorlage/Legend
+sind generierte Artefakte.** Reihenfolge für die Umsetzung: **#231** (Bug — die Validierung liest
+die Wertelisten aus der *hochgeladenen* Datei; `readLists` hat genau einen Produktionsaufrufer,
+`services/uploadService.ts:437`) → **#232** (Spaltenkatalog im Code, per Paritätstest an Schema und
+Vorlage gebunden) → **#233** (Flussnamen `assets/river_name.json` → DB) → **#205** (Listenautorität,
+hart vs. weich) → **#185** (Vorlage aus dem Katalog) → **#154** (Nutzertexte, Formulierung offen).
+**Entschieden und nicht neu zu diskutieren:** keine generische Vokabel-Tabelle (das Schema führt
+`method`/`assessment`/`typeOfStrip` als `String?`); `assets/species.json` **bleibt** als abgeleitete
+Bootstrap-Zweitwahrheit (#234); `river_name` und Fachvokabular werden **weich** geprüft (Warnung,
+keine Ablehnung), `species` hart. **Offene Entscheidungen:** `reader_id`/`memory_id` entfernen oder
+persistieren (heute geprüft und nirgends gespeichert), Legend-Sprache EN vs. DE-Beilage, und ob
+`Black Sea`/`Salzach/Sur`/`Eckartsau Bundesforste` in der Flussliste bleiben. **Ticket-Landschaft:**
+#206 ist nach `CatchLogX-Data#8` übernommen und geschlossen, #208 bei Dominic, #207 **offen und
+strittig** (Lena: superseded; Messung: 45 380 Zeilen ohne Punkt-Überlappung), #200 offen bis seine
+Kinder zu sind.
+
 **Stand 2026-11-16 (Institut-Fileserver als primäres Backup-Ziel angebunden, #86):** Der
 Lauf hat jetzt **zwei** Off-site-Ziele. Auf `//serverhome.boku.ac.at/DATAHOME/home/ihyam_catchlogx`
 (SMB, Konto `ihyam_catchlogx`, 20 GB) liegt `<stamp>-boku.tar.zst` — `db.dump`,
