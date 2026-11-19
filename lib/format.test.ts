@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { plural } from "@/lib/format";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { formatDateTime, plural } from "@/lib/format";
 
 describe("plural (#237)", () => {
   it("uses the singular for exactly one", () => {
@@ -17,5 +17,22 @@ describe("plural (#237)", () => {
     expect(plural(3, "file")).toBe("3 files");
     expect(plural(6, "row")).toBe("6 rows");
     expect(plural(0, "sampling")).toBe("0 samplings");
+  });
+});
+
+describe("formatDateTime (#238)", () => {
+  beforeEach(() => vi.stubEnv("TZ", "Europe/Vienna"));
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("formats an ISO timestamp as de-AT date and time", () => {
+    expect(formatDateTime("2026-11-18T13:14:29.481Z")).toBe("18.11.2026, 14:14");
+  });
+
+  it("never returns the raw ISO string", () => {
+    expect(formatDateTime("2026-11-18T13:14:29.481Z")).not.toContain("T13");
+  });
+
+  it("returns Unknown for an invalid value", () => {
+    expect(formatDateTime("not a date")).toBe("Unknown");
   });
 });

@@ -16,6 +16,7 @@ import {
 import AdminTemplateFilesManager from "./AdminTemplateFilesManager";
 import AdminFishSpeciesManager from "./AdminFishSpeciesManager";
 import { useAuth } from "./AuthProvider";
+import { formatDateTime } from "@/lib/format";
 
 /** One `Imports` row (#202): an import commits directly, no review step. */
 type ImportItem = {
@@ -39,18 +40,6 @@ type User = {
   isActive: boolean;
   createdAt: string;
 };
-
-function formatDateTime(dateString: string): string {
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) {
-    return "Unknown";
-  }
-
-  return new Intl.DateTimeFormat("de-AT", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
-}
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
@@ -593,7 +582,7 @@ const AdminPageComponent = () => {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                            {user.createdAt}
+                            {formatDateTime(user.createdAt)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
                             {deleteConfirmUserId === user.id ? (

@@ -9,3 +9,16 @@ export const plural = (count: number, singular: string) => {
   const suffix = /(s|sh|ch|x|z)$/.test(singular) ? "es" : "s";
   return `${count} ${singular}${suffix}`;
 };
+
+/** `18.11.2026, 14:14` (de-AT); `Unknown` for an unparsable value. */
+export function formatDateTime(dateString: string): string {
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown";
+  }
+
+  return new Intl.DateTimeFormat("de-AT", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
