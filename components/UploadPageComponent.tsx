@@ -10,6 +10,7 @@ import {
 } from "@/lib/template-files";
 import { downloadErrorArchive, uploadFiles } from "@/lib/upload-client";
 import type { ImportedFile } from "@/lib/upload-client";
+import { plural } from "@/lib/format";
 import {
   FileReport,
   MAX_UPLOAD_FILES,
@@ -38,10 +39,6 @@ const isExcelFile = (file: File) => {
     file.name.endsWith(".xls")
   );
 };
-
-/** `3 rows`, `1 row` — keeps the import summary readable. */
-const plural = (count: number, singular: string) =>
-  `${count} ${singular}${count === 1 ? "" : "s"}`;
 
 /** Per-file validation report, shared by the single and bulk upload. */
 const FileReportRow = ({ report }: { report: FileReport }) => {
