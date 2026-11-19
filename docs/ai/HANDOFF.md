@@ -3,7 +3,7 @@ type: Handoff
 title: Handoff
 description: Offene Aufgaben fuer die naechste Session.
 tags: [catchlogx, handoff]
-generated: { by: opencode/knowledge-persistence, at: 2026-11-15T18:05:00Z }
+generated: { by: opencode/knowledge-persistence, at: 2026-11-19T04:10:36Z }
 status: stable
 ---
 
@@ -23,10 +23,12 @@ hart vs. weich) → **#185** (Vorlage aus dem Katalog) → **#154** (Nutzertexte
 Bootstrap-Zweitwahrheit (#234); `river_name` und Fachvokabular werden **weich** geprüft (Warnung,
 keine Ablehnung), `species` hart. **Offene Entscheidungen:** `reader_id`/`memory_id` entfernen oder
 persistieren (heute geprüft und nirgends gespeichert), Legend-Sprache EN vs. DE-Beilage, und ob
-`Black Sea`/`Salzach/Sur`/`Eckartsau Bundesforste` in der Flussliste bleiben. **Ticket-Landschaft:**
-#206 ist nach `CatchLogX-Data#8` übernommen und geschlossen, #208 bei Dominic, #207 **offen und
-strittig** (Lena: superseded; Messung: 45 380 Zeilen ohne Punkt-Überlappung), #200 offen bis seine
-Kinder zu sind.
+`Black Sea`/`Salzach/Sur`/`Eckartsau Bundesforste` in der Flussliste bleiben. **Ticket-Landschaft
+(2026-11-19 umsortiert):** #206 ist nach `CatchLogX-Data#8` übernommen und geschlossen, #207
+(Juni-23-Lieferung) nach **`CatchLogX-Data#9`** und dort **nur Lena** zugewiesen, #208 läuft
+eigenständig bei Dominic, #231 hat Dominic als Vergabe-Owner. **#200 ist geschlossen** — der Cutover
+ist technisch durch, #205 hängt jetzt als Sub-Issue unter #236, und der Daten-Nachlauf steht
+vollständig im Datenrepo (#7, #8, #9).
 
 **Stand 2026-11-16 (Institut-Fileserver als primäres Backup-Ziel angebunden, #86):** Der
 Lauf hat jetzt **zwei** Off-site-Ziele. Auf `//serverhome.boku.ac.at/DATAHOME/home/ihyam_catchlogx`
@@ -592,4 +594,5 @@ Superuser-Slots.
 
 Kontext: Das Epic #125 bleibt offen, solange `CatchLogX-Data#2` offen ist. Vom
 Produktions-Upgrade-Pfad #137–#153 sind #138–#143 und #150/#152 erledigt; offen
-sind #144 (gated Pipeline), #153 (Data-Access-Seite) und #145 (Wissensbasis).
+sind #144 (gated Pipeline) und #153 (Data-Access-Seite). #145 ist mit dem Cutover
+überholt und geschlossen (#222).
