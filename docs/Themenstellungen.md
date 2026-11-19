@@ -49,9 +49,9 @@ Biegel (Treffer `id=19357`, 5AAIF), „Biegl" liefert keinen Treffer.
 | Testautomatisierung, Sicherheits- und Backup-Konzept produktiv | 31.05.2027 |
 | Dokumentation und Präsentation | 01.07.2027 |
 
-## Offene Tickets (Stand 2026-11-15)
+## Offene Tickets (Stand 2026-11-19)
 
-Snapshot der Triage vom 2026-11-15. Die Wahrheit über Zuweisungen steht in den
+Snapshot der Triage vom 2026-11-19. Die Wahrheit über Zuweisungen steht in den
 GitHub-Issues, nicht hier.
 
 ### Betreuer (kein `diplomarbeit`)
@@ -63,32 +63,37 @@ GitHub-Issues, nicht hier.
 | 144 | Gated Deploy-Pipeline | Georg (`ready-for-agent` entfernt) |
 | 165 | TLS vor Port 80 | Georg |
 | 166 | Postgres-Rollen `clx_app` / `clx_migrate` | — (Betreiber-Arbeit, braucht Prod-Zugang) |
-| 200 | Cutover: Produktions-DB neu aufbauen | Georg |
-| 207 | Juni-23-Lieferung importieren | Georg + Lena |
+| 200 | Cutover: Produktions-DB neu aufbauen | Georg (offen bis #205, #208 und der M-Nachfolger zu sind) |
+| 207 | Juni-23-Lieferung importieren | Georg + Lena — **offen, strittig** (Lena: superseded; Messung: 45 380 Zeilen ohne Überlappung) |
 | 86 | Vollbackup + inkrementelle Sicherung | Georg (BOKU-Drive-Daten von Martin übernommen) |
 | 220 | Docker-Reste auf dem Prod-Host | Georg |
+| 236 | Epic: Import-Vertrag — Code spezifiziert, DB konfiguriert, Vorlage ist ein Artefakt | — (Epic) |
 
 ### Übernommen (`diplomarbeit` + Assignee)
 
 | # | Thema | Assignee |
 |---|---|---|
 | 160 | Passwort-Reset in der Produktion (`NODEMAILER_*`) | Dominic |
-| 153 | In-App-Data-Access-Seite | Georg + Dominic |
+| 153 | In-App-Data-Access-Seite (Inhalt wird ein FAQ-Eintrag in #154) | Georg + Dominic |
 | 157 | About-Seite: Team-Historie | Alex |
 | 98 | Auth-HOCs einführen (oder löschen) | Alex |
 | 81 | Validierung der Koordinaten-Verortung | Rodion |
 | 227 | Admin-Rollen: `SUPER_ADMIN` entfernen, Selbst-Aussperrung verhindern | Rodion |
+| 205 | Offizielle Listen: eine Quelle, Prüfstrenge hart vs. weich | Rodion |
+| 208 | Adoptionspfad ist toter Code | Dominic |
+| 233 | Flussnamen-Vokabular: `assets/river_name.json` → DB | Rodion |
+| 234 | Referenzdaten-Export: `species.json` aus der DB + Snapshot im Datenrepo | Rodion |
+| 235 | Dev-Copy der Produktions-DB als Release-Asset | Jakob |
 
 ### Offen (`diplomarbeit`, kein Assignee)
 
 | # | Thema | Themenstrang |
 |---|---|---|
 | 219 | Inhaltliche Duplikaterkennung beim Import | Rodion |
-| 208 | Adoptionspfad ist toter Code | Dominic |
-| 206 | `2026_M`: `site_name` fehlt in 1 638 Zeilen | Rodion |
-| 205 | Offizielle Listen: eine Quelle, Vorlage generiert | Rodion |
+| 231 | Bug: Validierung liest das `List`-Blatt der hochgeladenen Datei | Backend (Dominic) |
+| 232 | Spaltenkatalog im Code als einzige Spezifikation | Backend (Dominic) |
 | 194 | Mailwege auf Dev belegen und härten | Dominic |
-| 185 | Vorlage automatisch aus der Datenbank generieren | Rodion |
+| 185 | Vorlage + Legend aus dem Katalog generieren | Rodion |
 | 182 | Import-Validierung akzeptiert leeres `project` | Alex |
 | 175 | Dependency-Upgrade Stufe 2 | Jakob |
 | 174 | Dependency-Upgrade Stufe 3 (Majors) | Jakob |
