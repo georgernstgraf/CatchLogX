@@ -132,6 +132,13 @@ sha256sum -c dev-copy-<stamp>.dump.zst.sha256 && zstd -d dev-copy-<stamp>.dump.z
 createdb clx && pg_restore -d clx --no-owner --no-privileges dev-copy-<stamp>.dump
 ```
 
+These commands assume Linux, macOS, Git Bash or WSL. On plain Windows use the
+Docker variant below, check the checksum in PowerShell with
+`Get-FileHash -Algorithm SHA256 dev-copy-<stamp>.dump.zst` (compare with the
+`.sha256` file) and unpack with `zstd.exe` (`winget install Facebook.zstd`).
+Only this restore needs to run on developer machines — `export-dev-copy.sh`
+itself runs on `claw` (Linux) only.
+
 With the Docker Compose database (no local `psql` tools needed):
 
 ```sh
