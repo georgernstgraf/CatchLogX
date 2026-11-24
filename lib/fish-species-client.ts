@@ -98,6 +98,32 @@ export function normalizeSpeciesInput(value: unknown): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
+/** What the admin GUI offers for a species, see {@link speciesEditPolicy}. */
+export type SpeciesEditPolicy = {
+  canDelete: boolean;
+  latinNameLocked: boolean;
+  /** Why the species cannot be deleted, or `null` when it can. */
+  deleteBlocker: string | null;
+};
+
+/**
+ * Edit rules of a species (#228): while catches use it, it can neither be
+ * deleted nor get a new scientific name. The server enforces the same rules.
+ */
+export function speciesEditPolicy(record: FishSpeciesRecord): SpeciesEditPolicy {
+  const { catchCount } = record;
+
+  if (catchCount === 0) {
+    return { canDelete: true, latinNameLocked: false, deleteBlocker: null };
+  }
+
+  return {
+    canDelete: false,
+    latinNameLocked: true,
+    deleteBlocker: `Used by ${catchCount} catch${catchCount === 1 ? "" : "es"} — cannot be deleted.`,
+  };
+}
+
 /** Loads all fish species with their catch counts. */
 export async function fetchFishSpecies(): Promise<FishSpeciesRecord[]> {
   const response = await fetch("/api/admin/fish-species", {

@@ -6,7 +6,7 @@ import {
   type UpdateFishSpeciesInput,
 } from "@/services/fishSpeciesService";
 
-/** Renames or re-describes a fish species. */
+/** Updates a fish species; renames it only while no catch uses it (#228). */
 export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
@@ -58,6 +58,17 @@ export async function PATCH(
     if (result.conflict) {
       return NextResponse.json(
         { error: "A species with this name already exists" },
+        { status: 409 },
+      );
+    }
+
+    if (result.latinNameLocked) {
+      const catchCount = result.catchCount;
+      return NextResponse.json(
+        {
+          error: `Scientific name is fixed: species is used by ${catchCount} catch${catchCount === 1 ? "" : "es"}`,
+          catchCount,
+        },
         { status: 409 },
       );
     }

@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
 
 // Fish species administration (#201): the species master is editable through
-// the admin GUI. Catches reference a species by foreign key, so a rename only
-// touches the species row and a delete is refused while catches still use it.
+// the admin GUI. While catches use a species, both a delete and a change of its
+// scientific name are refused: the name is the key of the Excel import (#228).
 
 /** A fish species as exposed to API clients. */
 export type FishSpeciesRecord = {
@@ -58,6 +58,10 @@ export type UpdateFishSpeciesResult = {
   notFound?: true;
   /** Another species already carries that name (P2002). */
   conflict?: true;
+  /** The scientific name is fixed because catches use the species (#228). */
+  latinNameLocked?: true;
+  /** Number of catches using the species, when the name is locked. */
+  catchCount?: number;
 };
 
 /** Result of {@link deleteFishSpecies}. */
@@ -195,8 +199,9 @@ export async function createFishSpecies(
 }
 
 /**
- * Updates a species. Only the passed fields are written; a rename leaves the
- * catches untouched because they reference the species by id.
+ * Updates a species. Only the passed fields are written. A changed scientific
+ * name is refused while catches use the species (#228); sending the unchanged
+ * name is fine, because the GUI always sends all three fields.
  */
 export async function updateFishSpecies(
   id: number,
@@ -213,7 +218,22 @@ export async function updateFishSpecies(
     if (!speciesName) {
       return { invalid: true };
     }
-    data.speciesName = speciesName;
+
+    const current = await prisma.fishSpecies.findUnique({
+      where: { id },
+      select: { speciesName: true, _count: { select: { catches: true } } },
+    });
+    if (!current) {
+      return { notFound: true };
+    }
+
+    if (cleanSpeciesName(current.speciesName) !== speciesName) {
+      const catchCount = current._count.catches;
+      if (catchCount > 0) {
+        return { latinNameLocked: true, catchCount };
+      }
+      data.speciesName = speciesName;
+    }
   }
 
   if (input.germanName !== undefined) {

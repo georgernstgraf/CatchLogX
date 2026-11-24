@@ -9,6 +9,7 @@ import {
   fetchSpeciesImports,
   FishSpeciesRecord,
   normalizeSpeciesInput,
+  speciesEditPolicy,
   SpeciesImportRecord,
   updateFishSpecies,
 } from "@/lib/fish-species-client";
@@ -36,6 +37,9 @@ function draftFromRecord(record: FishSpeciesRecord): SpeciesDraft {
 const inputClassName =
   "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200";
 
+const latinNameLockedHint =
+  "Scientific name is fixed while catches exist — it is the key of the Excel import.";
+
 /** Import dates are shown in the local format the admin page uses elsewhere. */
 function formatImportDate(value: string): string {
   const date = new Date(value);
@@ -58,6 +62,11 @@ const AdminFishSpeciesManager = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  // Update and delete errors belong to the row they happened in (#228).
+  const [rowError, setRowError] = useState<{
+    id: number;
+    message: string;
+  } | null>(null);
   // Imports per species (#224): fetched only when the catch count is expanded,
   // then cached until the list is refreshed or a species changes.
   const [expandedSpeciesId, setExpandedSpeciesId] = useState<number | null>(null);
@@ -75,6 +84,7 @@ const AdminFishSpeciesManager = () => {
       setExpandedSpeciesId(null);
       setImportsError("");
       setErrorMessage("");
+      setRowError(null);
     } catch (error) {
       console.error("Could not load fish species:", error);
       setErrorMessage("Fish species could not be loaded.");
@@ -191,13 +201,14 @@ const AdminFishSpeciesManager = () => {
   };
 
   const startEditing = (record: FishSpeciesRecord) => {
-    setErrorMessage("");
+    setRowError(null);
     setDeleteConfirmId(null);
     setEditingId(record.id);
     setEditDraft(draftFromRecord(record));
   };
 
   const cancelEditing = () => {
+    setRowError(null);
     setEditingId(null);
     setEditDraft(emptyDraft);
   };
@@ -209,7 +220,7 @@ const AdminFishSpeciesManager = () => {
     }
 
     setIsSaving(true);
-    setErrorMessage("");
+    setRowError(null);
 
     try {
       await updateFishSpecies(id, {
@@ -221,11 +232,13 @@ const AdminFishSpeciesManager = () => {
       await loadSpecies();
     } catch (error) {
       console.error("Could not update fish species:", error);
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Fish species could not be updated.",
-      );
+      setRowError({
+        id,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Fish species could not be updated.",
+      });
     } finally {
       setIsSaving(false);
     }
@@ -233,7 +246,7 @@ const AdminFishSpeciesManager = () => {
 
   const handleDelete = async (id: number) => {
     setIsDeleting(true);
-    setErrorMessage("");
+    setRowError(null);
 
     try {
       await deleteFishSpecies(id);
@@ -242,11 +255,14 @@ const AdminFishSpeciesManager = () => {
     } catch (error) {
       console.error("Could not delete fish species:", error);
       // The server's 409 text names the catch count; show it verbatim.
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Fish species could not be deleted.",
-      );
+      setRowError({
+        id,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Fish species could not be deleted.",
+      });
+      setDeleteConfirmId(null);
     } finally {
       setIsDeleting(false);
     }
@@ -260,7 +276,8 @@ const AdminFishSpeciesManager = () => {
             Fish Species
           </h2>
           <p className="text-gray-600 dark:text-gray-400">
-            Species with recorded catches cannot be deleted.
+            Species with recorded catches cannot be deleted, and their scientific
+            name is fixed.
           </p>
         </div>
         <div className="rounded-lg bg-[#e8f3f3] dark:bg-[#1f2f3e] border border-[#c7e0e0] dark:border-[#2d4257] px-4 py-2 text-sm text-[#235457] dark:text-[#b8d6d8]">
@@ -373,23 +390,40 @@ const AdminFishSpeciesManager = () => {
                 const isConfirmingDelete = deleteConfirmId === entry.id;
                 const isExpanded = expandedSpeciesId === entry.id;
                 const speciesImports = importsBySpecies[entry.id];
+                const policy = speciesEditPolicy(entry);
+                const nameHintId = `species-name-hint-${entry.id}`;
+                const deleteHintId = `species-delete-hint-${entry.id}`;
 
                 return (
                   <Fragment key={entry.id}>
                     <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/60">
                       <td className="px-4 py-4 text-sm text-gray-900 dark:text-gray-100">
                         {isEditing ? (
-                          <input
-                            type="text"
-                            value={editDraft.speciesName}
-                            onChange={(event) =>
-                              setEditDraft({
-                                ...editDraft,
-                                speciesName: event.target.value,
-                              })
-                            }
-                            className={inputClassName}
-                          />
+                          <>
+                            <input
+                              type="text"
+                              value={editDraft.speciesName}
+                              onChange={(event) =>
+                                setEditDraft({
+                                  ...editDraft,
+                                  speciesName: event.target.value,
+                                })
+                              }
+                              disabled={policy.latinNameLocked}
+                              aria-describedby={
+                                policy.latinNameLocked ? nameHintId : undefined
+                              }
+                              className={`${inputClassName} disabled:cursor-not-allowed disabled:opacity-60`}
+                            />
+                            {policy.latinNameLocked && (
+                              <p
+                                id={nameHintId}
+                                className="mt-1 text-xs text-gray-500 dark:text-gray-400"
+                              >
+                                {latinNameLockedHint}
+                              </p>
+                            )}
+                          </>
                         ) : (
                           entry.speciesName
                         )}
@@ -487,7 +521,10 @@ const AdminFishSpeciesManager = () => {
                               {isDeleting ? "Deleting..." : "Confirm"}
                             </button>
                             <button
-                              onClick={() => setDeleteConfirmId(null)}
+                              onClick={() => {
+                                setRowError(null);
+                                setDeleteConfirmId(null);
+                              }}
                               disabled={isDeleting}
                               className="inline-flex items-center gap-1 px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                               title="Keep species"
@@ -508,17 +545,38 @@ const AdminFishSpeciesManager = () => {
                             </button>
                             <button
                               onClick={() => {
-                                setErrorMessage("");
+                                setRowError(null);
                                 setEditingId(null);
                                 setDeleteConfirmId(entry.id);
                               }}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-red-600 text-white hover:bg-red-700 transition-colors"
-                              title="Delete species"
+                              disabled={!policy.canDelete}
+                              aria-describedby={
+                                policy.deleteBlocker ? deleteHintId : undefined
+                              }
+                              className={`inline-flex items-center gap-1 px-3 py-1.5 rounded text-white transition-colors ${
+                                policy.canDelete
+                                  ? "bg-red-600 hover:bg-red-700"
+                                  : "bg-gray-400 cursor-not-allowed"
+                              }`}
+                              title={policy.deleteBlocker ?? "Delete species"}
                             >
                               <Trash2 size={14} />
                               Delete
                             </button>
+                            {policy.deleteBlocker && (
+                              <span id={deleteHintId} className="sr-only">
+                                {policy.deleteBlocker}
+                              </span>
+                            )}
                           </div>
+                        )}
+                        {rowError?.id === entry.id && (
+                          <p
+                            role="alert"
+                            className="mt-2 text-sm text-red-600 dark:text-red-400"
+                          >
+                            {rowError.message}
+                          </p>
                         )}
                       </td>
                     </tr>

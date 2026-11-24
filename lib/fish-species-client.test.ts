@@ -7,6 +7,7 @@ import {
   normalizeFishSpecies,
   normalizeSpeciesImport,
   normalizeSpeciesInput,
+  speciesEditPolicy,
   updateFishSpecies,
 } from "@/lib/fish-species-client";
 
@@ -34,6 +35,27 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe("speciesEditPolicy", () => {
+  it("allows deleting and renaming without catches (#228)", () => {
+    expect(speciesEditPolicy({ ...validRecord, catchCount: 0 })).toEqual({
+      canDelete: true,
+      latinNameLocked: false,
+      deleteBlocker: null,
+    });
+  });
+
+  it.each([
+    [1, "Used by 1 catch — cannot be deleted."],
+    [12, "Used by 12 catches — cannot be deleted."],
+  ])("locks delete and scientific name with %i catch(es) (#228)", (catchCount, deleteBlocker) => {
+    expect(speciesEditPolicy({ ...validRecord, catchCount })).toEqual({
+      canDelete: false,
+      latinNameLocked: true,
+      deleteBlocker,
+    });
+  });
 });
 
 describe("normalizeFishSpecies", () => {

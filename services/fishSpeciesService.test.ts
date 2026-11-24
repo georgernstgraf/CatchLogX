@@ -45,8 +45,16 @@ function prismaError(code: string) {
   return Object.assign(new Error(`Prisma error ${code}`), { code });
 }
 
+/** Current row as read before a rename (#228). */
+function mockStored(speciesName: string, catches: number) {
+  vi.mocked(prisma.fishSpecies.findUnique).mockResolvedValue({
+    speciesName,
+    _count: { catches },
+  } as any);
+}
+
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
 });
 
 describe("listFishSpecies", () => {
@@ -183,12 +191,13 @@ describe("createFishSpecies", () => {
 
 describe("updateFishSpecies", () => {
   it("normalizes NBSP on rename so a near-duplicate cannot be created (#201)", async () => {
+    mockStored("Silurus sp.", 0);
     vi.mocked(prisma.fishSpecies.update).mockResolvedValue({
       id: 113,
       speciesName: "Silurus glanis",
       germanName: "Wels",
       family: "Siluridae",
-      _count: { catches: 9 },
+      _count: { catches: 0 },
     } as any);
 
     await updateFishSpecies(113, { speciesName: "Silurus\u00A0glanis" });
@@ -201,12 +210,13 @@ describe("updateFishSpecies", () => {
   });
 
   it("trims a renamed species name and keeps the id stable", async () => {
+    mockStored("Salmo truta", 0);
     vi.mocked(prisma.fishSpecies.update).mockResolvedValue({
       id: 1,
       speciesName: "Salmo trutta",
       germanName: "Bachforelle",
       family: "Salmonidae",
-      _count: { catches: 7 },
+      _count: { catches: 0 },
     } as any);
 
     const result = await updateFishSpecies(1, {
@@ -225,7 +235,7 @@ describe("updateFishSpecies", () => {
         speciesName: "Salmo trutta",
         germanName: "Bachforelle",
         family: "Salmonidae",
-        catchCount: 7,
+        catchCount: 0,
       },
     });
   });
@@ -262,6 +272,7 @@ describe("updateFishSpecies", () => {
   });
 
   it("reports a duplicate name as a conflict", async () => {
+    mockStored("Rutilus", 0);
     vi.mocked(prisma.fishSpecies.update).mockRejectedValue(prismaError("P2002"));
 
     expect(await updateFishSpecies(1, { speciesName: "Rutilus rutilus" })).toEqual({
@@ -269,19 +280,69 @@ describe("updateFishSpecies", () => {
     });
   });
 
-  it("never rewrites catches: the foreign key carries the rename", async () => {
+  it("never rewrites catches when a species is renamed", async () => {
+    mockStored("Salmo trutta", 0);
     vi.mocked(prisma.fishSpecies.update).mockResolvedValue({
       id: 1,
       speciesName: "Salmo trutta fario",
       germanName: "Bachforelle",
       family: "Salmonidae",
-      _count: { catches: 3 },
+      _count: { catches: 0 },
     } as any);
 
     await updateFishSpecies(1, { speciesName: "Salmo trutta fario" });
 
     expect(prisma.fishCatch.update).not.toHaveBeenCalled();
     expect(prisma.fishCatch.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses to rename a species with catches and writes nothing (#228)", async () => {
+    mockStored("Salmo trutta", 12);
+
+    expect(
+      await updateFishSpecies(1, {
+        speciesName: "Salmo trutta fario",
+        germanName: "Forelle",
+      }),
+    ).toEqual({ latinNameLocked: true, catchCount: 12 });
+    expect(prisma.fishSpecies.findUnique).toHaveBeenCalledWith({
+      where: { id: 1 },
+      select: { speciesName: true, _count: { select: { catches: true } } },
+    });
+    expect(prisma.fishSpecies.update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["identical name", "Salmo trutta"],
+    ["NBSP variant of the same name", " Salmo trutta "],
+  ])("does not write an unchanged name: %s (#228)", async (_label, speciesName) => {
+    mockStored("Salmo trutta", 12);
+    vi.mocked(prisma.fishSpecies.update).mockResolvedValue({
+      id: 1,
+      speciesName: "Salmo trutta",
+      germanName: "Forelle",
+      family: null,
+      _count: { catches: 12 },
+    } as any);
+
+    const result = await updateFishSpecies(1, {
+      speciesName,
+      germanName: "Forelle",
+    });
+
+    expect(prisma.fishSpecies.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { germanName: "Forelle" } }),
+    );
+    expect(result.species?.catchCount).toBe(12);
+  });
+
+  it("reports a rename of an unknown species as not found (#228)", async () => {
+    vi.mocked(prisma.fishSpecies.findUnique).mockResolvedValue(null);
+
+    expect(await updateFishSpecies(99, { speciesName: "x" })).toEqual({
+      notFound: true,
+    });
+    expect(prisma.fishSpecies.update).not.toHaveBeenCalled();
   });
 });
 
